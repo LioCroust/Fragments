@@ -1,26 +1,30 @@
 {
   "expo": {
-    "name": "Fragments Neon",
-    "slug": "fragments-neon",
+    "name": "Fragments",
+    "slug": "fragments",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon_2.png",
-    "scheme": "fragments-neon",
+    "scheme": "fragments",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fragments.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon_2.png",
         "backgroundColor": "#050510"
       },
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "package": "com.fragments.app"
     },
     "web": {
       "favicon": "./assets/images/icon_2.png"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
