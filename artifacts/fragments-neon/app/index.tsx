@@ -621,6 +621,9 @@ export default function GameScreen() {
         if (enemy.respawnAt > 0) {
           enemy.respawnAt = 0;
           enemy.blockedTime = 0;
+          enemy.edgeTurnTimer = 0;
+          enemy.edgeDirectionX = 0;
+          enemy.edgeDirectionY = 0;
           enemy.vx = enemy.kind === 'DRAGON' ? -enemy.speed * 0.55 : enemy.speed * 0.55;
           enemy.vy = enemy.kind === 'SPIDER' ? -enemy.speed * 0.45 : enemy.speed * 0.45;
           enemy.targetX = enemy.x;
@@ -631,6 +634,7 @@ export default function GameScreen() {
         enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
         enemy.spin += dt * (enemy.kind === 'DRAGON' ? -1.15 : enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
         enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
+        enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
 
         const visualRadius = enemyVisualRadius(enemy, g.cell) * (1 + Math.abs(Math.sin(enemy.phase * 1.25)) * 0.035);
         const boundaryMargins = enemyBoundaryMargins(enemy, g.cell);
@@ -720,6 +724,13 @@ export default function GameScreen() {
           desiredVelocity = { x: Math.cos(routeHeading), y: Math.sin(routeHeading) };
         }
 
+        if (enemy.edgeTurnTimer > 0) {
+          desiredVelocity = {
+            x: enemy.edgeDirectionX,
+            y: enemy.edgeDirectionY,
+          };
+        }
+
         const desiredLength = Math.hypot(desiredVelocity.x, desiredVelocity.y) || 1;
         const steering = clamp(enemy.agility * dt * (enemy.behavior === 'PLANNED' ? 3.4 : 2.2), 0, 1);
         enemy.vx += ((desiredVelocity.x / desiredLength) * desiredSpeed - enemy.vx) * steering;
@@ -727,6 +738,26 @@ export default function GameScreen() {
 
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
+        const hitsBoundaryX = nextX < minX || nextX > maxX;
+        const hitsBoundaryY = nextY < minY || nextY > maxY;
+        const turnAwayFromBlueEdge = (hitX: boolean, hitY: boolean) => {
+          if (!hitX && !hitY) return;
+          const centerDirectionX = Math.sign(g.width * 0.5 - enemy.x) || (Math.sin(enemy.routePhase) >= 0 ? 1 : -1);
+          const centerDirectionY = Math.sign(g.height * 0.5 - enemy.y) || (Math.cos(enemy.routePhase) >= 0 ? 1 : -1);
+          enemy.edgeDirectionX = hitX
+            ? (nextX < minX ? 1 : -1)
+            : centerDirectionX * 0.72;
+          enemy.edgeDirectionY = hitY
+            ? (nextY < minY ? 1 : -1)
+            : centerDirectionY * 0.72;
+          const edgeDirectionLength = Math.hypot(enemy.edgeDirectionX, enemy.edgeDirectionY) || 1;
+          enemy.edgeDirectionX /= edgeDirectionLength;
+          enemy.edgeDirectionY /= edgeDirectionLength;
+          enemy.edgeTurnTimer = 1.15;
+          enemy.routePhase += Math.PI * 0.65;
+          enemy.vx = enemy.edgeDirectionX * enemy.speed * 0.78;
+          enemy.vy = enemy.edgeDirectionY * enemy.speed * 0.78;
+        };
         const canMoveFull = enemyFitsAt(nextX, nextY);
         const canMoveX = enemyFitsAt(nextX, enemy.y);
         const canMoveY = enemyFitsAt(enemy.x, nextY);
@@ -735,42 +766,50 @@ export default function GameScreen() {
           enemy.y = nextY;
         } else if (canMoveX) {
           enemy.x = nextX;
-          enemy.vy *= -1;
+          if (hitsBoundaryY) turnAwayFromBlueEdge(false, true);
+          else enemy.vy *= -1;
         } else if (canMoveY) {
           enemy.y = nextY;
-          enemy.vx *= -1;
+          if (hitsBoundaryX) turnAwayFromBlueEdge(true, false);
+          else enemy.vx *= -1;
         } else {
-          const escapeDistance = Math.max(g.cell * 0.72, bodyRadius * 1.18);
-          const escapeDirections = [
-            { x: 0, y: -1 },
-            { x: 0, y: 1 },
-            { x: -1, y: 0 },
-            { x: 1, y: 0 },
-            { x: -0.7, y: -0.7 },
-            { x: 0.7, y: -0.7 },
-            { x: -0.7, y: 0.7 },
-            { x: 0.7, y: 0.7 },
-          ];
-          const escape = escapeDirections
-            .map((direction) => ({
-              x: clamp(enemy.x + direction.x * escapeDistance, minX, maxX),
-              y: clamp(enemy.y + direction.y * escapeDistance, minY, maxY),
-              alignment: direction.x * enemy.vx + direction.y * enemy.vy,
-            }))
-            .filter((candidate) => enemyFitsAt(candidate.x, candidate.y))
-            .sort((first, second) => second.alignment - first.alignment)[0];
-
-          if (escape) {
-            const escapeX = escape.x - enemy.x;
-            const escapeY = escape.y - enemy.y;
-            const escapeLength = Math.hypot(escapeX, escapeY) || 1;
-            enemy.x = escape.x;
-            enemy.y = escape.y;
-            enemy.vx = (escapeX / escapeLength) * enemy.speed * 0.55;
-            enemy.vy = (escapeY / escapeLength) * enemy.speed * 0.55;
+          if (hitsBoundaryX || hitsBoundaryY) {
+            enemy.x = clamp(enemy.x, minX, maxX);
+            enemy.y = clamp(enemy.y, minY, maxY);
+            turnAwayFromBlueEdge(hitsBoundaryX, hitsBoundaryY);
           } else {
-            enemy.vx *= -1;
-            enemy.vy *= -1;
+            const escapeDistance = Math.max(g.cell * 0.72, bodyRadius * 1.18);
+            const escapeDirections = [
+              { x: 0, y: -1 },
+              { x: 0, y: 1 },
+              { x: -1, y: 0 },
+              { x: 1, y: 0 },
+              { x: -0.7, y: -0.7 },
+              { x: 0.7, y: -0.7 },
+              { x: -0.7, y: 0.7 },
+              { x: 0.7, y: 0.7 },
+            ];
+            const escape = escapeDirections
+              .map((direction) => ({
+                x: clamp(enemy.x + direction.x * escapeDistance, minX, maxX),
+                y: clamp(enemy.y + direction.y * escapeDistance, minY, maxY),
+                alignment: direction.x * enemy.vx + direction.y * enemy.vy,
+              }))
+              .filter((candidate) => enemyFitsAt(candidate.x, candidate.y))
+              .sort((first, second) => second.alignment - first.alignment)[0];
+
+            if (escape) {
+              const escapeX = escape.x - enemy.x;
+              const escapeY = escape.y - enemy.y;
+              const escapeLength = Math.hypot(escapeX, escapeY) || 1;
+              enemy.x = escape.x;
+              enemy.y = escape.y;
+              enemy.vx = (escapeX / escapeLength) * enemy.speed * 0.55;
+              enemy.vy = (escapeY / escapeLength) * enemy.speed * 0.55;
+            } else {
+              enemy.vx *= -1;
+              enemy.vy *= -1;
+            }
           }
         }
 

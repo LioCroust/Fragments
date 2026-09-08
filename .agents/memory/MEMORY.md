@@ -2,3 +2,4 @@
 - [Expo static build port](expo-static-build-port.md) — The bundle script requires localhost:8081 to be free during Metro startup.
 - [Collision geometry](collision-geometry.md) — Use segment and body geometry for collisions, never trail-cell membership alone.
 - [Safe band controls](safe-band-controls.md) — Preserve swipe direction through the outer safe band so the drone can reach the empty playfield.
+- [Enemy edge navigation](enemy-edge-navigation.md) — Turn enemies inward after perimeter contact instead of letting them ping-pong between blue borders.
