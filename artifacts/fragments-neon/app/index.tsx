@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions, PanResponder, Pressable, Image } from 'react-native';
-import Svg, { Rect, Polyline, Polygon, Circle, Defs, RadialGradient, Stop, Filter, FeGaussianBlur } from 'react-native-svg';
+import Svg, { Rect, Polyline, Circle, Defs, RadialGradient, Stop, Filter, FeGaussianBlur } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,7 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const GRID_W = 40;
 const TARGET_PERCENT = 75;
+const shardSprite = require('@/assets/images/energy-shard.png');
 
 const isClaimedSafe = (grid: number[][], x: number, y: number, w: number, h: number) => {
   if (x < 0 || x >= w || y < 0 || y >= h) return true;
@@ -482,23 +483,58 @@ export default function GameScreen() {
             ))}
 
             {shards.map((s, i) => (
-              <Polygon
-                key={`s${i}`}
-                points={`${s.x},${s.y - 8} ${s.x + 8},${s.y} ${s.x},${s.y + 8} ${s.x - 8},${s.y}`}
+              <Circle
+                key={`shard-glow-${i}`}
+                cx={s.x}
+                cy={s.y}
+                r={18}
                 fill={colors.accent}
+                opacity={0.14}
               />
             ))}
 
             {trailPoints.length > 0 && (
-              <Polyline
-                points={trailPoints}
-                fill="none"
-                stroke={shardTiers > 0 ? colors.primary : "#ffffff"}
-                strokeWidth={shardTiers > 1 ? 4 : 2}
-                filter={shardTiers > 1 ? "url(#blur)" : undefined}
-              />
+              <>
+                <Polyline
+                  points={trailPoints}
+                  fill="none"
+                  stroke={colors.primary}
+                  strokeWidth={shardTiers > 1 ? 16 : 12}
+                  opacity={0.18}
+                  filter="url(#blur)"
+                />
+                <Polyline
+                  points={trailPoints}
+                  fill="none"
+                  stroke={colors.secondary}
+                  strokeWidth={shardTiers > 0 ? 8 : 6}
+                  opacity={0.48}
+                />
+                <Polyline
+                  points={trailPoints}
+                  fill="none"
+                  stroke={colors.primary}
+                  strokeWidth={shardTiers > 1 ? 5 : 3}
+                  opacity={0.98}
+                />
+              </>
             )}
           </Svg>
+
+          {shards.map((s, i) => (
+            <Image
+              key={`shard-sprite-${i}`}
+              source={shardSprite}
+              style={[
+                styles.shardSprite,
+                {
+                  left: s.x - 17,
+                  top: s.y - 17,
+                  transform: [{ rotate: `${(i % 2 === 0 ? 1 : -1) * 8}deg` }],
+                },
+              ]}
+            />
+          ))}
           
           <View style={[styles.drone, { transform: [{ translateX: playerPos.x - 16 }, { translateY: playerPos.y - 16 }] }]}>
             <Image source={require('@/assets/images/player-drone.png')} style={{width: 32, height: 32}} />
@@ -519,8 +555,9 @@ export default function GameScreen() {
            <Text style={[styles.headerText, { color: colors.foreground }]}>{score.toString().padStart(6, '0')}</Text>
         </View>
         <View style={styles.headerRow}>
-           <Text style={[styles.headerText, { color: colors.accent, fontSize: 14 }]}>Boucliers: {shields}</Text>
-           <Text style={[styles.headerText, { color: colors.secondary, fontSize: 14 }]}>Capture: {progress}% / {TARGET_PERCENT}%</Text>
+            <Text style={[styles.headerText, { color: colors.accent, fontSize: 14 }]}>Boucliers: {shields}</Text>
+            <Text style={[styles.headerText, { color: colors.accent, fontSize: 14 }]}>Fragments: {totalShards}</Text>
+            <Text style={[styles.headerText, { color: colors.secondary, fontSize: 14 }]}>Capture: {progress}% / {TARGET_PERCENT}%</Text>
         </View>
       </View>
 
@@ -534,8 +571,8 @@ export default function GameScreen() {
             <Text style={[styles.buttonText, { color: colors.primary }]}>DÉMARRER</Text>
           </Pressable>
 
-          <Text style={[styles.tutorial, { color: colors.mutedForeground }]}>
-            Glissez depuis le bord sécurisé pour capturer le territoire. Évitez les sentinelles!
+           <Text style={[styles.tutorial, { color: colors.mutedForeground }]}>
+             Glissez depuis le bord sécurisé pour capturer le territoire. Les fragments orange valent +500 et renforcent votre faisceau.
           </Text>
 
           <Pressable style={styles.soundToggle} onPress={() => setSoundEnabled(s => !s)}>
@@ -591,6 +628,12 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  shardSprite: {
+    position: 'absolute',
+    width: 34,
+    height: 34,
+    resizeMode: 'contain',
   },
   header: {
     position: 'absolute',
