@@ -38,3 +38,73 @@ mtime_ms = 1788893016753
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/b53e3e02-c25f-4dd8-b1d1-ed0b494b65a1/8490ea77-74ab-4137-a3ea-8464b2bc35c8"
 storage_version_token = "1788893204766583"
 content_type = "image/png"
+
+[[outputs]]
+id = "NKhwDG2-7aPacfxyFFw2q"
+uri = "file://attached_assets/generated_images/drone-concept-01-prism-arrow.png"
+type = "image"
+title = "Drone concept 01 — Prism Arrow"
+description = "Variante indépendante non intégrée au jeu, proposée pour sélection artistique."
+logical_id = "424ffc6b-f5ad-4210-97c0-6ca6e6637457"
+content_hash = "sha256:c0bd9b17098fb96dc09c625a6b325cd1788688f3c074a36ce09ab3feb278b7bd"
+size = 1177878
+mtime_ms = 1788894227203
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/424ffc6b-f5ad-4210-97c0-6ca6e6637457/6aed3b9a-62eb-4da6-8bae-8f8c4fc473d0"
+storage_version_token = "1788894243588527"
+content_type = "image/png"
+
+[[outputs]]
+id = "ONsXkUxo_SvCBH2LJjp7o"
+uri = "file://attached_assets/generated_images/drone-concept-02-tri-blade.png"
+type = "image"
+title = "Drone concept 02 — Tri-Blade"
+description = "Variante indépendante non intégrée au jeu, proposée pour sélection artistique."
+logical_id = "4233bf06-e40c-4480-ae7a-99fede68ccf0"
+content_hash = "sha256:878e7e9c3707cd69d57f280ea48bc7132ed1aebe9da734b2056878e1ec999a2c"
+size = 1063540
+mtime_ms = 1788894225987
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/4233bf06-e40c-4480-ae7a-99fede68ccf0/6a7024fb-f32a-423f-97bb-5a686b9d5bf3"
+storage_version_token = "1788894244176650"
+content_type = "image/png"
+
+[[outputs]]
+id = "lB0z43f5Puqefoe9ZjxCD"
+uri = "file://attached_assets/generated_images/drone-concept-03-hex-wing.png"
+type = "image"
+title = "Drone concept 03 — Hex Wing"
+description = "Variante indépendante non intégrée au jeu, proposée pour sélection artistique."
+logical_id = "0413a911-9cc0-4ed5-8faa-7ed0b88e7856"
+content_hash = "sha256:a1bbde07f01a9d04a5c1778a9ab00b2850a18a9801af3feb56b253d0b58e2f16"
+size = 1061369
+mtime_ms = 1788894232179
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/0413a911-9cc0-4ed5-8faa-7ed0b88e7856/d8faee4c-3fd2-4c88-9c70-0f68276aa671"
+storage_version_token = "1788894244743415"
+content_type = "image/png"
+
+[[outputs]]
+id = "5kShMfpijoLIrFVLayt3A"
+uri = "file://attached_assets/generated_images/drone-concept-04-manta.png"
+type = "image"
+title = "Drone concept 04 — Neon Manta"
+description = "Variante indépendante non intégrée au jeu, proposée pour sélection artistique."
+logical_id = "4a06e8e9-9cdb-4efb-bfb8-57ce26e4def2"
+content_hash = "sha256:0a2df0195b1979fe2d097da1ab5207a84e177ec7684e49e8d4e9b031a5470412"
+size = 1083430
+mtime_ms = 1788894237099
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/4a06e8e9-9cdb-4efb-bfb8-57ce26e4def2/e0f83d9e-7b37-4854-9b7a-779a29b54997"
+storage_version_token = "1788894245355397"
+content_type = "image/png"
+
+[[outputs]]
+id = "7sn1Ce58yF-HyYLn4_Q76"
+uri = "file://attached_assets/generated_images/drone-concept-05-orbit-kite.png"
+type = "image"
+title = "Drone concept 05 — Orbit Kite"
+description = "Variante indépendante non intégrée au jeu, proposée pour sélection artistique."
+logical_id = "3520f37b-eeb8-407c-b816-09c68577ae65"
+content_hash = "sha256:f0094a8bd31af735f29709ca7f23da83e1251830c5a5623737b57c968af0702f"
+size = 1106086
+mtime_ms = 1788894243003
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/3520f37b-eeb8-407c-b816-09c68577ae65/5c65ae50-86c1-461d-bf21-2df751c2ff43"
+storage_version_token = "1788894245990292"
+content_type = "image/png"

@@ -649,6 +649,30 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
+      const rasterizedTrail = new Set<string>();
+      const markTrailCell = (x: number, y: number) => {
+        const cellX = Math.floor(x / g.cell);
+        const cellY = Math.floor(y / g.cell);
+        if (cellX < 0 || cellX >= COLS || cellY < 0 || cellY >= g.rows) return;
+        if (g.grid[cellY][cellX] === EMPTY || g.grid[cellY][cellX] === TRAIL) {
+          g.grid[cellY][cellX] = TRAIL;
+          rasterizedTrail.add(`${cellX}:${cellY}`);
+        }
+      };
+      for (let index = 1; index < g.trail.length; index += 1) {
+        const start = g.trail[index - 1];
+        const end = g.trail[index];
+        const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+        const samples = Math.max(1, Math.ceil(segmentLength / Math.max(2, g.cell * 0.2)));
+        for (let sample = 0; sample <= samples; sample += 1) {
+          const progress = sample / samples;
+          markTrailCell(
+            start.x + (end.x - start.x) * progress,
+            start.y + (end.y - start.y) * progress,
+          );
+        }
+      }
+
       const visited = Array.from({ length: g.rows }, () => Array(COLS).fill(false));
       const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       const components: Cell[][] = [];
@@ -685,6 +709,13 @@ export default function GameScreen() {
         g.fillQueue.push(...component);
       });
       const queuedCells = new Set(g.fillQueue.map((cell) => `${cell.x}:${cell.y}`));
+      rasterizedTrail.forEach((key) => {
+        const [x, y] = key.split(':').map(Number);
+        if (!queuedCells.has(key)) {
+          queuedCells.add(key);
+          g.fillQueue.push({ x, y });
+        }
+      });
       g.trail.forEach((point) => {
         const cell = { x: Math.floor(point.x / g.cell), y: Math.floor(point.y / g.cell) };
         const key = `${cell.x}:${cell.y}`;
@@ -786,6 +817,29 @@ export default function GameScreen() {
           return enemySpriteFootprint(enemy, g.cell, x, y)
             .every((point) => cellAt(point.x, point.y) === EMPTY);
         };
+        const enemyCanMoveAt = (x: number, y: number) => {
+          if (x < minX || x > maxX || y < minY || y > maxY) return false;
+          return enemySpriteFootprint(enemy, g.cell, x, y)
+            .every((point) => {
+              const state = cellAt(point.x, point.y);
+              return state === EMPTY || state === TRAIL;
+            });
+        };
+        const enemyTouchesTrail = (x: number, y: number) => {
+          if (g.trail.length < 2) return false;
+          const footprintTouchesTrail = enemySpriteFootprint(enemy, g.cell, x, y).some((point) => (
+            cellAt(point.x, point.y) === TRAIL
+          ));
+          if (footprintTouchesTrail) return true;
+          const collisionDistance = enemyRadius(enemy, g.cell) + g.cell * 0.12;
+          return g.trail.slice(1).some((point, index) => (
+            distanceToSegment({ x, y }, g.trail[index], point) < collisionDistance
+          ));
+        };
+        if (enemyTouchesTrail(enemy.x, enemy.y)) {
+          explode(g, now);
+          return;
+        }
         const fullyEnclosedAt = (x: number, y: number) => (
           cellAt(x, y) === CLAIMED
           && enemySpriteFootprint(enemy, g.cell, x, y)
@@ -888,7 +942,7 @@ export default function GameScreen() {
               };
               const playerDistance = Math.hypot(candidate.x - g.player.x, candidate.y - g.player.y);
               const headingDistance = Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y);
-              const blockedPenalty = enemyFitsAt(candidate.x, candidate.y) ? 0 : 10000;
+              const blockedPenalty = enemyCanMoveAt(candidate.x, candidate.y) ? 0 : 10000;
               const score = blockedPenalty + Math.abs(playerDistance - idealDistance) * 2 + headingDistance * 0.08;
               if (score < bestScore) {
                 bestScore = score;
@@ -935,9 +989,9 @@ export default function GameScreen() {
 
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
-        const canMoveFull = enemyFitsAt(nextX, nextY);
-        const canMoveX = enemyFitsAt(nextX, enemy.y);
-        const canMoveY = enemyFitsAt(enemy.x, nextY);
+        const canMoveFull = enemyCanMoveAt(nextX, nextY);
+        const canMoveX = enemyCanMoveAt(nextX, enemy.y);
+        const canMoveY = enemyCanMoveAt(enemy.x, nextY);
         const blockedX = nextX < minX || nextX > maxX || !canMoveX;
         const blockedY = nextY < minY || nextY > maxY || !canMoveY;
         const turnAwayFromBlueEdge = (hitX: boolean, hitY: boolean) => {
@@ -1002,7 +1056,7 @@ export default function GameScreen() {
                 y: clamp(enemy.y + direction.y * escapeDistance, minY, maxY),
                 alignment: direction.x * enemy.vx + direction.y * enemy.vy,
               }))
-              .filter((candidate) => enemyFitsAt(candidate.x, candidate.y))
+              .filter((candidate) => enemyCanMoveAt(candidate.x, candidate.y))
               .sort((first, second) => second.alignment - first.alignment)[0];
 
             if (escape) {
@@ -1036,12 +1090,7 @@ export default function GameScreen() {
         if (droneIsActive && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
           explode(g, now);
         }
-        for (let i = 1; i < g.trail.length; i += 1) {
-          if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < enemyRadius(enemy, g.cell) + g.cell * 0.12) {
-            explode(g, now);
-            break;
-          }
-        }
+        if (enemyTouchesTrail(enemy.x, enemy.y)) explode(g, now);
       });
 
       for (let firstIndex = 0; firstIndex < g.enemies.length; firstIndex += 1) {
