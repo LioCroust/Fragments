@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions, PanResponder, Pressable, Image } from 'react-native';
-import Svg, { Rect, Polyline, Circle, Defs, RadialGradient, Stop, Filter, FeGaussianBlur } from 'react-native-svg';
+import Svg, { Rect, Polyline, Circle, Line, Defs, RadialGradient, Stop, Filter, FeGaussianBlur } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -72,6 +72,7 @@ export default function GameScreen() {
     score: 0,
     shields: 3,
     level: 1,
+    arenaTop: 0,
     fillQueue: [] as {x: number, y: number}[],
     fillCursor: 0,
     fillCaptured: 0
@@ -140,8 +141,6 @@ export default function GameScreen() {
         syncEntities();
       }
 
-      g.animFrame = requestAnimationFrame(gameLoop);
-      return;
     }
 
     // Player Movement
@@ -247,23 +246,26 @@ export default function GameScreen() {
     g.animFrame = requestAnimationFrame(gameLoop);
   }, []);
 
-  const dragStartRef = useRef({ x: 0, y: 0 });
-
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => gameRef.current.status === 'PLAYING',
       onPanResponderGrant: () => {
-        dragStartRef.current = { x: gameRef.current.player.x, y: gameRef.current.player.y };
-        gameRef.current.target = { x: dragStartRef.current.x, y: dragStartRef.current.y };
+        const g = gameRef.current;
+        g.target = { x: g.player.x, y: g.player.y };
       },
       onPanResponderMove: (evt, gestureState) => {
         const g = gameRef.current;
         if (g.status === 'PLAYING') {
-          g.target.x = dragStartRef.current.x + gestureState.dx * 1.5;
-          g.target.y = dragStartRef.current.y + gestureState.dy * 1.5;
+          const maxX = (GRID_W - 1) * g.cellW;
+          const maxY = (g.gridH - 1) * g.cellW;
+          // Follow the finger directly in arena coordinates so entering
+          // unsecured territory never feels like hitting an invisible wall.
+          g.target.x = Math.max(0, Math.min(maxX, gestureState.moveX));
+          g.target.y = Math.max(0, Math.min(maxY, gestureState.moveY - g.arenaTop));
         }
       },
-      onPanResponderRelease: () => {}
+      onPanResponderRelease: () => {},
+      onPanResponderTerminationRequest: () => false,
     })
   ).current;
 
@@ -320,6 +322,7 @@ export default function GameScreen() {
     const g = gameRef.current;
     g.cellW = cellW;
     g.gridH = gridH;
+    g.arenaTop = topPadding;
     g.status = 'PLAYING';
     g.level = lvl;
     g.score = currentScore;
@@ -451,6 +454,7 @@ export default function GameScreen() {
 
   const captureArea = () => {
     const g = gameRef.current;
+    if (g.fillQueue.length > 0) return;
     playSound('confirm');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     
@@ -517,6 +521,31 @@ export default function GameScreen() {
                 <FeGaussianBlur stdDeviation="2" />
               </Filter>
             </Defs>
+
+            {Array.from({ length: GRID_W + 1 }).map((_, i) => (
+              <Line
+                key={`grid-v-${i}`}
+                x1={i * gameRef.current.cellW}
+                y1={0}
+                x2={i * gameRef.current.cellW}
+                y2={gameRef.current.gridH * gameRef.current.cellW}
+                stroke={i % 5 === 0 ? colors.primary : colors.border}
+                strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
+                opacity={i % 5 === 0 ? 0.22 : 0.1}
+              />
+            ))}
+            {Array.from({ length: gameRef.current.gridH + 1 }).map((_, i) => (
+              <Line
+                key={`grid-h-${i}`}
+                x1={0}
+                y1={i * gameRef.current.cellW}
+                x2={GRID_W * gameRef.current.cellW}
+                y2={i * gameRef.current.cellW}
+                stroke={i % 5 === 0 ? colors.secondary : colors.border}
+                strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
+                opacity={i % 5 === 0 ? 0.2 : 0.09}
+              />
+            ))}
             
             {renderedGrid.map((r, i) => (
               <Rect 
@@ -525,11 +554,23 @@ export default function GameScreen() {
                 y={r.y * gameRef.current.cellW} 
                 width={r.w * gameRef.current.cellW} 
                 height={gameRef.current.cellW} 
-                fill={colors.card} 
-                stroke={colors.border}
-                strokeWidth={0.5}
+                fill={colors.primary}
+                opacity={0.14}
+                stroke={colors.primary}
+                strokeWidth={0.8}
               />
             ))}
+
+            <Rect
+              x={1}
+              y={1}
+              width={GRID_W * gameRef.current.cellW - 2}
+              height={gameRef.current.gridH * gameRef.current.cellW - 2}
+              fill="none"
+              stroke={colors.primary}
+              strokeWidth={1.5}
+              opacity={0.46}
+            />
 
             {shards.map((s, i) => (
               <Circle
