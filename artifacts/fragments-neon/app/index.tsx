@@ -615,34 +615,50 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
-      const qx = clamp(Math.floor((g.width * 0.52) / g.cell), 0, COLS - 1);
-      const qy = clamp(Math.floor((g.height * 0.46) / g.cell), 0, g.rows - 1);
       const visited = Array.from({ length: g.rows }, () => Array(COLS).fill(false));
-      const queue: Cell[] = [];
-      if (g.grid[qy]?.[qx] === EMPTY) {
-        visited[qy][qx] = true;
-        queue.push({ x: qx, y: qy });
-      }
       const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      while (queue.length > 0) {
-        const current = queue.shift()!;
-        directions.forEach(([dx, dy]) => {
-          const x = current.x + dx;
-          const y = current.y + dy;
-          if (x >= 0 && x < COLS && y >= 0 && y < g.rows && !visited[y][x] && g.grid[y][x] === EMPTY) {
-            visited[y][x] = true;
-            queue.push({ x, y });
-          }
-        });
-      }
+      const components: Cell[][] = [];
 
-      g.fillQueue = [];
-      for (let y = 0; y < g.rows; y += 1) {
-        for (let x = 0; x < COLS; x += 1) {
-          if (g.grid[y][x] === EMPTY && !visited[y][x]) g.fillQueue.push({ x, y });
+      for (let startY = 0; startY < g.rows; startY += 1) {
+        for (let startX = 0; startX < COLS; startX += 1) {
+          if (visited[startY][startX] || g.grid[startY][startX] !== EMPTY) continue;
+          const component: Cell[] = [];
+          const queue: Cell[] = [{ x: startX, y: startY }];
+          visited[startY][startX] = true;
+
+          while (queue.length > 0) {
+            const current = queue.shift()!;
+            component.push(current);
+            directions.forEach(([dx, dy]) => {
+              const x = current.x + dx;
+              const y = current.y + dy;
+              if (x >= 0 && x < COLS && y >= 0 && y < g.rows && !visited[y][x] && g.grid[y][x] === EMPTY) {
+                visited[y][x] = true;
+                queue.push({ x, y });
+              }
+            });
+          }
+          components.push(component);
         }
       }
-      g.trail.forEach((point) => g.fillQueue.push({ x: Math.floor(point.x / g.cell), y: Math.floor(point.y / g.cell) }));
+
+      // The largest empty component is the remaining playable field. Any
+      // smaller component is a genuinely enclosed pocket and must be filled.
+      components.sort((first, second) => second.length - first.length);
+
+      g.fillQueue = [];
+      components.slice(1).forEach((component) => {
+        g.fillQueue.push(...component);
+      });
+      const queuedCells = new Set(g.fillQueue.map((cell) => `${cell.x}:${cell.y}`));
+      g.trail.forEach((point) => {
+        const cell = { x: Math.floor(point.x / g.cell), y: Math.floor(point.y / g.cell) };
+        const key = `${cell.x}:${cell.y}`;
+        if (!queuedCells.has(key)) {
+          queuedCells.add(key);
+          g.fillQueue.push(cell);
+        }
+      });
       g.completedTrail = [...g.trail];
       g.trail = [];
       g.fillCursor = 0;
