@@ -836,7 +836,13 @@ export default function GameScreen() {
         for (let i = 0; i < steps; i += 1) {
           const bounds = perimeterBounds(g.width, g.height, g.cell);
           const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
-          if (g.trail.length === 0) {
+          const playerInOuterSafeBand = (
+            g.player.x <= bounds.left + playerRadius
+            || g.player.x >= bounds.right - playerRadius
+            || g.player.y <= bounds.top + playerRadius
+            || g.player.y >= bounds.bottom - playerRadius
+          );
+          if (g.trail.length === 0 && !playerInOuterSafeBand) {
             if (direction.x !== 0) {
               g.cutCoordinate = clamp(Math.round(g.player.y / g.cell) * g.cell, bounds.top + playerRadius, bounds.bottom - playerRadius);
               g.player.y = g.cutCoordinate;
