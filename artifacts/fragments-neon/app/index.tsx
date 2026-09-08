@@ -1183,21 +1183,21 @@ export default function GameScreen() {
           const velocityLength = Math.hypot(enemy.vx, enemy.vy);
           if (velocityLength > 8) {
             g.smokeAccumulator += dt;
-            if (g.smokeAccumulator >= 0.045) {
+            if (g.smokeAccumulator >= 0.04) {
               const backwardX = -enemy.vx / velocityLength;
               const backwardY = -enemy.vy / velocityLength;
               const sideX = -backwardY;
               const sideY = backwardX;
               const sideOffset = (Math.random() - 0.5) * g.cell * 0.34;
-              const maxLife = 0.24 + Math.random() * 0.12;
+              const maxLife = 0.43 + Math.random() * 0.17;
               g.smokePuffs.push({
-                x: enemy.x + backwardX * g.cell * 0.88 + sideX * sideOffset,
-                y: enemy.y + backwardY * g.cell * 0.88 + sideY * sideOffset,
+                x: enemy.x + backwardX * g.cell * 0.98 + sideX * sideOffset,
+                y: enemy.y + backwardY * g.cell * 0.98 + sideY * sideOffset,
                 life: maxLife,
                 maxLife,
-                size: g.cell * (0.13 + Math.random() * 0.08),
-                driftX: backwardX * (8 + Math.random() * 18) + sideX * (Math.random() - 0.5) * 10,
-                driftY: backwardY * (8 + Math.random() * 18) + sideY * (Math.random() - 0.5) * 10,
+                size: g.cell * (0.13 + Math.random() * 0.1),
+                driftX: backwardX * (10 + Math.random() * 22) + sideX * (Math.random() - 0.5) * 13,
+                driftY: backwardY * (10 + Math.random() * 22) + sideY * (Math.random() - 0.5) * 13,
               });
               g.smokeAccumulator = 0;
             }
@@ -1732,11 +1732,11 @@ export default function GameScreen() {
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudRow}>
           <Text style={[styles.hudText, { color: colors.primary }]}>SECTEUR 01</Text>
-          <Text style={[styles.scoreText, { color: colors.foreground }]}>{hud.score.toString().padStart(6, '0')}</Text>
+          <Text style={[styles.scoreText, { color: colors.foreground }]}>SCORE {hud.score.toString().padStart(6, '0')}</Text>
         </View>
         <View style={styles.hudRow}>
           <Text style={[styles.hudSubtext, { color: colors.accent }]}>BOUCLIERS {hud.shields}</Text>
-          <Text style={[styles.hudSubtext, { color: colors.secondary }]}>ZONE {hud.capture}%</Text>
+          <Text style={[styles.hudSubtext, { color: colors.secondary }]}>ZONE {hud.capture}%/80</Text>
         </View>
         {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
