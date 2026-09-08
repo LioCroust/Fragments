@@ -473,22 +473,11 @@ export default function GameScreen() {
         }
       },
       onPanResponderRelease: () => {
-        const g = gameRef.current;
-        if (g.trail.length === 0 && g.cell > 0) {
-          const bounds = perimeterBounds(g.width, g.height, g.cell);
-          if (!playerInOuterSafeBand(g.player, bounds, g.cell * PLAYER_RADIUS_CELLS)) {
-            g.inputDir = ZERO;
-          }
-        }
+        // Keep the selected direction latched. This lets a short inward
+        // swipe cross the outer safe band and enter the empty playfield.
       },
       onPanResponderTerminate: () => {
-        const g = gameRef.current;
-        if (g.trail.length === 0 && g.cell > 0) {
-          const bounds = perimeterBounds(g.width, g.height, g.cell);
-          if (!playerInOuterSafeBand(g.player, bounds, g.cell * PLAYER_RADIUS_CELLS)) {
-            g.inputDir = ZERO;
-          }
-        }
+        // Keep the selected direction latched for the same safe-band entry.
       },
       onPanResponderTerminationRequest: () => false,
     }),
