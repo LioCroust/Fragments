@@ -14,7 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
 const COLS = 16;
-const PERIMETER_INSET_CELLS = 1.5;
+const PERIMETER_INSET_CELLS = 2;
+const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
 const EMPTY = 0;
 const CLAIMED = 1;
@@ -346,7 +347,7 @@ export default function GameScreen() {
     for (let y = 0; y < rows; y += 1) {
       const row: number[] = [];
       for (let x = 0; x < COLS; x += 1) {
-        const safe = x < 2 || x >= COLS - 2 || y < 2 || y >= rows - 2;
+        const safe = x < SAFE_BAND_CELLS || x >= COLS - SAFE_BAND_CELLS || y < SAFE_BAND_CELLS || y >= rows - SAFE_BAND_CELLS;
         row.push(safe ? CLAIMED : EMPTY);
         if (!safe) totalEmpty += 1;
       }
@@ -745,7 +746,7 @@ export default function GameScreen() {
           if (state === EMPTY) {
             if (g.trail.length === 0) g.cutDir = direction;
             g.grid[y][x] = TRAIL;
-            g.trail.push({ x: x * g.cell + g.cell / 2, y: y * g.cell + g.cell / 2 });
+            g.trail.push({ x: g.player.x, y: g.player.y });
             for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
           } else if (state === TRAIL) {
             const recent = g.trail.slice(-6);
@@ -795,18 +796,24 @@ export default function GameScreen() {
       context.globalCompositeOperation = 'source-over';
       context.strokeStyle = 'rgba(0,243,255,0.11)';
       context.lineWidth = 0.65;
-      for (let x = 0; x <= COLS; x += 1) {
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      context.save();
+      context.beginPath();
+      context.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+      context.clip();
+      for (let x = SAFE_BAND_CELLS; x <= COLS - SAFE_BAND_CELLS; x += 1) {
         context.beginPath();
-        context.moveTo(x * g.cell, 0);
-        context.lineTo(x * g.cell, g.height);
+        context.moveTo(x * g.cell, bounds.top);
+        context.lineTo(x * g.cell, bounds.bottom);
         context.stroke();
       }
-      for (let y = 0; y <= g.rows; y += 1) {
+      for (let y = SAFE_BAND_CELLS; y <= g.rows - SAFE_BAND_CELLS; y += 1) {
         context.beginPath();
-        context.moveTo(0, y * g.cell);
-        context.lineTo(g.width, y * g.cell);
+        context.moveTo(bounds.left, y * g.cell);
+        context.lineTo(bounds.right, y * g.cell);
         context.stroke();
       }
+      context.restore();
 
       context.fillStyle = 'rgba(0,243,255,0.10)';
       for (let y = 0; y < g.rows; y += 1) {
@@ -828,10 +835,14 @@ export default function GameScreen() {
         context.shadowColor = '#ff5500';
         context.shadowBlur = 18;
         context.lineWidth = 5;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
         context.beginPath();
         context.moveTo(g.trail[0].x, g.trail[0].y);
         g.trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
         context.stroke();
+        context.lineCap = 'butt';
+        context.lineJoin = 'miter';
       }
 
       context.globalCompositeOperation = 'lighter';
