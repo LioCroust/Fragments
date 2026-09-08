@@ -159,6 +159,13 @@ const perimeterBounds = (width: number, height: number, cell: number) => ({
   bottom: height - cell * PERIMETER_INSET_CELLS,
 });
 
+const playerInOuterSafeBand = (player: Point, bounds: ReturnType<typeof perimeterBounds>, radius: number) => (
+  player.x <= bounds.left + radius
+  || player.x >= bounds.right - radius
+  || player.y <= bounds.top + radius
+  || player.y >= bounds.bottom - radius
+);
+
 const spriteFrames: Record<EnemyKind, any[]> = {
   SHIP: [
     require('../assets/images/enemy-ship-final-frame-0.png'),
@@ -467,11 +474,21 @@ export default function GameScreen() {
       },
       onPanResponderRelease: () => {
         const g = gameRef.current;
-        if (g.trail.length === 0) g.inputDir = ZERO;
+        if (g.trail.length === 0 && g.cell > 0) {
+          const bounds = perimeterBounds(g.width, g.height, g.cell);
+          if (!playerInOuterSafeBand(g.player, bounds, g.cell * PLAYER_RADIUS_CELLS)) {
+            g.inputDir = ZERO;
+          }
+        }
       },
       onPanResponderTerminate: () => {
         const g = gameRef.current;
-        if (g.trail.length === 0) g.inputDir = ZERO;
+        if (g.trail.length === 0 && g.cell > 0) {
+          const bounds = perimeterBounds(g.width, g.height, g.cell);
+          if (!playerInOuterSafeBand(g.player, bounds, g.cell * PLAYER_RADIUS_CELLS)) {
+            g.inputDir = ZERO;
+          }
+        }
       },
       onPanResponderTerminationRequest: () => false,
     }),
@@ -836,13 +853,8 @@ export default function GameScreen() {
         for (let i = 0; i < steps; i += 1) {
           const bounds = perimeterBounds(g.width, g.height, g.cell);
           const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
-          const playerInOuterSafeBand = (
-            g.player.x <= bounds.left + playerRadius
-            || g.player.x >= bounds.right - playerRadius
-            || g.player.y <= bounds.top + playerRadius
-            || g.player.y >= bounds.bottom - playerRadius
-          );
-          if (g.trail.length === 0 && !playerInOuterSafeBand) {
+          const isInOuterSafeBand = playerInOuterSafeBand(g.player, bounds, playerRadius);
+          if (g.trail.length === 0 && !isInOuterSafeBand) {
             if (direction.x !== 0) {
               g.cutCoordinate = clamp(Math.round(g.player.y / g.cell) * g.cell, bounds.top + playerRadius, bounds.bottom - playerRadius);
               g.player.y = g.cutCoordinate;
