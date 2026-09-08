@@ -489,6 +489,8 @@ export default function GameScreen() {
     enemies: [],
     diamond: { x: 0, y: 0, phase: 0, collected: false },
     particles: [],
+    smokePuffs: [],
+    smokeAccumulator: 0,
     fillQueue: [],
     fillCursor: 0,
     scanY: 0,
@@ -1649,7 +1651,6 @@ export default function GameScreen() {
     const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
     const playerRotationDegrees = angle * (180 / Math.PI) + 90;
     const playerSize = playerSpriteSize(snapshot.cell);
-    const wakeTransform = `translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`;
     return (
       <Svg style={StyleSheet.absoluteFill}>
         <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
