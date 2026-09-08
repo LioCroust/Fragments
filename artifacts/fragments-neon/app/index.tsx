@@ -13,7 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
-const COLS = 16;
+const COLS = 12;
 const PERIMETER_INSET_CELLS = 2;
 const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
@@ -58,6 +58,7 @@ type Game = {
   player: Point;
   inputDir: Direction;
   cutDir: Direction;
+  cutCoordinate: number;
   trail: Point[];
   enemies: Enemy[];
   particles: Particle[];
@@ -280,6 +281,7 @@ export default function GameScreen() {
     player: { x: 0, y: 0 },
     inputDir: ZERO,
     cutDir: ZERO,
+    cutCoordinate: 0,
     trail: [],
     enemies: [],
     particles: [],
@@ -341,7 +343,7 @@ export default function GameScreen() {
     const previousLevel = preserveStats ? g.level : 1;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
-    const rows = Math.max(24, Math.floor(height / cell));
+    const rows = Math.max(18, Math.floor(height / cell));
     const grid: number[][] = [];
     let totalEmpty = 0;
 
@@ -362,9 +364,10 @@ export default function GameScreen() {
       cell,
       rows,
       grid,
-      player: { x: bounds.left + cell * PLAYER_RADIUS_CELLS, y: bounds.bottom - cell * PLAYER_RADIUS_CELLS },
+      player: { x: (SAFE_BAND_CELLS + 1) * cell, y: (rows - SAFE_BAND_CELLS - 1) * cell },
       inputDir: ZERO,
       cutDir: ZERO,
+      cutCoordinate: 0,
       trail: [],
       enemies: createEnemies(width, height, cell, previousLevel),
       particles: [],
@@ -411,7 +414,12 @@ export default function GameScreen() {
         g.inputDir = direction;
         // A new cardinal swipe can redirect an active cut at 90 degrees.
         // Releasing still leaves the drone travelling until it reaches safety.
-        if (g.trail.length > 0) g.cutDir = direction;
+        if (g.trail.length > 0) {
+          g.cutDir = direction;
+          g.cutCoordinate = direction.x !== 0
+            ? Math.round(g.player.y / g.cell) * g.cell
+            : Math.round(g.player.x / g.cell) * g.cell;
+        }
       },
       onPanResponderRelease: () => {
         const g = gameRef.current;
@@ -568,7 +576,7 @@ export default function GameScreen() {
         }
 
         enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
-        enemy.spin += dt * (enemy.kind === 'DRAGON' ? 1.15 : enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
+        enemy.spin += dt * (enemy.kind === 'DRAGON' ? -1.15 : enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
         enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
 
         const visualRadius = enemyVisualRadius(enemy, g.cell) * (1 + Math.abs(Math.sin(enemy.phase * 1.25)) * 0.035);
@@ -739,6 +747,19 @@ export default function GameScreen() {
         for (let i = 0; i < steps; i += 1) {
           const bounds = perimeterBounds(g.width, g.height, g.cell);
           const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
+          if (g.trail.length === 0) {
+            if (direction.x !== 0) {
+              g.cutCoordinate = clamp(Math.round(g.player.y / g.cell) * g.cell, bounds.top + playerRadius, bounds.bottom - playerRadius);
+              g.player.y = g.cutCoordinate;
+            } else {
+              g.cutCoordinate = clamp(Math.round(g.player.x / g.cell) * g.cell, bounds.left + playerRadius, bounds.right - playerRadius);
+              g.player.x = g.cutCoordinate;
+            }
+          } else if (g.cutDir.x !== 0) {
+            g.player.y = g.cutCoordinate;
+          } else if (g.cutDir.y !== 0) {
+            g.player.x = g.cutCoordinate;
+          }
           g.player.x = clamp(g.player.x + stepX, bounds.left + playerRadius, bounds.right - playerRadius);
           g.player.y = clamp(g.player.y + stepY, bounds.top + playerRadius, bounds.bottom - playerRadius);
           const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
