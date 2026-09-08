@@ -1,805 +1,697 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, PanResponder, Pressable, Image, LayoutChangeEvent } from 'react-native';
-import Svg, { Rect, Polyline, Circle, Line, Defs, RadialGradient, Stop, Filter, FeGaussianBlur } from 'react-native-svg';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  LayoutChangeEvent,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import Svg, { Circle, Line, Polygon, Polyline, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
-import { useAudioPlayer } from 'expo-audio';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
+const COLS = 40;
 const EMPTY = 0;
 const CLAIMED = 1;
 const TRAIL = 2;
+const ZERO = { x: 0 as const, y: 0 as const };
 
-const FALLBACK_SCREEN_WIDTH = Dimensions.get('window').width;
-const FALLBACK_SCREEN_HEIGHT = Dimensions.get('window').height;
-const GRID_W = 40;
-const TARGET_PERCENT = 75;
-const playerSprite = require('@/assets/images/player-arcwing.png');
-const enemySprite = require('@/assets/images/enemy-void-mantis.png');
-const shardSprite = require('@/assets/images/energy-tesseract.png');
-const beamCapsuleSprite = require('@/assets/images/laser-beam-capsule.png');
+type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
+type Point = { x: number; y: number };
+type Cell = { x: number; y: number };
+type Mode = 'FAST' | 'SLOW';
+type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
 
-const isClaimedSafe = (grid: number[][], x: number, y: number, w: number, h: number) => {
-  if (x < 0 || x >= w || y < 0 || y >= h) return true;
-  return grid[y][x] === CLAIMED;
+type Game = {
+  width: number;
+  height: number;
+  cell: number;
+  rows: number;
+  grid: number[][];
+  player: Point;
+  inputDir: Direction;
+  cutDir: Direction;
+  trail: Point[];
+  qix: Point & { vx: number; vy: number; phase: number };
+  particles: Particle[];
+  fillQueue: Cell[];
+  fillCursor: number;
+  scanY: number;
+  mode: Mode;
+  score: number;
+  shields: number;
+  captured: number;
+  totalEmpty: number;
+  level: number;
+  frame: number;
+  initialized: boolean;
+  status: 'PLAYING' | 'RESPAWN';
+  respawnAt: number;
 };
+
+type Hud = {
+  score: number;
+  shields: number;
+  capture: number;
+  mode: Mode;
+  feedback: string;
+};
+
+type Snapshot = {
+  width: number;
+  height: number;
+  cell: number;
+  rows: number;
+  claimed: { x: number; y: number; w: number }[];
+  trail: Point[];
+  player: Point;
+  direction: Direction;
+  qix: Point & { phase: number };
+  particles: Particle[];
+  scanY: number;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const cardinalDirection = (dx: number, dy: number): Direction => {
+  if (Math.abs(dx) >= Math.abs(dy)) return { x: dx >= 0 ? 1 : -1, y: 0 };
+  return { x: 0, y: dy >= 0 ? 1 : -1 };
+};
+
+const makeClaimedRuns = (grid: number[][]) => {
+  const runs: { x: number; y: number; w: number }[] = [];
+  grid.forEach((row, y) => {
+    let start = -1;
+    row.forEach((value, x) => {
+      if (value === CLAIMED && start < 0) start = x;
+      if (value !== CLAIMED && start >= 0) {
+        runs.push({ x: start, y, w: x - start });
+        start = -1;
+      }
+    });
+    if (start >= 0) runs.push({ x: start, y, w: row.length - start });
+  });
+  return runs;
+};
+
+const distanceToSegment = (point: Point, a: Point, b: Point) => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy || 1;
+  const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared, 0, 1);
+  const closest = { x: a.x + t * dx, y: a.y + t * dy };
+  return Math.hypot(point.x - closest.x, point.y - closest.y);
+};
+
+const qixPoints = (qix: Point & { phase: number }, radius: number, arm: number) => {
+  const points: Point[] = [];
+  const segments = 8 + (arm % 4);
+  for (let i = 0; i <= segments; i += 1) {
+    const angle = qix.phase * 0.8 + arm * 0.7 + (i / segments) * Math.PI * 2;
+    const wave = Math.sin(qix.phase * 3 + i * 1.7 + arm) * 0.28;
+    points.push({
+      x: qix.x + Math.cos(angle) * radius * (1 + wave),
+      y: qix.y + Math.sin(angle) * radius * (1 + wave),
+    });
+  }
+  return points;
+};
+
+const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
 
 export default function GameScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  
-  const confirmSound = useAudioPlayer(require('@/assets/audio/confirm.mp3'));
-  const pickupSound = useAudioPlayer(require('@/assets/audio/pickup.mp3'));
-  const dangerSound = useAudioPlayer(require('@/assets/audio/danger.mp3'));
-
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  
-  // React State for Rendering
-  const [gameState, setGameState] = useState<'MENU'|'PLAYING'|'GAMEOVER'|'VICTORY'>('MENU');
-  const [score, setScore] = useState(0);
-  const [bestScore, setBestScore] = useState(0);
-  const [totalShards, setTotalShards] = useState(0);
-  const [shields, setShields] = useState(3);
-  const [level, setLevel] = useState(1);
-  const [progress, setProgress] = useState(0);
-  const [shardTiers, setShardTiers] = useState(0);
-  
-  // Game Render State
-  const [renderedGrid, setRenderedGrid] = useState<{x:number, y:number, w:number}[]>([]);
-  const [playerPos, setPlayerPos] = useState({x: 0, y: 0});
-  const [trailPoints, setTrailPoints] = useState<string>("");
-  const [trailAngle, setTrailAngle] = useState(0);
-  const [captureFill, setCaptureFill] = useState(0);
-  const [enemies, setEnemies] = useState<{x:number, y:number}[]>([]);
-  const [shards, setShards] = useState<{x:number, y:number, gx:number, gy:number}[]>([]);
-  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
-  const arenaSizeRef = useRef({ width: 0, height: 0 });
-  
-  const gameRef = useRef({
-    grid: [] as number[][],
-    cellW: 0,
-    gridH: 0,
-    player: { x: 0, y: 0, startX: 0, startY: 0 },
-    target: { x: 0, y: 0 },
-    control: { x: 0, y: 0 },
-    cutDirection: { x: 0, y: 0 },
-    trailGrid: [] as {x: number, y: number}[],
-    trailPts: [] as {x: number, y: number}[],
-    enemies: [] as {x: number, y: number, vx: number, vy: number}[],
-    shards: [] as {x: number, y: number, gx: number, gy: number}[],
-    animFrame: 0,
-    lastTime: 0,
-    status: 'MENU',
-    capturedCells: 0,
-    totalEmptyCells: 0,
+  const canvasRef = useRef<any>(null);
+  const sizeRef = useRef({ width: 0, height: 0 });
+  const gameRef = useRef<Game>({
+    width: 0,
+    height: 0,
+    cell: 0,
+    rows: 0,
+    grid: [],
+    player: { x: 0, y: 0 },
+    inputDir: ZERO,
+    cutDir: ZERO,
+    trail: [],
+    qix: { x: 0, y: 0, vx: 70, vy: 54, phase: 0 },
+    particles: [],
+    fillQueue: [],
+    fillCursor: 0,
+    scanY: 0,
+    mode: 'FAST',
     score: 0,
     shields: 3,
+    captured: 0,
+    totalEmpty: 1,
     level: 1,
-    arenaTop: 0,
-    fillQueue: [] as {x: number, y: number}[],
-    fillCursor: 0,
-    fillCaptured: 0
+    frame: 0,
+    initialized: false,
+    status: 'PLAYING',
+    respawnAt: 0,
   });
 
-  const gameLoop = useCallback(() => {
+  const [hud, setHud] = useState<Hud>({
+    score: 0,
+    shields: 3,
+    capture: 0,
+    mode: 'FAST',
+    feedback: '',
+  });
+  const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
+
+  const resetGame = useCallback((preserveStats = false) => {
     const g = gameRef.current;
-    if (g.status !== 'PLAYING') return;
+    const { width, height } = sizeRef.current;
+    if (width <= 0 || height <= 0) return;
 
-    let now = Date.now();
-    let dt = (now - g.lastTime) / 1000;
-    if (dt > 0.1) dt = 0.1;
-    g.lastTime = now;
-
-    let gridChanged = false;
-    let entityChanged = false;
-
-    // Capture animation: reveal the secured territory progressively before
-    // changing state to victory. This keeps the payoff visible and gives the
-    // UI a full-frame, 60fps moment to celebrate the player's move.
-    if (g.fillQueue.length > 0) {
-      const cellsPerFrame = Math.max(4, Math.min(18, Math.ceil(g.fillQueue.length / 24)));
-      for (let i = 0; i < cellsPerFrame && g.fillCursor < g.fillQueue.length; i++) {
-        const cell = g.fillQueue[g.fillCursor];
-        if (g.grid[cell.y][cell.x] !== CLAIMED) {
-          g.grid[cell.y][cell.x] = CLAIMED;
-          g.fillCaptured += 1;
-        }
-        g.fillCursor += 1;
-      }
-
-      gridChanged = true;
-      setCaptureFill(Math.min(100, Math.round((g.fillCursor / g.fillQueue.length) * 100)));
-      syncGrid();
-
-      if (g.fillCursor >= g.fillQueue.length) {
-        const newlyCaptured = g.fillCaptured;
-        g.capturedCells += newlyCaptured;
-        g.score += newlyCaptured * 10;
-        g.fillQueue = [];
-        g.fillCursor = 0;
-        g.fillCaptured = 0;
-
-        const newProgress = Math.floor((g.capturedCells / g.totalEmptyCells) * 100);
-        setProgress(newProgress);
-        setCaptureFill(100);
-
-        g.shards = g.shards.filter(s => {
-          if (g.grid[s.gy][s.gx] === CLAIMED) {
-            playSound('pickup');
-            saveData(0, 1);
-            g.score += 500;
-            return false;
-          }
-          return true;
-        });
-
-        if (newProgress >= TARGET_PERCENT) {
-          g.status = 'VICTORY';
-          setGameState('VICTORY');
-        } else {
-          setCaptureFill(0);
-        }
-
-        syncGrid();
-        syncEntities();
-      }
-
-    }
-
-    // Player Movement: Qix-style cardinal movement. On safe territory the
-    // joystick can choose any cardinal direction; once a cut starts, its
-    // direction is locked until the player reaches the safe border again.
-    const moveDirection = g.trailGrid.length > 0 ? g.cutDirection : g.control;
-    const MOVE_SPEED = 300 * dt;
-    const moveX = moveDirection.x * MOVE_SPEED;
-    const moveY = moveDirection.y * MOVE_SPEED;
-
-    if (moveX !== 0 || moveY !== 0) {
-      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(moveX), Math.abs(moveY))));
-      const stepX = moveX / steps;
-      const stepY = moveY / steps;
-      
-      for (let i = 0; i < steps; i++) {
-        g.player.x += stepX;
-        g.player.y += stepY;
-        
-        g.player.x = Math.max(0, Math.min(g.player.x, (GRID_W - 1) * g.cellW));
-        g.player.y = Math.max(0, Math.min(g.player.y, (g.gridH - 1) * g.cellW));
-
-        const gx = Math.floor(g.player.x / g.cellW);
-        const gy = Math.floor(g.player.y / g.cellW);
-        
-        const state = g.grid[gy][gx];
-        
-        if (state === EMPTY) {
-          if (g.trailGrid.length === 0) {
-            g.cutDirection = { x: moveDirection.x, y: moveDirection.y };
-          }
-          g.grid[gy][gx] = TRAIL;
-          g.trailGrid.push({x: gx, y: gy});
-          if (g.trailPts.length === 0) {
-             g.trailPts.push({x: g.player.startX, y: g.player.startY});
-          }
-        } else if (state === TRAIL) {
-          const lastCells = g.trailGrid.slice(-4);
-          const hitSelf = !lastCells.some(c => c.x === gx && c.y === gy);
-          if (hitSelf) {
-            handlePlayerHit();
-            gridChanged = true;
-            break;
-          }
-        } else if (state === CLAIMED) {
-          if (g.trailGrid.length > 2) {
-            captureArea();
-            gridChanged = true;
-            break;
-          } else if (g.trailGrid.length > 0) {
-            for (let t of g.trailGrid) g.grid[t.y][t.x] = EMPTY;
-            g.trailGrid = [];
-            g.trailPts = [];
-            gridChanged = true;
-          }
-          g.player.startX = g.player.x;
-          g.player.startY = g.player.y;
-        }
-      }
-      
-      if (g.trailGrid.length > 0) {
-          g.trailPts.push({x: g.player.x, y: g.player.y});
-      }
-      entityChanged = true;
-    }
-
-    // Enemy Movement
-    for (let e of g.enemies) {
-      let nx = e.x + e.vx * dt * 60;
-      let ny = e.y + e.vy * dt * 60;
-      
-      let egx = Math.floor(nx / g.cellW);
-      let egy = Math.floor(ny / g.cellW);
-      
-      if (egx < 0 || egx >= GRID_W) { e.vx *= -1; nx = e.x; }
-      if (egy < 0 || egy >= g.gridH) { e.vy *= -1; ny = e.y; }
-      
-      if (egx >= 0 && egx < GRID_W && egy >= 0 && egy < g.gridH) {
-        let state = g.grid[egy][egx];
-        if (state === CLAIMED) {
-           let cpx = Math.floor(e.x / g.cellW);
-           let cpy = Math.floor(e.y / g.cellW);
-           if (cpx !== egx && isClaimedSafe(g.grid, egx, cpy, GRID_W, g.gridH)) e.vx *= -1;
-           if (cpy !== egy && isClaimedSafe(g.grid, cpx, egy, GRID_W, g.gridH)) e.vy *= -1;
-           if (cpx !== egx && cpy !== egy && !isClaimedSafe(g.grid, egx, cpy, GRID_W, g.gridH) && !isClaimedSafe(g.grid, cpx, egy, GRID_W, g.gridH)) {
-              e.vx *= -1; e.vy *= -1;
-           }
-           nx = e.x + (e.vx * dt * 60); 
-           ny = e.y + (e.vy * dt * 60);
-        } else if (state === TRAIL) {
-           handlePlayerHit();
-           gridChanged = true;
-           break;
-        }
-      }
-      e.x = nx;
-      e.y = ny;
-      entityChanged = true;
-    }
-
-    if (gridChanged) syncGrid();
-    if (entityChanged || gridChanged) syncEntities();
-
-    g.animFrame = requestAnimationFrame(gameLoop);
-  }, []);
-
-  const joystickPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => gameRef.current.status === 'PLAYING',
-      onPanResponderGrant: () => {
-        const g = gameRef.current;
-        g.control = { x: 0, y: 0 };
-        setJoystickOffset({ x: 0, y: 0 });
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const g = gameRef.current;
-        if (g.status === 'PLAYING') {
-          const radius = 42;
-          const deadZone = 12;
-          const distance = Math.sqrt(gestureState.dx ** 2 + gestureState.dy ** 2);
-          const clampedDistance = Math.min(radius, distance);
-          const angle = Math.atan2(gestureState.dy, gestureState.dx);
-          const knobX = Math.cos(angle) * clampedDistance;
-          const knobY = Math.sin(angle) * clampedDistance;
-
-          setJoystickOffset({ x: knobX, y: knobY });
-
-          if (distance < deadZone) {
-            g.control = { x: 0, y: 0 };
-          } else if (Math.abs(gestureState.dx) >= Math.abs(gestureState.dy)) {
-            g.control = { x: gestureState.dx > 0 ? 1 : -1, y: 0 };
-          } else {
-            g.control = { x: 0, y: gestureState.dy > 0 ? 1 : -1 };
-          }
-        }
-      },
-      onPanResponderRelease: () => {
-        gameRef.current.control = { x: 0, y: 0 };
-        setJoystickOffset({ x: 0, y: 0 });
-      },
-      onPanResponderTerminate: () => {
-        gameRef.current.control = { x: 0, y: 0 };
-        setJoystickOffset({ x: 0, y: 0 });
-      },
-      onPanResponderTerminationRequest: () => false,
-    })
-  ).current;
-
-  useEffect(() => {
-    loadData();
-    return () => {
-      cancelAnimationFrame(gameRef.current.animFrame);
-    };
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const best = await AsyncStorage.getItem('bestScore');
-      const shards = await AsyncStorage.getItem('totalShards');
-      if (best) setBestScore(parseInt(best, 10));
-      if (shards) {
-        const parsedShards = parseInt(shards, 10);
-        setTotalShards(parsedShards);
-        setShardTiers(Math.min(2, Math.floor(parsedShards / 10)));
-      }
-    } catch (e) {}
-  };
-
-  const saveData = async (newScore: number, newShards: number) => {
-    try {
-      if (newScore > bestScore) {
-        setBestScore(newScore);
-        await AsyncStorage.setItem('bestScore', newScore.toString());
-      }
-      const updatedShards = totalShards + newShards;
-      setTotalShards(updatedShards);
-      setShardTiers(Math.min(2, Math.floor(updatedShards / 10)));
-      await AsyncStorage.setItem('totalShards', updatedShards.toString());
-    } catch (e) {}
-  };
-
-  const playSound = useCallback((sound: 'confirm' | 'pickup' | 'danger') => {
-    if (!soundEnabled) return;
-    if (sound === 'confirm') { confirmSound.seekTo(0); confirmSound.play(); }
-    if (sound === 'pickup') { pickupSound.seekTo(0); pickupSound.play(); }
-    if (sound === 'danger') { dangerSound.seekTo(0); dangerSound.play(); }
-  }, [soundEnabled, confirmSound, pickupSound, dangerSound]);
-
-  const initLevel = useCallback((lvl: number, currentScore: number = 0, currentShields: number = 3) => {
-    setProgress(0);
-    setGameState('PLAYING');
-    
-    const topPadding = Math.max(insets.top, 20) + 80;
-    const bottomPadding = insets.bottom + 40;
-    const measuredWidth = arenaSizeRef.current.width || FALLBACK_SCREEN_WIDTH;
-    const measuredHeight = arenaSizeRef.current.height || (
-      FALLBACK_SCREEN_HEIGHT - topPadding - bottomPadding
-    );
-    const cellW = measuredWidth / GRID_W;
-    const arenaHeight = measuredHeight;
-    const gridH = Math.floor(arenaHeight / cellW);
-    
-    const g = gameRef.current;
-    g.cellW = cellW;
-    g.gridH = gridH;
-    g.arenaTop = topPadding;
-    g.status = 'PLAYING';
-    g.level = lvl;
-    g.score = currentScore;
-    g.shields = currentShields;
-    
-    let grid = [];
+    const previousScore = preserveStats ? g.score : 0;
+    const previousShields = preserveStats ? g.shields : 3;
+    const previousLevel = preserveStats ? g.level : 1;
+    const cell = width / COLS;
+    const rows = Math.max(24, Math.floor(height / cell));
+    const grid: number[][] = [];
     let totalEmpty = 0;
-    for (let y = 0; y < gridH; y++) {
-      let row = [];
-      for (let x = 0; x < GRID_W; x++) {
-        if (x < 2 || x >= GRID_W - 2 || y < 2 || y >= gridH - 2) {
-          row.push(CLAIMED);
-        } else {
-          row.push(EMPTY);
-          totalEmpty++;
-        }
+
+    for (let y = 0; y < rows; y += 1) {
+      const row: number[] = [];
+      for (let x = 0; x < COLS; x += 1) {
+        const safe = x < 2 || x >= COLS - 2 || y < 2 || y >= rows - 2;
+        row.push(safe ? CLAIMED : EMPTY);
+        if (!safe) totalEmpty += 1;
       }
       grid.push(row);
     }
-    g.grid = grid;
-    g.totalEmptyCells = totalEmpty;
-    g.capturedCells = 0;
-    
-    g.player.x = (GRID_W / 2) * cellW;
-    g.player.y = (gridH - 2) * cellW;
-    g.player.startX = g.player.x;
-    g.player.startY = g.player.y;
-    g.target.x = g.player.x;
-    g.target.y = g.player.y;
-    g.control = { x: 0, y: 0 };
-    g.cutDirection = { x: 0, y: 0 };
-    g.trailGrid = [];
-    g.trailPts = [];
-    
-    g.enemies = [];
-    const baseSpeed = 1.5 + lvl * 0.4;
-    for (let i = 0; i < Math.min(lvl, 5); i++) {
-      g.enemies.push({
-        x: (GRID_W / 2 + (i%2===0?1:-1) * i * 3) * cellW,
-        y: (gridH / 3 + i * 2) * cellW,
-        vx: (Math.random() > 0.5 ? 1 : -1) * baseSpeed,
-        vy: (Math.random() > 0.5 ? 1 : -1) * baseSpeed
-      });
-    }
-    
-    g.shards = [];
-    for (let i = 0; i < 2 + lvl; i++) {
-      let sx = Math.floor(Math.random() * (GRID_W - 10)) + 5;
-      let sy = Math.floor(Math.random() * (gridH - 10)) + 5;
-      g.shards.push({
-        x: sx * cellW + cellW / 2,
-        y: sy * cellW + cellW / 2,
-        gx: sx,
-        gy: sy
-      });
-    }
-    
-    syncGrid();
-    syncEntities();
-    g.lastTime = Date.now();
-    cancelAnimationFrame(g.animFrame);
-    g.animFrame = requestAnimationFrame(gameLoop);
-  }, [insets]);
+
+    gameRef.current = {
+      ...g,
+      width,
+      height,
+      cell,
+      rows,
+      grid,
+      player: { x: 2.5 * cell, y: (rows - 2.5) * cell },
+      inputDir: ZERO,
+      cutDir: ZERO,
+      trail: [],
+      qix: {
+        x: width * 0.52,
+        y: height * 0.46,
+        vx: 62 + previousLevel * 8,
+        vy: 48 + previousLevel * 6,
+        phase: 0,
+      },
+      particles: [],
+      fillQueue: [],
+      fillCursor: 0,
+      scanY: 0,
+      mode: 'FAST',
+      score: previousScore,
+      shields: previousShields,
+      captured: 0,
+      totalEmpty,
+      level: previousLevel,
+      frame: 0,
+      initialized: true,
+      status: 'PLAYING',
+      respawnAt: 0,
+    };
+    setHud({
+      score: previousScore,
+      shields: previousShields,
+      capture: 0,
+      mode: 'FAST',
+      feedback: '',
+    });
+  }, []);
 
   const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width <= 0 || height <= 0) return;
-
-    const previous = arenaSizeRef.current;
+    const previous = sizeRef.current;
     const changed = Math.abs(previous.width - width) > 1 || Math.abs(previous.height - height) > 1;
-    arenaSizeRef.current = { width, height };
+    sizeRef.current = { width, height };
+    if (changed && gameRef.current.initialized) resetGame(true);
+  }, [resetGame]);
 
-    // The canvas preview is an iframe, so its layout size can be different
-    // from the browser window. Rebuild once using the measured arena instead
-    // of the global Dimensions value.
-    if (changed && gameRef.current.status === 'PLAYING') {
+  const setMode = (mode: Mode) => {
+    gameRef.current.mode = mode;
+    setHud((current) => ({ ...current, mode }));
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gesture) => {
+        const g = gameRef.current;
+        if (g.status !== 'PLAYING' || Math.hypot(gesture.dx, gesture.dy) < 10) return;
+        if (g.trail.length === 0) g.inputDir = cardinalDirection(gesture.dx, gesture.dy);
+      },
+      onPanResponderRelease: () => {
+        const g = gameRef.current;
+        if (g.trail.length === 0) g.inputDir = ZERO;
+      },
+      onPanResponderTerminate: () => {
+        const g = gameRef.current;
+        if (g.trail.length === 0) g.inputDir = ZERO;
+      },
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
+
+  useEffect(() => {
+    let animationFrame = 0;
+    let lastTime = Date.now();
+
+    const addParticle = (g: Game, direction: Direction) => {
+      if (g.particles.length > 460) return;
+      const backwards = Math.atan2(-direction.y, -direction.x);
+      const angle = backwards + (Math.random() - 0.5) * (Math.PI / 4);
+      const speed = 80 + Math.random() * 210;
+      const colorsForSpark = ['#ffffff', '#fff35c', '#ff8a00', '#ff5500'];
+      g.particles.push({
+        x: g.player.x - direction.x * g.cell * 0.8,
+        y: g.player.y - direction.y * g.cell * 0.8,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.4,
+        size: 1.2 + Math.random() * 2.5,
+        color: colorsForSpark[Math.floor(Math.random() * colorsForSpark.length)],
+      });
+    };
+
+    const explode = (g: Game, now: number) => {
+      for (let i = 0; i < 170; i += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 50 + Math.random() * 300;
+        g.particles.push({
+          x: g.player.x,
+          y: g.player.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 0.6 + Math.random() * 0.5,
+          size: 1.5 + Math.random() * 4,
+          color: i % 3 === 0 ? '#ffffff' : '#ff6a00',
+        });
+      }
+      g.trail.forEach((point) => {
+        const x = Math.floor(point.x / g.cell);
+        const y = Math.floor(point.y / g.cell);
+        if (g.grid[y]?.[x] === TRAIL) g.grid[y][x] = EMPTY;
+      });
+      g.trail = [];
+      g.inputDir = ZERO;
+      g.cutDir = ZERO;
+      g.shields -= 1;
+      g.status = 'RESPAWN';
+      g.respawnAt = now + (g.shields > 0 ? 520 : 1050);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    };
+
+    const capture = (g: Game) => {
+      const qx = clamp(Math.floor(g.qix.x / g.cell), 0, COLS - 1);
+      const qy = clamp(Math.floor(g.qix.y / g.cell), 0, g.rows - 1);
+      const visited = Array.from({ length: g.rows }, () => Array(COLS).fill(false));
+      const queue: Cell[] = [];
+      if (g.grid[qy]?.[qx] === EMPTY) {
+        visited[qy][qx] = true;
+        queue.push({ x: qx, y: qy });
+      }
+      const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        directions.forEach(([dx, dy]) => {
+          const x = current.x + dx;
+          const y = current.y + dy;
+          if (x >= 0 && x < COLS && y >= 0 && y < g.rows && !visited[y][x] && g.grid[y][x] === EMPTY) {
+            visited[y][x] = true;
+            queue.push({ x, y });
+          }
+        });
+      }
+
+      g.fillQueue = [];
+      for (let y = 0; y < g.rows; y += 1) {
+        for (let x = 0; x < COLS; x += 1) {
+          if (g.grid[y][x] === EMPTY && !visited[y][x]) g.fillQueue.push({ x, y });
+        }
+      }
+      g.trail.forEach((point) => g.fillQueue.push({ x: Math.floor(point.x / g.cell), y: Math.floor(point.y / g.cell) }));
+      g.trail = [];
+      g.fillCursor = 0;
+      g.scanY = 0;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    };
+
+    const update = (g: Game, dt: number, now: number) => {
+      g.frame += 1;
+      g.qix.phase += dt * 4;
+
+      g.particles = g.particles
+        .map((particle) => ({
+          ...particle,
+          x: particle.x + particle.vx * dt,
+          y: particle.y + particle.vy * dt,
+          vx: particle.vx * 0.95,
+          vy: particle.vy * 0.95,
+          life: particle.life - dt,
+        }))
+        .filter((particle) => particle.life > 0);
+
+      if (g.status === 'RESPAWN') {
+        if (now >= g.respawnAt) {
+          if (g.shields <= 0) resetGame(false);
+          else resetGame(true);
+        }
+        return;
+      }
+
+      if (g.fillQueue.length > 0) {
+        const cellsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
+        for (let i = 0; i < cellsPerFrame && g.fillCursor < g.fillQueue.length; i += 1) {
+          const cell = g.fillQueue[g.fillCursor];
+          if (g.grid[cell.y]?.[cell.x] !== CLAIMED) {
+            g.grid[cell.y][cell.x] = CLAIMED;
+            g.captured += 1;
+          }
+          g.fillCursor += 1;
+        }
+        g.scanY = (g.fillCursor / Math.max(1, g.fillQueue.length)) * g.height;
+        if (g.fillCursor >= g.fillQueue.length) {
+          g.fillQueue = [];
+          g.fillCursor = 0;
+          g.scanY = 0;
+          g.score += Math.max(100, Math.floor(g.captured / 6));
+        }
+      }
+
+      const direction = g.trail.length > 0 ? g.cutDir : g.inputDir;
+      const speed = g.mode === 'SLOW' ? 118 : 236;
+      const distance = speed * dt;
+      if (direction.x !== 0 || direction.y !== 0) {
+        const steps = Math.max(1, Math.ceil(distance));
+        const stepX = (direction.x * distance) / steps;
+        const stepY = (direction.y * distance) / steps;
+
+        for (let i = 0; i < steps; i += 1) {
+          g.player.x = clamp(g.player.x + stepX, 0, g.width - g.cell);
+          g.player.y = clamp(g.player.y + stepY, 0, g.height - g.cell);
+          const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
+          const y = clamp(Math.floor(g.player.y / g.cell), 0, g.rows - 1);
+          const state = g.grid[y][x];
+
+          if (state === EMPTY) {
+            if (g.trail.length === 0) g.cutDir = direction;
+            g.grid[y][x] = TRAIL;
+            g.trail.push({ x: x * g.cell + g.cell / 2, y: y * g.cell + g.cell / 2 });
+            if (g.mode === 'SLOW') {
+              for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
+            }
+          } else if (state === TRAIL) {
+            const recent = g.trail.slice(-6);
+            if (!recent.some((point) => Math.floor(point.x / g.cell) === x && Math.floor(point.y / g.cell) === y)) {
+              explode(g, now);
+              break;
+            }
+          } else if (state === CLAIMED) {
+            if (g.trail.length > 3) {
+              capture(g);
+              break;
+            }
+            if (g.trail.length > 0) {
+              g.trail.forEach((point) => {
+                const tx = Math.floor(point.x / g.cell);
+                const ty = Math.floor(point.y / g.cell);
+                if (g.grid[ty]?.[tx] === TRAIL) g.grid[ty][tx] = EMPTY;
+              });
+              g.trail = [];
+            }
+          }
+        }
+      }
+
+      const qixNext = {
+        x: g.qix.x + g.qix.vx * dt,
+        y: g.qix.y + g.qix.vy * dt,
+      };
+      const qixCellX = clamp(Math.floor(qixNext.x / g.cell), 0, COLS - 1);
+      const qixCellY = clamp(Math.floor(qixNext.y / g.cell), 0, g.rows - 1);
+      if (qixNext.x < g.cell * 2 || qixNext.x > g.width - g.cell * 2 || g.grid[qixCellY][qixCellX] === CLAIMED) {
+        g.qix.vx *= -1;
+      } else {
+        g.qix.x = qixNext.x;
+      }
+      if (qixNext.y < g.cell * 2 || qixNext.y > g.height - g.cell * 2 || g.grid[qixCellY][qixCellX] === CLAIMED) {
+        g.qix.vy *= -1;
+      } else {
+        g.qix.y = qixNext.y;
+      }
+
+      if (Math.hypot(g.qix.x - g.player.x, g.qix.y - g.player.y) < g.cell * 1.35) explode(g, now);
+      for (let i = 1; i < g.trail.length; i += 1) {
+        if (distanceToSegment(g.qix, g.trail[i - 1], g.trail[i]) < g.cell * 0.7) {
+          explode(g, now);
+          break;
+        }
+      }
+    };
+
+    const drawCanvas = (g: Game) => {
+      const canvas = canvasRef.current;
+      if (!canvas || Platform.OS !== 'web') return;
+      const ratio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+      const pixelWidth = Math.max(1, Math.floor(g.width * ratio));
+      const pixelHeight = Math.max(1, Math.floor(g.height * ratio));
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+      }
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, g.width, g.height);
+      context.fillStyle = '#000000';
+      context.fillRect(0, 0, g.width, g.height);
+
+      context.globalCompositeOperation = 'source-over';
+      context.strokeStyle = 'rgba(0,243,255,0.15)';
+      context.lineWidth = 0.65;
+      for (let x = 0; x <= COLS; x += 1) {
+        context.beginPath();
+        context.moveTo(x * g.cell, 0);
+        context.lineTo(x * g.cell, g.height);
+        context.stroke();
+      }
+      for (let y = 0; y <= g.rows; y += 1) {
+        context.beginPath();
+        context.moveTo(0, y * g.cell);
+        context.lineTo(g.width, y * g.cell);
+        context.stroke();
+      }
+
+      context.fillStyle = 'rgba(0,243,255,0.10)';
+      for (let y = 0; y < g.rows; y += 1) {
+        for (let x = 0; x < COLS; x += 1) {
+          if (g.grid[y][x] === CLAIMED) context.fillRect(x * g.cell, y * g.cell, g.cell + 0.5, g.cell + 0.5);
+        }
+      }
+
+      context.globalCompositeOperation = 'lighter';
+      context.strokeStyle = '#00f3ff';
+      context.shadowColor = '#00f3ff';
+      context.shadowBlur = 15;
+      context.lineWidth = 3;
+      context.strokeRect(g.cell * 1.5, g.cell * 1.5, g.width - g.cell * 3, g.height - g.cell * 3);
+      context.shadowBlur = 0;
+
+      if (g.trail.length > 1) {
+        context.strokeStyle = g.mode === 'SLOW' ? '#ff5500' : '#00f3ff';
+        context.shadowColor = g.mode === 'SLOW' ? '#ff5500' : '#00f3ff';
+        context.shadowBlur = g.mode === 'SLOW' ? 18 : 8;
+        context.lineWidth = g.mode === 'SLOW' ? 5 : 3;
+        context.beginPath();
+        context.moveTo(g.trail[0].x, g.trail[0].y);
+        g.trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+        context.stroke();
+      }
+
+      g.particles.forEach((particle) => {
+        context.globalAlpha = clamp(particle.life / 0.4, 0, 1);
+        context.fillStyle = particle.color;
+        context.fillRect(particle.x, particle.y, particle.size, particle.size);
+      });
+      context.globalAlpha = 1;
+
+      for (let arm = 0; arm < 10; arm += 1) {
+        const points = qixPoints(g.qix, g.cell * (2.3 + (arm % 3) * 0.35), arm);
+        context.strokeStyle = arm % 2 === 0 ? '#7b00ff' : '#ff0077';
+        context.shadowColor = context.strokeStyle;
+        context.shadowBlur = 14;
+        context.lineWidth = 1.5 + (arm % 3) * 0.5;
+        context.beginPath();
+        context.moveTo(g.qix.x, g.qix.y);
+        points.forEach((point) => context.lineTo(point.x, point.y));
+        context.stroke();
+      }
+      context.shadowBlur = 0;
+
+      if (g.fillQueue.length > 0) {
+        context.strokeStyle = '#ffffff';
+        context.shadowColor = '#00f3ff';
+        context.shadowBlur = 18;
+        context.lineWidth = 2;
+        context.beginPath();
+        context.moveTo(0, g.scanY);
+        context.lineTo(g.width, g.scanY);
+        context.stroke();
+      }
+
+      const angle = Math.atan2(g.trail.length > 0 ? g.cutDir.y : g.inputDir.y, g.trail.length > 0 ? g.cutDir.x : g.inputDir.x);
+      context.save();
+      context.translate(g.player.x, g.player.y);
+      context.rotate(Number.isNaN(angle) ? 0 : angle);
+      context.fillStyle = '#ffffff';
+      context.shadowColor = '#00f3ff';
+      context.shadowBlur = 20;
+      context.beginPath();
+      context.moveTo(g.cell * 1.35, 0);
+      context.lineTo(-g.cell * 0.85, -g.cell * 0.75);
+      context.lineTo(-g.cell * 0.35, 0);
+      context.lineTo(-g.cell * 0.85, g.cell * 0.75);
+      context.closePath();
+      context.fill();
+      context.fillStyle = '#00f3ff';
+      context.beginPath();
+      context.arc(0, 0, g.cell * 0.34, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+      context.globalCompositeOperation = 'source-over';
+    };
+
+    const loop = () => {
+      const now = Date.now();
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+      lastTime = now;
       const g = gameRef.current;
-      initLevel(g.level, g.score, g.shields);
-    }
-  }, [initLevel]);
-
-  const syncGrid = () => {
-    const g = gameRef.current;
-    let rects = [];
-    for (let y = 0; y < g.gridH; y++) {
-      let startX = -1;
-      for (let x = 0; x < GRID_W; x++) {
-        if (g.grid[y][x] === CLAIMED) {
-          if (startX === -1) startX = x;
-        } else {
-          if (startX !== -1) {
-            rects.push({ x: startX, y, w: x - startX });
-            startX = -1;
-          }
+      if (!g.initialized && sizeRef.current.width > 0) resetGame(false);
+      if (g.initialized) {
+        update(g, dt, now);
+        drawCanvas(g);
+        if (Platform.OS !== 'web' && g.frame % 2 === 0) {
+          setNativeSnapshot({
+            width: g.width,
+            height: g.height,
+            cell: g.cell,
+            rows: g.rows,
+            claimed: makeClaimedRuns(g.grid),
+            trail: [...g.trail],
+            player: { ...g.player },
+            direction: g.trail.length > 0 ? g.cutDir : g.inputDir,
+            qix: { x: g.qix.x, y: g.qix.y, phase: g.qix.phase },
+            particles: g.particles.slice(-150),
+            scanY: g.scanY,
+          });
+        }
+        if (g.frame % 6 === 0) {
+          setHud({
+            score: g.score,
+            shields: Math.max(0, g.shields),
+            capture: Math.floor((g.captured / g.totalEmpty) * 100),
+            mode: g.mode,
+            feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : g.fillQueue.length > 0 ? 'SECTEUR EN SYNCHRONISATION' : '',
+          });
         }
       }
-      if (startX !== -1) {
-        rects.push({ x: startX, y, w: GRID_W - startX });
-      }
-    }
-    setRenderedGrid(rects);
-    setShards([...g.shards]);
-  };
+      animationFrame = requestAnimationFrame(loop);
+    };
 
-  const syncEntities = () => {
-    const g = gameRef.current;
-    setPlayerPos({ x: g.player.x, y: g.player.y });
-    setEnemies(g.enemies.map(e => ({ x: e.x, y: e.y })));
-    if (g.trailPts.length > 0) {
-      setTrailPoints(g.trailPts.map(p => `${p.x},${p.y}`).join(' '));
-      if (g.trailPts.length > 1) {
-        const previous = g.trailPts[g.trailPts.length - 2];
-        const current = g.trailPts[g.trailPts.length - 1];
-        setTrailAngle(Math.atan2(current.y - previous.y, current.x - previous.x) * 180 / Math.PI);
-      }
-    } else {
-      setTrailPoints("");
-      setTrailAngle(0);
-    }
-    
-    // Sync UI states
-    setScore(g.score);
-    setShields(g.shields);
-    setLevel(g.level);
-  };
+    animationFrame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [resetGame, colors]);
 
-  const handlePlayerHit = () => {
-    const g = gameRef.current;
-    playSound('danger');
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    
-    for (let t of g.trailGrid) g.grid[t.y][t.x] = EMPTY;
-    g.trailGrid = [];
-    g.trailPts = [];
-    
-    g.player.x = g.player.startX;
-    g.player.y = g.player.startY;
-    g.target.x = g.player.startX;
-    g.target.y = g.player.startY;
-    g.control = { x: 0, y: 0 };
-    g.cutDirection = { x: 0, y: 0 };
-    
-    g.shields -= 1;
-    if (g.shields < 0) {
-      g.status = 'GAMEOVER';
-      setGameState('GAMEOVER');
-      saveData(g.score, 0);
+  const renderNativeArena = () => {
+    if (Platform.OS === 'web' || !nativeSnapshot) return null;
+    const snapshot = nativeSnapshot;
+    const gridLines = [];
+    for (let x = 0; x <= COLS; x += 1) {
+      gridLines.push(<Line key={`v${x}`} x1={x * snapshot.cell} y1={0} x2={x * snapshot.cell} y2={snapshot.height} stroke="#00f3ff" opacity={0.13} strokeWidth={0.6} />);
     }
-  };
-
-  const captureArea = () => {
-    const g = gameRef.current;
-    if (g.fillQueue.length > 0) return;
-    playSound('confirm');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    
-    const enemyCells = g.enemies.map(e => ({ 
-      x: Math.floor(e.x / g.cellW), 
-      y: Math.floor(e.y / g.cellW) 
-    }));
-    
-    let visited = Array(g.gridH).fill(0).map(() => Array(GRID_W).fill(false));
-    let queue: {x: number, y: number}[] = [];
-    
-    for (let ec of enemyCells) {
-      if (ec.x >= 0 && ec.x < GRID_W && ec.y >= 0 && ec.y < g.gridH) {
-        if (g.grid[ec.y][ec.x] === EMPTY) {
-          queue.push(ec);
-          visited[ec.y][ec.x] = true;
-        }
-      }
+    for (let y = 0; y <= snapshot.rows; y += 1) {
+      gridLines.push(<Line key={`h${y}`} x1={0} y1={y * snapshot.cell} x2={snapshot.width} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.13} strokeWidth={0.6} />);
     }
-    
-    const dirs = [[1,0], [-1,0], [0,1], [0,-1]];
-    while (queue.length > 0) {
-      let curr = queue.shift()!;
-      for (let d of dirs) {
-        let nx = curr.x + d[0];
-        let ny = curr.y + d[1];
-        if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < g.gridH) {
-          if (!visited[ny][nx] && g.grid[ny][nx] === EMPTY) {
-            visited[ny][nx] = true;
-            queue.push({x: nx, y: ny});
-          }
-        }
-      }
-    }
-    
-    const fillQueue: {x: number, y: number}[] = [];
-    for (let y = 0; y < g.gridH; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        if (g.grid[y][x] === EMPTY && !visited[y][x]) {
-          fillQueue.push({ x, y });
-        }
-      }
-    }
-    
-    for (let t of g.trailGrid) {
-      fillQueue.push({ x: t.x, y: t.y });
-    }
-    
-    g.trailGrid = [];
-    g.trailPts = [];
-    g.fillQueue = fillQueue;
-    g.fillCursor = 0;
-    g.fillCaptured = 0;
-    setCaptureFill(0);
+    const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
+    const playerPoints = [
+      [snapshot.player.x + Math.cos(angle) * snapshot.cell * 1.35, snapshot.player.y + Math.sin(angle) * snapshot.cell * 1.35],
+      [snapshot.player.x + Math.cos(angle + 2.5) * snapshot.cell, snapshot.player.y + Math.sin(angle + 2.5) * snapshot.cell],
+      [snapshot.player.x + Math.cos(angle - 2.5) * snapshot.cell, snapshot.player.y + Math.sin(angle - 2.5) * snapshot.cell],
+    ].map((point) => point.join(',')).join(' ');
+    return (
+      <Svg style={StyleSheet.absoluteFill}>
+        <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
+        {gridLines}
+        {snapshot.claimed.map((run, index) => (
+          <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
+        ))}
+        <Rect x={snapshot.cell * 1.5} y={snapshot.cell * 1.5} width={snapshot.width - snapshot.cell * 3} height={snapshot.height - snapshot.cell * 3} fill="none" stroke="#00f3ff" strokeWidth={3} opacity={0.95} />
+        {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke={hud.mode === 'SLOW' ? '#ff5500' : '#00f3ff'} strokeWidth={hud.mode === 'SLOW' ? 5 : 3} />}
+        {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
+        {Array.from({ length: 10 }).map((_, arm) => <Polyline key={`qix${arm}`} points={pointsToString([{ x: snapshot.qix.x, y: snapshot.qix.y }, ...qixPoints(snapshot.qix, snapshot.cell * (2.3 + (arm % 3) * 0.35), arm)])} fill="none" stroke={arm % 2 === 0 ? '#7b00ff' : '#ff0077'} strokeWidth={2} />)}
+        {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
+        <Polygon points={playerPoints} fill="#ffffff" stroke="#00f3ff" strokeWidth={2} />
+        <Circle cx={snapshot.player.x} cy={snapshot.player.y} r={snapshot.cell * 0.34} fill="#00f3ff" />
+      </Svg>
+    );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {gameState === 'PLAYING' && (
-        <View
-          style={[styles.arena, { top: Math.max(insets.top, 20) + 80, bottom: insets.bottom + 40 }]}
-          onLayout={handleArenaLayout}
-          testID="game-arena"
-        >
-          <Svg style={StyleSheet.absoluteFill}>
-            <Defs>
-              <Filter id="blur">
-                <FeGaussianBlur stdDeviation="2" />
-              </Filter>
-            </Defs>
-
-            {Array.from({ length: GRID_W + 1 }).map((_, i) => (
-              <Line
-                key={`grid-v-${i}`}
-                x1={i * gameRef.current.cellW}
-                y1={0}
-                x2={i * gameRef.current.cellW}
-                y2={gameRef.current.gridH * gameRef.current.cellW}
-                stroke={i % 5 === 0 ? colors.primary : colors.border}
-                strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
-                opacity={i % 5 === 0 ? 0.22 : 0.1}
-              />
-            ))}
-            {Array.from({ length: gameRef.current.gridH + 1 }).map((_, i) => (
-              <Line
-                key={`grid-h-${i}`}
-                x1={0}
-                y1={i * gameRef.current.cellW}
-                x2={GRID_W * gameRef.current.cellW}
-                y2={i * gameRef.current.cellW}
-                stroke={i % 5 === 0 ? colors.secondary : colors.border}
-                strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
-                opacity={i % 5 === 0 ? 0.2 : 0.09}
-              />
-            ))}
-            
-            {renderedGrid.map((r, i) => (
-              <Rect 
-                key={i} 
-                x={r.x * gameRef.current.cellW} 
-                y={r.y * gameRef.current.cellW} 
-                width={r.w * gameRef.current.cellW} 
-                height={gameRef.current.cellW} 
-                fill={colors.primary}
-                opacity={0.14}
-                stroke={colors.primary}
-                strokeWidth={0.8}
-              />
-            ))}
-
-            <Rect
-              x={1}
-              y={1}
-              width={GRID_W * gameRef.current.cellW - 2}
-              height={gameRef.current.gridH * gameRef.current.cellW - 2}
-              fill="none"
-              stroke={colors.primary}
-              strokeWidth={1.5}
-              opacity={0.46}
-            />
-
-            {shards.map((s, i) => (
-              <Circle
-                key={`shard-glow-${i}`}
-                cx={s.x}
-                cy={s.y}
-                r={18}
-                fill={colors.accent}
-                opacity={0.14}
-              />
-            ))}
-
-            {trailPoints.length > 0 && (
-              <>
-                <Polyline
-                  points={trailPoints}
-                  fill="none"
-                  stroke={colors.primary}
-                  strokeWidth={shardTiers > 1 ? 16 : 12}
-                  opacity={0.18}
-                  filter="url(#blur)"
-                />
-                <Polyline
-                  points={trailPoints}
-                  fill="none"
-                  stroke={colors.secondary}
-                  strokeWidth={shardTiers > 0 ? 8 : 6}
-                  opacity={0.48}
-                />
-                <Polyline
-                  points={trailPoints}
-                  fill="none"
-                  stroke={colors.primary}
-                  strokeWidth={shardTiers > 1 ? 5 : 3}
-                  opacity={0.98}
-                />
-              </>
-            )}
-          </Svg>
-
-          {shards.map((s, i) => (
-            <Image
-              key={`shard-sprite-${i}`}
-              source={shardSprite}
-              style={[
-                styles.shardSprite,
-                {
-                  left: s.x - 17,
-                  top: s.y - 17,
-                  transform: [{ rotate: `${(i % 2 === 0 ? 1 : -1) * 8}deg` }],
-                },
-              ]}
-            />
-          ))}
-
-          {trailPoints.length > 0 && (
-            <Image
-              source={beamCapsuleSprite}
-              style={[
-                styles.beamCapsule,
-                {
-                  left: playerPos.x - 44,
-                  top: playerPos.y - 14,
-                  transform: [{ rotate: `${trailAngle}deg` }],
-                },
-              ]}
-            />
-          )}
-
-          {captureFill > 0 && captureFill < 100 && (
-            <View style={styles.captureStatus} pointerEvents="none">
-              <Text style={[styles.captureStatusLabel, { color: colors.primary }]}>
-                SECTEUR EN COURS DE SYNCHRONISATION
-              </Text>
-              <Text style={[styles.captureStatusValue, { color: colors.accent }]}>
-                {captureFill}%
-              </Text>
-            </View>
-          )}
-          
-          <View style={[styles.drone, { transform: [{ translateX: playerPos.x - 16 }, { translateY: playerPos.y - 16 }] }]}>
-            <Image source={playerSprite} style={styles.playerSprite} />
-          </View>
-
-          {enemies.map((e, i) => (
-             <View key={`e${i}`} style={[styles.enemy, { transform: [{ translateX: e.x - 16 }, { translateY: e.y - 16 }] }]}>
-               <Image source={enemySprite} style={styles.enemySprite} />
-             </View>
-          ))}
-
-          <View
-            style={[
-              styles.joystick,
-              {
-                left: 18,
-                bottom: insets.bottom + 16,
-                borderColor: colors.primary,
-                backgroundColor: `${colors.primary}18`,
-              },
-            ]}
-            {...joystickPanResponder.panHandlers}
-            testID="virtual-joystick"
-          >
-            <View style={[styles.joystickCross, { borderColor: colors.secondary }]} pointerEvents="none">
-              <View style={[styles.joystickCrossVertical, { backgroundColor: colors.secondary }]} />
-              <View style={[styles.joystickCrossHorizontal, { backgroundColor: colors.secondary }]} />
-            </View>
-            <View
-              style={[
-                styles.joystickThumb,
-                {
-                  borderColor: colors.primary,
-                  backgroundColor: colors.background,
-                  transform: [{ translateX: joystickOffset.x }, { translateY: joystickOffset.y }],
-                },
-              ]}
-              pointerEvents="none"
-            >
-              <View style={[styles.joystickCore, { backgroundColor: colors.primary }]} />
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Overlays will go here */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]} pointerEvents="none">
-        <View style={styles.headerRow}>
-           <Text style={[styles.headerText, { color: colors.primary }]}>NIV {level}</Text>
-           <Text style={[styles.headerText, { color: colors.foreground }]}>{score.toString().padStart(6, '0')}</Text>
-        </View>
-        <View style={styles.headerRow}>
-            <Text style={[styles.headerText, { color: colors.accent, fontSize: 14 }]}>Boucliers: {shields}</Text>
-            <Text style={[styles.headerText, { color: colors.accent, fontSize: 14 }]}>Fragments: {totalShards}</Text>
-            <Text style={[styles.headerText, { color: colors.secondary, fontSize: 14 }]}>Capture: {progress}% / {TARGET_PERCENT}%</Text>
-        </View>
+    <View style={styles.container} {...panResponder.panHandlers}>
+      <View style={styles.arena} onLayout={handleArenaLayout} testID="game-arena">
+        {Platform.OS === 'web'
+          ? React.createElement('canvas' as any, {
+              ref: canvasRef,
+              style: { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' },
+            })
+          : renderNativeArena()}
       </View>
 
-      {gameState === 'MENU' && (
-        <View style={styles.overlay}>
-          <Text style={[styles.title, { color: colors.primary }]}>FRAGMENTS</Text>
-          <Text style={[styles.subtitle, { color: colors.secondary }]}>NEON</Text>
-          <Text style={[styles.bestScore, { color: colors.foreground }]}>Meilleur Score: {bestScore}</Text>
-          
-          <Pressable style={[styles.button, { borderColor: colors.primary }]} onPress={() => { playSound('confirm'); initLevel(1); }}>
-            <Text style={[styles.buttonText, { color: colors.primary }]}>DÉMARRER</Text>
-          </Pressable>
-
-             <Text style={[styles.tutorial, { color: colors.mutedForeground }]}>
-              Utilisez le joystick pour tracer des découpes droites. Enfermez les ennemis dans la plus grande zone possible. Les fragments orange valent +500.
-          </Text>
-
-          <Pressable style={styles.soundToggle} onPress={() => setSoundEnabled(s => !s)}>
-             <Text style={{color: colors.mutedForeground, fontSize: 12}}>{soundEnabled ? 'SON: ACTIF' : 'SON: MUET'}</Text>
-          </Pressable>
+      <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
+        <View style={styles.hudRow}>
+          <Text style={[styles.hudText, { color: colors.primary }]}>SECTEUR 01</Text>
+          <Text style={[styles.hudText, { color: colors.foreground }]}>{hud.score.toString().padStart(6, '0')}</Text>
         </View>
-      )}
-
-      {gameState === 'GAMEOVER' && (
-        <View style={styles.overlay}>
-          <Text style={[styles.title, { color: colors.destructive }]}>ÉCHEC</Text>
-          <Text style={[styles.bestScore, { color: colors.foreground }]}>Score: {score}</Text>
-          <Pressable style={[styles.button, { borderColor: colors.primary }]} onPress={() => { playSound('confirm'); initLevel(1); }}>
-            <Text style={[styles.buttonText, { color: colors.primary }]}>RÉESSAYER</Text>
-          </Pressable>
+        <View style={styles.hudRow}>
+          <Text style={[styles.hudSubtext, { color: colors.accent }]}>BOUCLIERS {hud.shields}</Text>
+          <Text style={[styles.hudSubtext, { color: colors.secondary }]}>ZONE {hud.capture}%</Text>
         </View>
-      )}
+        {hud.feedback !== '' && <Text style={[styles.feedback, { color: hud.mode === 'SLOW' ? '#ff8a00' : colors.primary }]}>{hud.feedback}</Text>}
+      </View>
 
-      {gameState === 'VICTORY' && (
-        <View style={styles.overlay}>
-          <Text style={[styles.title, { color: colors.primary }]}>SECTEUR SÉCURISÉ</Text>
-          <Text style={[styles.bestScore, { color: colors.foreground }]}>Score: {score}</Text>
-          <Pressable style={[styles.button, { borderColor: colors.accent }]} onPress={() => { playSound('confirm'); initLevel(level + 1, score, shields); }}>
-            <Text style={[styles.buttonText, { color: colors.accent }]}>NIVEAU SUIVANT</Text>
-          </Pressable>
-        </View>
-      )}
+      <View style={[styles.modeControls, { bottom: Math.max(insets.bottom, 14) + 12 }]}>
+        <Pressable
+          onPress={() => setMode('SLOW')}
+          onStartShouldSetResponder={() => true}
+          style={[styles.modeButton, styles.slowButton, hud.mode === 'SLOW' && styles.modeButtonActive]}
+          testID="slow-cut"
+        >
+          <Text style={styles.modeKicker}>CHALUMEAU</Text>
+          <Text style={styles.modeLabel}>SLOW</Text>
+          <Text style={styles.modeHint}>2× SCORE · PARTICULES</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setMode('FAST')}
+          onStartShouldSetResponder={() => true}
+          style={[styles.modeButton, styles.fastButton, hud.mode === 'FAST' && styles.modeButtonActive]}
+          testID="fast-cut"
+        >
+          <Text style={styles.modeKicker}>RAPIDE</Text>
+          <Text style={styles.modeLabel}>FAST</Text>
+          <Text style={styles.modeHint}>VITESSE · PRÉCISION</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -807,188 +699,88 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    overflow: 'hidden'
+    backgroundColor: '#000000',
+    overflow: 'hidden',
   },
   arena: {
     position: 'absolute',
+    top: 72,
     left: 0,
     right: 0,
-    overflow: 'hidden'
+    bottom: 126,
+    backgroundColor: '#000000',
+    overflow: 'hidden',
   },
-  drone: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  playerSprite: {
-    width: 56,
-    height: 56,
-    resizeMode: 'contain',
-  },
-  enemy: {
-    position: 'absolute',
-    width: 54,
-    height: 54,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  enemySprite: {
-    width: 54,
-    height: 54,
-    resizeMode: 'contain',
-  },
-  beamCapsule: {
-    position: 'absolute',
-    width: 88,
-    height: 28,
-    resizeMode: 'contain',
-    opacity: 0.94,
-  },
-  joystick: {
-    position: 'absolute',
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 12,
-  },
-  joystickCross: {
-    position: 'absolute',
-    width: 68,
-    height: 68,
-    borderWidth: 1,
-    borderRadius: 34,
-    opacity: 0.34,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  joystickCrossVertical: {
-    position: 'absolute',
-    width: 1,
-    height: 54,
-    opacity: 0.7,
-  },
-  joystickCrossHorizontal: {
-    position: 'absolute',
-    width: 54,
-    height: 1,
-    opacity: 0.7,
-  },
-  joystickThumb: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  joystickCore: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  captureStatus: {
-    position: 'absolute',
-    top: '46%',
-    left: 24,
-    right: 24,
-    alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: 'rgba(5, 5, 16, 0.82)',
-    borderWidth: 1,
-    borderColor: '#00F0FF',
-  },
-  captureStatusLabel: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 11,
-    letterSpacing: 1.5,
-  },
-  captureStatusValue: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 28,
-    letterSpacing: 2,
-    marginTop: 4,
-  },
-  shardSprite: {
-    position: 'absolute',
-    width: 48,
-    height: 48,
-    resizeMode: 'contain',
-  },
-  header: {
+  hud: {
     position: 'absolute',
     top: 0,
-    left: 20,
-    right: 20,
-    zIndex: 10
+    left: 18,
+    right: 18,
   },
-  headerRow: {
+  hudRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 5
+    marginBottom: 4,
   },
-  headerText: {
+  hudText: {
     fontFamily: 'Inter_700Bold',
-    fontSize: 20,
-    letterSpacing: 1
+    fontSize: 16,
+    letterSpacing: 1.5,
   },
-  overlay: {
+  hudSubtext: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  feedback: {
+    alignSelf: 'center',
+    marginTop: 8,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.8,
+  },
+  modeControls: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(5, 5, 16, 0.9)',
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modeButton: {
+    flex: 1,
+    minHeight: 74,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 20,
-    padding: 20
-  },
-  title: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 48,
-    letterSpacing: 4,
-    textAlign: 'center'
-  },
-  subtitle: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 40,
-    letterSpacing: 8,
-    marginBottom: 40,
-    textAlign: 'center'
-  },
-  bestScore: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: 18,
-    marginBottom: 60
-  },
-  button: {
-    borderWidth: 2,
-    paddingVertical: 15,
-    paddingHorizontal: 40,
+    borderWidth: 1,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    marginBottom: 40
+    backgroundColor: 'rgba(0,0,0,0.52)',
   },
-  buttonText: {
+  modeButtonActive: {
+    borderWidth: 2,
+    backgroundColor: 'rgba(0,243,255,0.10)',
+  },
+  slowButton: {
+    borderColor: '#ff5500',
+  },
+  fastButton: {
+    borderColor: '#00f3ff',
+  },
+  modeKicker: {
+    color: '#9ba0b3',
     fontFamily: 'Inter_700Bold',
-    fontSize: 20,
-    letterSpacing: 2
+    fontSize: 9,
+    letterSpacing: 1.1,
   },
-  tutorial: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 20
+  modeLabel: {
+    color: '#ffffff',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 21,
+    letterSpacing: 2,
   },
-  soundToggle: {
-    position: 'absolute',
-    bottom: 40,
-    padding: 10
-  }
+  modeHint: {
+    color: '#9ba0b3',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 8,
+    letterSpacing: 0.6,
+  },
 });

@@ -1,0 +1,38 @@
+Rôle et Contexte :
+Agis en tant que Concepteur de Jeux Vidéo Senior et Développeur Mobile expert en moteurs de jeux 2D, calculs graphiques et Game Feel. Nous créons un prototype fonctionnel et hautement optimisé d'un jeu de type Qix en VUE DU DESSUS (Top-Down) pour Android. L'objectif exclusif est de développer le "Core Gameplay" (mécaniques de jeu fondamentales), le rendu néon TRON, le système de particules "Chalumeau Plasma", les contrôles tactiles par Swipe et la gestion des collisions. Ne crée AUCUN menu, écran titre ou options pour le moment. Lance directement le joueur dans l'action de l'arène dès le chargement.
+
+Pile Technique & Rendu de Performance :
+- Architecture : Application HTML5 Canvas 2D / WebGL (via canvas natif optimisé ou Pixi.js), taillée pour les performances mobiles et encapsulée Android, garantissant 60 FPS constants sans aucune latence.
+- Utilise absolument la propriété de canvas `globalCompositeOperation = "lighter"` pour le rendu des lasers, des lignes et des étincelles afin de créer une surbrillance de lumière cumulative (effet néon réaliste).
+
+1. DIRECTION ARTISTIQUE & DESIGN TRON (Vue du dessus) :
+L'affichage doit être un spectacle de lumières néon et de contrastes fluo agressifs sur fond sombre :
+- Fond d'écran : Noir d'encre absolu (#000000) traversé par une grille géométrique fixe en fil de fer (Wireframe) bleu cyan électrique (#00f3ff) avec une opacité de 0.15.
+- Bordures du terrain : Lignes épaisses bleu cyan fluo avec un effet de halo lumineux intense (shadowBlur: 15, shadowColor: "#00f3ff").
+- Le Drone du Joueur : Un petit sprite ou polygone géométrique blanc et cyan vif. Le drone possède un noyau d'énergie central qui pulse et s'oriente (rotation) instantanément dans l'axe exact de sa direction de déplacement.
+- L'Ennemi Central (Le Qix) : Une entité abstraite mouvante et agressive, formée de 8 à 12 lignes de lasers vectorielles interconnectées qui vibrent, s'étirent et ondulent. Couleurs : Violet électrique (#7b00ff) et Rose Magenta fluo (#ff0077) avec un effet de traînée (motion blur) persistant qui s'estompe au mouvement.
+
+2. EFFET CHALUMEAU PLASMA & ÉTINCELLES (Effet visuel majeur) :
+- Traînée de découpe : Quand le drone quitte une ligne sécurisée pour capturer du terrain, il trace un fil laser orange fluo incandescent (#ff5500) ou blanc chaud.
+- Émetteur d'étincelles : À l'emplacement exact de la pointe arrière du drone pendant qu'il trace sa ligne, génère en continu un système de particules intensif (15 à 20 micro-particules par frame).
+- Physique des étincelles : Propulse les particules vers l'arrière du mouvement du drone avec un cône de dispersion de 45° et des vitesses aléatoires. Couleurs alternées : Blanc pur (coeur du feu), jaune vif, et orange brûlant. Chaque particule doit rétrécir en taille et voir son opacité (alpha) chuter drastiquement jusqu'à extinction complète en moins de 0.4 seconde, simulant du métal en fusion projeté par un chalumeau plasma.
+
+3. CONTRÔLES TACTILES PAR SWIPE (Précision Chirurgicale Anti-Joystick) :
+Pour éviter l'imprécision d'un joystick virtuel sur Android, implémente un système de détection de gestes direct :
+- Système de Swipe global : Capture les glissements de doigt (Haut, Bas, Gauche, Droite) n'importe où sur l'écran. Pas besoin de toucher ou de viser le drone. Les virages à 90° doivent être instantanés et alignés sur les axes de la grille. Les diagonales sont interdites.
+- Aimantation automatique : Le drone est contraint de suivre les bordures et lignes existantes. S'il se déplace sur une ligne de bordure et que l'utilisateur fait un swipe vers le vide, le drone ne bouge que si l'un des boutons de coupe est activé. S'il lève le doigt de l'écran, le drone s'arrête net s'il se trouve sur une ligne de sécurité (zone déjà capturée ou bordure extérieure). Si le joueur s'arrête en plein milieu du vide pendant une découpe, le drone doit continuer sa course en ligne droite jusqu'à la prochaine bordure pour éviter de rester bloqué dans une zone vulnérable.
+- Boutons de Coupe (En bas de l'écran) : Deux larges zones tactiles transparentes mais visibles en surbrillance néon :
+  * Zone Droite "FAST" : Coupe rapide (Couleur de traînée : Cyan, très peu d'étincelles).
+  * Zone Gauche "SLOW" : Coupe lente (Couleur de traînée : Orange incandescent, effet de particules chalumeau et étincelles au maximum, rapporte 2x plus de points).
+
+4. LOGIQUE DE CAPTURE & COLLISONS :
+- Algorithme de capture (Flood Fill) : Dès que le drone rejoint une autre bordure sécurisée, la zone fermée ne contenant pas l'ennemi central (le Qix) est immédiatement validée.
+- Animation de capture : Un rideau laser traverse la zone capturée pour la scanner de haut en bas, puis la zone se remplit d'une couleur bleutée semi-transparente (opacité 0.1) qui donne un effet de "territoire verrouillé".
+- Système de collision et explosion : Si l'ennemi (le Qix) entre en collision avec le drone ou avec la ligne laser orange en cours de découpe, le drone explose instantanément dans une immense gerbe d'étincelles orange et blanches, et la ligne de découpe incomplète s'efface.
+
+Plan d'action immédiat pour l'implémentation :
+Étape 1 : Générer l'arène avec la grille TRON, les bordures néon et le drone en vue du dessus.
+Étape 2 : Implémenter le système de contrôle par Swipe avec l'aimantation stricte aux lignes et les deux modes de vitesse (Fast/Slow).
+Étape 3 : Intégrer l'émetteur de particules d'étincelles chalumeau au niveau du drone lorsqu'il découpe en mode lent.
+Étape 4 : Coder la trajectoire du Qix (lignes de lasers vibrantes) et la détection des collisions au pixel près (mort du joueur).
+Étape 5 : Coder l'algorithme de calcul des zones fermées et son animation de balayage laser.
