@@ -54,6 +54,19 @@ type Enemy = Point & {
   lastSafeY?: number;
 };
 
+type Diamond = Point & {
+  phase: number;
+  collected: boolean;
+};
+
+const ENEMY_SCORE: Record<EnemyKind, number> = {
+  SHIP: 180,
+  DRAGON: 420,
+  SEVEN: 620,
+  SPIDER: 800,
+};
+const DIAMOND_SCORE = 750;
+
 type Game = {
   width: number;
   height: number;
@@ -69,6 +82,7 @@ type Game = {
   trail: Point[];
   completedTrail: Point[];
   enemies: Enemy[];
+  diamond: Diamond;
   particles: Particle[];
   fillQueue: Cell[];
   fillCursor: number;
@@ -80,6 +94,8 @@ type Game = {
   totalEmpty: number;
   level: number;
   frame: number;
+  trailScoreAccumulator: number;
+  pendingCaptureCells: number;
   initialized: boolean;
   status: 'PLAYING' | 'RESPAWN';
   respawnAt: number;
@@ -104,6 +120,7 @@ type Snapshot = {
   player: Point;
   direction: Direction;
   enemies: Enemy[];
+  diamond: Diamond;
   particles: Particle[];
   scanY: number;
 };
@@ -256,6 +273,22 @@ const spriteFrames: Record<EnemyKind, any[]> = {
     require('../assets/images/enemy-spider-final-frame-5.png'),
   ],
 };
+const diamondSource = require('../assets/images/neon-diamond-fragment.png');
+
+const createDiamond = (grid: number[][], width: number, cell: number): Diamond => {
+  const emptyCells: Cell[] = [];
+  grid.forEach((row, y) => row.forEach((state, x) => {
+    if (state === EMPTY) emptyCells.push({ x, y });
+  }));
+  const cellPosition = emptyCells[Math.floor(Math.random() * Math.max(1, emptyCells.length))]
+    ?? { x: SAFE_BAND_CELLS + 1, y: SAFE_BAND_CELLS + 1 };
+  return {
+    x: (cellPosition.x + 0.5) * cell,
+    y: (cellPosition.y + 0.5) * cell,
+    phase: Math.random() * Math.PI * 2,
+    collected: false,
+  };
+};
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
 
@@ -363,7 +396,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
   const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
   const enemies: Enemy[] = [
-    { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 62 * levelSpeed, vy: 42 * levelSpeed, speed: 72 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 56 * levelSpeed, vy: 38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 42 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
@@ -391,6 +424,7 @@ export default function GameScreen() {
     trail: [],
     completedTrail: [],
     enemies: [],
+    diamond: { x: 0, y: 0, phase: 0, collected: false },
     particles: [],
     fillQueue: [],
     fillCursor: 0,
@@ -402,6 +436,8 @@ export default function GameScreen() {
     totalEmpty: 1,
     level: 1,
     frame: 0,
+    trailScoreAccumulator: 0,
+    pendingCaptureCells: 0,
     initialized: false,
     status: 'PLAYING',
     respawnAt: 0,
@@ -416,6 +452,7 @@ export default function GameScreen() {
   });
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
+  const diamondImageRef = useRef<any>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
@@ -433,10 +470,18 @@ export default function GameScreen() {
         image.src = uri;
       });
     });
+    const resolvedDiamond = (RNImage as any).resolveAssetSource?.(diamondSource);
+    const diamondImage = new (globalThis as any).Image();
+    diamondImage.decoding = 'async';
+    diamondImage.onload = () => {
+      if (!cancelled) diamondImageRef.current = diamondImage;
+    };
+    diamondImage.src = resolvedDiamond?.uri ?? diamondSource;
 
     return () => {
       cancelled = true;
       spriteImagesRef.current = {};
+      diamondImageRef.current = null;
     };
   }, []);
 
@@ -480,6 +525,7 @@ export default function GameScreen() {
       trail: [],
       completedTrail: [],
       enemies: createEnemies(width, height, cell, previousLevel),
+      diamond: createDiamond(grid, width, cell),
       particles: [],
       fillQueue: [],
       fillCursor: 0,
@@ -491,6 +537,8 @@ export default function GameScreen() {
       totalEmpty,
       level: previousLevel,
       frame: 0,
+      trailScoreAccumulator: 0,
+      pendingCaptureCells: 0,
       initialized: true,
       status: 'PLAYING',
       respawnAt: 0,
@@ -639,6 +687,7 @@ export default function GameScreen() {
           g.fillQueue.push(cell);
         }
       });
+      g.pendingCaptureCells = g.fillQueue.length;
       g.completedTrail = [...g.trail];
       g.trail = [];
       g.fillCursor = 0;
@@ -684,6 +733,7 @@ export default function GameScreen() {
           color: colors[i % colors.length],
         });
       }
+      g.score += ENEMY_SCORE[enemy.kind];
       enemy.blockedTime = 0;
       enemy.respawnAt = now + 900;
       enemy.vx = 0;
@@ -1033,6 +1083,7 @@ export default function GameScreen() {
           life: particle.life - dt,
         }))
         .filter((particle) => particle.life > 0);
+      if (!g.diamond.collected) g.diamond.phase += dt * 2.6;
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
@@ -1049,6 +1100,27 @@ export default function GameScreen() {
           if (g.grid[cell.y]?.[cell.x] !== CLAIMED) {
             g.grid[cell.y][cell.x] = CLAIMED;
             g.captured += 1;
+            const diamondCell = {
+              x: Math.floor(g.diamond.x / g.cell),
+              y: Math.floor(g.diamond.y / g.cell),
+            };
+            if (!g.diamond.collected && diamondCell.x === cell.x && diamondCell.y === cell.y) {
+              g.diamond.collected = true;
+              g.score += DIAMOND_SCORE;
+              for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 35 + Math.random() * 180;
+                g.particles.push({
+                  x: g.diamond.x,
+                  y: g.diamond.y,
+                  vx: Math.cos(angle) * speed,
+                  vy: Math.sin(angle) * speed,
+                  life: 0.45 + Math.random() * 0.55,
+                  size: 1 + Math.random() * 2.8,
+                  color: ['#ffffff', '#00f3ff', '#ff2bb5', '#b8ff4a'][particleIndex % 4],
+                });
+              }
+            }
           }
           g.fillCursor += 1;
         }
@@ -1058,7 +1130,8 @@ export default function GameScreen() {
           g.fillCursor = 0;
           g.scanY = 0;
           g.completedTrail = [];
-          g.score += Math.max(100, Math.floor(g.captured / 6));
+          g.score += Math.max(100, g.pendingCaptureCells * 20);
+          g.pendingCaptureCells = 0;
         }
       }
 
@@ -1115,6 +1188,14 @@ export default function GameScreen() {
           next.x = clamp(next.x, outerBounds.left, outerBounds.right);
           next.y = clamp(next.y, outerBounds.top, outerBounds.bottom);
           g.player = next;
+          if (activeTrail) {
+            g.trailScoreAccumulator += Math.hypot(g.player.x - previous.x, g.player.y - previous.y);
+            const trailPoints = Math.floor(g.trailScoreAccumulator / 8);
+            if (trailPoints > 0) {
+              g.score += trailPoints;
+              g.trailScoreAccumulator -= trailPoints * 8;
+            }
+          }
 
           if (activeTrail && pointTouchesOldTrail(g.player, g.trail, g.cell, direction)) {
             // Touching an earlier red segment closes the shape. Keep the
@@ -1135,6 +1216,7 @@ export default function GameScreen() {
             if (g.trail.length === 0) {
               g.cutDir = direction;
               g.cutCoordinate = direction.x !== 0 ? g.player.y : g.player.x;
+                g.score += 1;
               // A cut can start by leaving an already claimed zone. In that
               // case the trail begins at the actual transition point, not at
               // the outer perimeter. Only an outside-to-arena entry uses the
@@ -1255,6 +1337,20 @@ export default function GameScreen() {
       context.globalAlpha = 1;
 
       context.globalCompositeOperation = 'lighter';
+      const diamondImage = diamondImageRef.current;
+      if (!g.diamond.collected && diamondImage) {
+        const diamondSize = g.cell * 1.75;
+        context.save();
+        context.translate(g.diamond.x, g.diamond.y);
+        context.rotate(g.diamond.phase);
+        drawEnemySpriteWithGlow(
+          context,
+          diamondImage,
+          { width: diamondSize, height: diamondSize },
+          '#ffffff',
+        );
+        context.restore();
+      }
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
@@ -1325,6 +1421,7 @@ export default function GameScreen() {
             player: { ...g.player },
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
+             diamond: { ...g.diamond },
              particles: g.particles.slice(-1000),
             scanY: g.scanY,
           });
@@ -1373,6 +1470,20 @@ export default function GameScreen() {
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
           {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
+         {!snapshot.diamond.collected && (
+           <G
+             transform={`translate(${snapshot.diamond.x} ${snapshot.diamond.y}) rotate(${snapshot.diamond.phase * (180 / Math.PI)}) translate(${-snapshot.diamond.x} ${-snapshot.diamond.y})`}
+           >
+             <SvgImage
+               href={diamondSource}
+               x={snapshot.diamond.x - snapshot.cell * 0.875}
+               y={snapshot.diamond.y - snapshot.cell * 0.875}
+               width={snapshot.cell * 1.75}
+               height={snapshot.cell * 1.75}
+               opacity={0.98}
+             />
+           </G>
+         )}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
           {snapshot.enemies.map((enemy, enemyIndex) => {
             if (enemy.respawnAt > Date.now()) return null;
@@ -1418,7 +1529,7 @@ export default function GameScreen() {
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudRow}>
           <Text style={[styles.hudText, { color: colors.primary }]}>SECTEUR 01</Text>
-          <Text style={[styles.hudText, { color: colors.foreground }]}>{hud.score.toString().padStart(6, '0')}</Text>
+          <Text style={[styles.scoreText, { color: colors.foreground }]}>{hud.score.toString().padStart(6, '0')}</Text>
         </View>
         <View style={styles.hudRow}>
           <Text style={[styles.hudSubtext, { color: colors.accent }]}>BOUCLIERS {hud.shields}</Text>
@@ -1466,6 +1577,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 16,
     letterSpacing: 1.5,
+  },
+  scoreText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 18,
+    letterSpacing: 2.4,
+    textShadowColor: '#00f3ff',
+    textShadowRadius: 9,
+    textShadowOffset: { width: 0, height: 0 },
   },
   hudSubtext: {
     fontFamily: 'Inter_700Bold',

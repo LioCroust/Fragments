@@ -7,6 +7,7 @@ uri = "file://artifacts/fragments-neon/assets/audio/confirm.mp3"
 type = "audio"
 title = "confirm chime"
 description = "Generated sound effect: Premium futuristic arcade UI confirmation sound, crystalline synth pluck with a warm sub bass pulse and shimmering cybernetic tail, clean and satisfying, no voice"
+logical_id = "7500d1a2-3f02-4457-bfcd-ae25c2b25b12"
 
 [[outputs]]
 id = "UaEpnqcaYHQd_YIaUr9jE"
@@ -14,6 +15,7 @@ uri = "file://artifacts/fragments-neon/assets/audio/danger.mp3"
 type = "audio"
 title = "danger pulse"
 description = "Generated sound effect: Tense cyberpunk arcade danger pulse, deep electronic impact with a distorted neon crackle, short and punchy, no voice"
+logical_id = "c6929354-9f94-4f64-b025-bc7ae1e65781"
 
 [[outputs]]
 id = "HqFf9Ts-KmHCrkJQ-m6U3"
@@ -21,3 +23,18 @@ uri = "file://artifacts/fragments-neon/assets/audio/pickup.mp3"
 type = "audio"
 title = "pickup chime"
 description = "Generated sound effect: Futuristic neon energy pickup sound for a mobile game, ascending laser arpeggio with a bright digital sparkle and short sci-fi tail, no voice"
+logical_id = "c14f0900-4e20-4baf-969d-f34e1b8a9cdc"
+
+[[outputs]]
+id = "I8FHtrO0MAW4aRa-rWXC1"
+uri = "file://artifacts/fragments-neon/assets/images/neon-diamond-fragment.png"
+type = "image"
+title = "Fragments Neon — diamant néon"
+description = "Sprite PNG transparent original, intégré au secteur 1 avec rotation et bonus de capture cyan."
+logical_id = "b53e3e02-c25f-4dd8-b1d1-ed0b494b65a1"
+content_hash = "sha256:0cfea9cc37e1eb9e4ac249ead4c791bf4b5d27ea7325c6ecdd304ae35e5b359b"
+size = 1038593
+mtime_ms = 1788893016753
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/b53e3e02-c25f-4dd8-b1d1-ed0b494b65a1/8490ea77-74ab-4137-a3ea-8464b2bc35c8"
+storage_version_token = "1788893204766583"
+content_type = "image/png"
