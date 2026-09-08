@@ -256,6 +256,28 @@ const enemyVisualRadius = (enemy: Enemy, cell: number) => {
   return Math.max(enemyRadius(enemy, cell), Math.hypot(sprite.width, sprite.height) * 0.5) + PERIMETER_STROKE_WIDTH * 0.5;
 };
 
+const enemyBoundaryMargins = (enemy: Enemy, cell: number) => {
+  const sprite = enemySpriteSize(enemy.kind, cell);
+  const motion = enemyAnimationTransform(enemy, cell);
+  const rotation = motion.rotation;
+  const halfWidth = sprite.width * 0.5;
+  const halfHeight = sprite.height * 0.5;
+  const rotatedHalfWidth = (
+    Math.abs(Math.cos(rotation)) * halfWidth
+    + Math.abs(Math.sin(rotation)) * halfHeight
+  ) * motion.scale + PERIMETER_STROKE_WIDTH * 0.5;
+  const rotatedHalfHeight = (
+    Math.abs(Math.sin(rotation)) * halfWidth
+    + Math.abs(Math.cos(rotation)) * halfHeight
+  ) * motion.scale + PERIMETER_STROKE_WIDTH * 0.5;
+
+  return {
+    x: rotatedHalfWidth,
+    y: rotatedHalfHeight,
+    offsetY: motion.offsetY,
+  };
+};
+
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
@@ -584,10 +606,11 @@ export default function GameScreen() {
         enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
 
         const visualRadius = enemyVisualRadius(enemy, g.cell) * (1 + Math.abs(Math.sin(enemy.phase * 1.25)) * 0.035);
-        const minX = bounds.left + visualRadius;
-        const maxX = bounds.right - visualRadius;
-        const minY = bounds.top + visualRadius;
-        const maxY = bounds.bottom - visualRadius;
+        const boundaryMargins = enemyBoundaryMargins(enemy, g.cell);
+        const minX = bounds.left + boundaryMargins.x;
+        const maxX = bounds.right - boundaryMargins.x;
+        const minY = bounds.top + boundaryMargins.y - boundaryMargins.offsetY;
+        const maxY = bounds.bottom - boundaryMargins.y - boundaryMargins.offsetY;
         const cellAt = (x: number, y: number) => {
           const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
           const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
@@ -664,13 +687,13 @@ export default function GameScreen() {
         const blockedY = nextY < minY || nextY > maxY || cellAt(enemy.x, nextY) === CLAIMED;
         if (blockedX) {
           enemy.vx *= -1;
-          enemy.x = clamp(enemy.x, minX, maxX);
+          enemy.x = nextX < minX ? minX : maxX;
         } else {
           enemy.x = nextX;
         }
         if (blockedY) {
           enemy.vy *= -1;
-          enemy.y = clamp(enemy.y, minY, maxY);
+          enemy.y = nextY < minY ? minY : maxY;
         } else {
           enemy.y = nextY;
         }
@@ -690,8 +713,18 @@ export default function GameScreen() {
           enemy.blockedTime = Math.max(0, enemy.blockedTime - dt * 1.8);
         }
 
-        const collisionRadius = enemyVisualRadius(enemy, g.cell) * 0.78 + g.cell * PLAYER_RADIUS_CELLS * 0.6;
-        if (Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) explode(g, now);
+        const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
+        const safePerimeterTolerance = Math.max(1, g.cell * 0.08);
+        const playerOnSafePerimeter = (
+          g.player.x <= bounds.left + playerRadius + safePerimeterTolerance
+          || g.player.x >= bounds.right - playerRadius - safePerimeterTolerance
+          || g.player.y <= bounds.top + playerRadius + safePerimeterTolerance
+          || g.player.y >= bounds.bottom - playerRadius - safePerimeterTolerance
+        );
+        const collisionRadius = enemyVisualRadius(enemy, g.cell) * 0.78 + playerRadius * 0.6;
+        if (!playerOnSafePerimeter && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
+          explode(g, now);
+        }
         for (let i = 1; i < g.trail.length; i += 1) {
           if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < enemyVisualRadius(enemy, g.cell) * 0.78) {
             explode(g, now);
