@@ -19,6 +19,7 @@ const PERIMETER_INSET_CELLS = 2;
 const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
+const ZONE_COLOR = '#00f3ff';
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 
@@ -780,7 +781,7 @@ export default function GameScreen() {
     let lastTime = Date.now();
 
     const addParticle = (g: Game, direction: Direction) => {
-      if (g.particles.length > 460) return;
+      if (g.particles.length >= 96) return;
       const backwards = Math.atan2(-direction.y, -direction.x);
       const angle = backwards + (Math.random() - 0.5) * (Math.PI / 4);
       const speed = 80 + Math.random() * 210;
@@ -790,8 +791,8 @@ export default function GameScreen() {
         y: g.player.y - direction.y * g.cell * 0.8,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        life: 0.4,
-        size: 1.2 + Math.random() * 2.5,
+         life: 0.24,
+         size: 1 + Math.random() * 1.8,
         color: colorsForSpark[Math.floor(Math.random() * colorsForSpark.length)],
       });
     };
@@ -1433,7 +1434,7 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
+            for (let spark = 0; spark < 3; spark += 1) addParticle(g, g.cutDir);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
@@ -1484,15 +1485,17 @@ export default function GameScreen() {
         context.stroke();
       }
 
-       context.fillStyle = 'rgba(0,243,255,0.14)';
+       context.globalCompositeOperation = 'source-over';
+       context.globalAlpha = 1;
+       context.fillStyle = ZONE_COLOR;
+       context.beginPath();
       g.claimedPolygons.forEach((polygon) => {
         if (polygon.length < 3) return;
-        context.beginPath();
         context.moveTo(polygon[0].x, polygon[0].y);
         polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
         context.closePath();
-        context.fill();
       });
+       context.fill();
 
       context.globalCompositeOperation = 'lighter';
       context.strokeStyle = '#00f3ff';
@@ -1639,7 +1642,7 @@ export default function GameScreen() {
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
              diamond: { ...g.diamond },
-             particles: g.particles.slice(-1000),
+             particles: g.particles.slice(-120),
              smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
              claimedPolygons: g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point }))),
             scanY: g.scanY,
@@ -1684,8 +1687,8 @@ export default function GameScreen() {
           <Polygon
             key={`claimed-polygon-${index}`}
             points={pointsToString(polygon)}
-            fill="#00f3ff"
-            opacity={0.14}
+            fill={ZONE_COLOR}
+            opacity={1}
           />
         ))}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
