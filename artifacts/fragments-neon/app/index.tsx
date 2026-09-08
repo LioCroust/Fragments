@@ -13,7 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
-const COLS = 40;
+const COLS = 24;
 const EMPTY = 0;
 const CLAIMED = 1;
 const TRAIL = 2;
@@ -22,7 +22,7 @@ const ZERO = { x: 0 as const, y: 0 as const };
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
 type Cell = { x: number; y: number };
-type Mode = 'FAST' | 'SLOW';
+type Mode = 'SLOW';
 type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
 
 type Game = {
@@ -142,7 +142,7 @@ export default function GameScreen() {
     fillQueue: [],
     fillCursor: 0,
     scanY: 0,
-    mode: 'FAST',
+    mode: 'SLOW',
     score: 0,
     shields: 3,
     captured: 0,
@@ -158,7 +158,7 @@ export default function GameScreen() {
     score: 0,
     shields: 3,
     capture: 0,
-    mode: 'FAST',
+    mode: 'SLOW',
     feedback: '',
   });
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
@@ -208,7 +208,7 @@ export default function GameScreen() {
       fillQueue: [],
       fillCursor: 0,
       scanY: 0,
-      mode: 'FAST',
+      mode: 'SLOW',
       score: previousScore,
       shields: previousShields,
       captured: 0,
@@ -223,7 +223,7 @@ export default function GameScreen() {
       score: previousScore,
       shields: previousShields,
       capture: 0,
-      mode: 'FAST',
+      mode: 'SLOW',
       feedback: '',
     });
   }, []);
@@ -237,11 +237,6 @@ export default function GameScreen() {
     if (changed && gameRef.current.initialized) resetGame(true);
   }, [resetGame]);
 
-  const setMode = (mode: Mode) => {
-    gameRef.current.mode = mode;
-    setHud((current) => ({ ...current, mode }));
-  };
-
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -249,7 +244,11 @@ export default function GameScreen() {
       onPanResponderMove: (_, gesture) => {
         const g = gameRef.current;
         if (g.status !== 'PLAYING' || Math.hypot(gesture.dx, gesture.dy) < 10) return;
-        if (g.trail.length === 0) g.inputDir = cardinalDirection(gesture.dx, gesture.dy);
+        const direction = cardinalDirection(gesture.dx, gesture.dy);
+        g.inputDir = direction;
+        // A new cardinal swipe can redirect an active cut at 90 degrees.
+        // Releasing still leaves the drone travelling until it reaches safety.
+        if (g.trail.length > 0) g.cutDir = direction;
       },
       onPanResponderRelease: () => {
         const g = gameRef.current;
@@ -390,7 +389,7 @@ export default function GameScreen() {
       }
 
       const direction = g.trail.length > 0 ? g.cutDir : g.inputDir;
-      const speed = g.mode === 'SLOW' ? 118 : 236;
+      const speed = 118;
       const distance = speed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
         const steps = Math.max(1, Math.ceil(distance));
@@ -408,9 +407,7 @@ export default function GameScreen() {
             if (g.trail.length === 0) g.cutDir = direction;
             g.grid[y][x] = TRAIL;
             g.trail.push({ x: x * g.cell + g.cell / 2, y: y * g.cell + g.cell / 2 });
-            if (g.mode === 'SLOW') {
-              for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
-            }
+            for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
           } else if (state === TRAIL) {
             const recent = g.trail.slice(-6);
             if (!recent.some((point) => Math.floor(point.x / g.cell) === x && Math.floor(point.y / g.cell) === y)) {
@@ -509,10 +506,10 @@ export default function GameScreen() {
       context.shadowBlur = 0;
 
       if (g.trail.length > 1) {
-        context.strokeStyle = g.mode === 'SLOW' ? '#ff5500' : '#00f3ff';
-        context.shadowColor = g.mode === 'SLOW' ? '#ff5500' : '#00f3ff';
-        context.shadowBlur = g.mode === 'SLOW' ? 18 : 8;
-        context.lineWidth = g.mode === 'SLOW' ? 5 : 3;
+        context.strokeStyle = '#ff5500';
+        context.shadowColor = '#ff5500';
+        context.shadowBlur = 18;
+        context.lineWidth = 5;
         context.beginPath();
         context.moveTo(g.trail[0].x, g.trail[0].y);
         g.trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
@@ -637,7 +634,7 @@ export default function GameScreen() {
           <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
         ))}
         <Rect x={snapshot.cell * 1.5} y={snapshot.cell * 1.5} width={snapshot.width - snapshot.cell * 3} height={snapshot.height - snapshot.cell * 3} fill="none" stroke="#00f3ff" strokeWidth={3} opacity={0.95} />
-        {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke={hud.mode === 'SLOW' ? '#ff5500' : '#00f3ff'} strokeWidth={hud.mode === 'SLOW' ? 5 : 3} />}
+        {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} />}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
         {Array.from({ length: 10 }).map((_, arm) => <Polyline key={`qix${arm}`} points={pointsToString([{ x: snapshot.qix.x, y: snapshot.qix.y }, ...qixPoints(snapshot.qix, snapshot.cell * (2.3 + (arm % 3) * 0.35), arm)])} fill="none" stroke={arm % 2 === 0 ? '#7b00ff' : '#ff0077'} strokeWidth={2} />)}
         {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
@@ -667,30 +664,13 @@ export default function GameScreen() {
           <Text style={[styles.hudSubtext, { color: colors.accent }]}>BOUCLIERS {hud.shields}</Text>
           <Text style={[styles.hudSubtext, { color: colors.secondary }]}>ZONE {hud.capture}%</Text>
         </View>
-        {hud.feedback !== '' && <Text style={[styles.feedback, { color: hud.mode === 'SLOW' ? '#ff8a00' : colors.primary }]}>{hud.feedback}</Text>}
+        {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
 
-      <View style={[styles.modeControls, { bottom: Math.max(insets.bottom, 14) + 12 }]}>
-        <Pressable
-          onPress={() => setMode('SLOW')}
-          onStartShouldSetResponder={() => true}
-          style={[styles.modeButton, styles.slowButton, hud.mode === 'SLOW' && styles.modeButtonActive]}
-          testID="slow-cut"
-        >
-          <Text style={styles.modeKicker}>CHALUMEAU</Text>
-          <Text style={styles.modeLabel}>SLOW</Text>
-          <Text style={styles.modeHint}>2× SCORE · PARTICULES</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setMode('FAST')}
-          onStartShouldSetResponder={() => true}
-          style={[styles.modeButton, styles.fastButton, hud.mode === 'FAST' && styles.modeButtonActive]}
-          testID="fast-cut"
-        >
-          <Text style={styles.modeKicker}>RAPIDE</Text>
-          <Text style={styles.modeLabel}>FAST</Text>
-          <Text style={styles.modeHint}>VITESSE · PRÉCISION</Text>
-        </Pressable>
+      <View style={[styles.slowStatus, { bottom: Math.max(insets.bottom, 14) + 18 }]}>
+        <Text style={styles.slowStatusKicker}>MODE DE DÉCOUPE</Text>
+        <Text style={styles.slowStatusLabel}>CHALUMEAU SLOW</Text>
+        <Text style={styles.slowStatusHint}>PARTICULES ACTIVES · BONUS DE SCORE</Text>
       </View>
     </View>
   );
@@ -707,7 +687,7 @@ const styles = StyleSheet.create({
     top: 72,
     left: 0,
     right: 0,
-    bottom: 126,
+    bottom: 76,
     backgroundColor: '#000000',
     overflow: 'hidden',
   },
@@ -739,48 +719,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.8,
   },
-  modeControls: {
+  slowStatus: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modeButton: {
-    flex: 1,
-    minHeight: 74,
+    left: 16,
+    right: 16,
+    minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.52)',
-  },
-  modeButtonActive: {
-    borderWidth: 2,
-    backgroundColor: 'rgba(0,243,255,0.10)',
-  },
-  slowButton: {
     borderColor: '#ff5500',
+    backgroundColor: 'rgba(255,85,0,0.08)',
   },
-  fastButton: {
-    borderColor: '#00f3ff',
-  },
-  modeKicker: {
+  slowStatusKicker: {
     color: '#9ba0b3',
     fontFamily: 'Inter_700Bold',
-    fontSize: 9,
-    letterSpacing: 1.1,
+    fontSize: 8,
+    letterSpacing: 1.2,
   },
-  modeLabel: {
-    color: '#ffffff',
+  slowStatusLabel: {
+    color: '#ff8a00',
     fontFamily: 'Inter_700Bold',
-    fontSize: 21,
+    fontSize: 16,
     letterSpacing: 2,
   },
-  modeHint: {
+  slowStatusHint: {
     color: '#9ba0b3',
     fontFamily: 'Inter_500Medium',
     fontSize: 8,
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
   },
 });
