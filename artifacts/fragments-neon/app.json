@@ -4,15 +4,21 @@
     "slug": "fragments-neon",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon_2.png",
     "scheme": "fragments-neon",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon_2.png",
+        "backgroundColor": "#050510"
+      },
+      "softwareKeyboardLayoutMode": "pan"
+    },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/icon_2.png"
     },
     "plugins": ["expo-router"],
     "experiments": {

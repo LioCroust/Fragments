@@ -1,0 +1,23 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "LwENK9SZCmLJmyilqF86k"
+uri = "file://artifacts/fragments-neon/assets/audio/confirm.mp3"
+type = "audio"
+title = "confirm chime"
+description = "Generated sound effect: Premium futuristic arcade UI confirmation sound, crystalline synth pluck with a warm sub bass pulse and shimmering cybernetic tail, clean and satisfying, no voice"
+
+[[outputs]]
+id = "UaEpnqcaYHQd_YIaUr9jE"
+uri = "file://artifacts/fragments-neon/assets/audio/danger.mp3"
+type = "audio"
+title = "danger pulse"
+description = "Generated sound effect: Tense cyberpunk arcade danger pulse, deep electronic impact with a distorted neon crackle, short and punchy, no voice"
+
+[[outputs]]
+id = "HqFf9Ts-KmHCrkJQ-m6U3"
+uri = "file://artifacts/fragments-neon/assets/audio/pickup.mp3"
+type = "audio"
+title = "pickup chime"
+description = "Generated sound effect: Futuristic neon energy pickup sound for a mobile game, ascending laser arpeggio with a bright digital sparkle and short sci-fi tail, no voice"
