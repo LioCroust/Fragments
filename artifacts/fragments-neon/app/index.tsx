@@ -57,6 +57,7 @@ type Game = {
   grid: number[][];
   player: Point;
   inputDir: Direction;
+  facingDir: Direction;
   cutDir: Direction;
   cutCoordinate: number;
   trail: Point[];
@@ -259,7 +260,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
   const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
-  const enemies = [
+  const enemies: Enemy[] = [
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 62 * levelSpeed, vy: 42 * levelSpeed, speed: 72 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 42 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
@@ -281,6 +282,7 @@ export default function GameScreen() {
     grid: [],
     player: { x: 0, y: 0 },
     inputDir: ZERO,
+    facingDir: { x: 0, y: 1 },
     cutDir: ZERO,
     cutCoordinate: 0,
     trail: [],
@@ -365,8 +367,9 @@ export default function GameScreen() {
       cell,
       rows,
       grid,
-      player: { x: (SAFE_BAND_CELLS + 1) * cell, y: (rows - SAFE_BAND_CELLS - 1) * cell },
+      player: { x: (SAFE_BAND_CELLS + 1) * cell, y: bounds.bottom - cell * PLAYER_RADIUS_CELLS },
       inputDir: ZERO,
+      facingDir: { x: 0, y: 1 },
       cutDir: ZERO,
       cutCoordinate: 0,
       trail: [],
@@ -771,6 +774,7 @@ export default function GameScreen() {
       }
 
       const direction = g.trail.length > 0 ? g.cutDir : g.inputDir;
+      if (direction.x !== 0 || direction.y !== 0) g.facingDir = direction;
       const speed = 118;
       const distance = speed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
@@ -796,6 +800,27 @@ export default function GameScreen() {
           }
           g.player.x = clamp(g.player.x + stepX, bounds.left + playerRadius, bounds.right - playerRadius);
           g.player.y = clamp(g.player.y + stepY, bounds.top + playerRadius, bounds.bottom - playerRadius);
+
+          const reachedPerimeter = g.trail.length > 0 && (
+            (direction.x < 0 && g.player.x <= bounds.left + playerRadius)
+            || (direction.x > 0 && g.player.x >= bounds.right - playerRadius)
+            || (direction.y < 0 && g.player.y <= bounds.top + playerRadius)
+            || (direction.y > 0 && g.player.y >= bounds.bottom - playerRadius)
+          );
+          if (reachedPerimeter) {
+            const perimeterContact = {
+              x: direction.x < 0 ? bounds.left : direction.x > 0 ? bounds.right : g.player.x,
+              y: direction.y < 0 ? bounds.top : direction.y > 0 ? bounds.bottom : g.player.y,
+            };
+            if (g.trail.length > 3) {
+              g.trail.push(perimeterContact);
+              capture(g);
+            } else {
+              g.trail = [];
+            }
+            break;
+          }
+
           const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
           const y = clamp(Math.floor(g.player.y / g.cell), 0, g.rows - 1);
           const state = g.grid[y][x];
@@ -821,7 +846,13 @@ export default function GameScreen() {
             g.trail.push({ x: g.player.x, y: g.player.y });
           } else if (state === CLAIMED) {
             if (g.trail.length > 3) {
-              g.trail.push({ x: g.player.x, y: g.player.y });
+              const safeContact = {
+                x: direction.x > 0 ? x * g.cell : direction.x < 0 ? (x + 1) * g.cell : g.player.x,
+                y: direction.y > 0 ? y * g.cell : direction.y < 0 ? (y + 1) * g.cell : g.player.y,
+              };
+              g.trail.push(safeContact);
+              g.player.x = clamp(safeContact.x - direction.x * playerRadius, bounds.left + playerRadius, bounds.right - playerRadius);
+              g.player.y = clamp(safeContact.y - direction.y * playerRadius, bounds.top + playerRadius, bounds.bottom - playerRadius);
               capture(g);
               break;
             }
@@ -947,7 +978,7 @@ export default function GameScreen() {
         context.stroke();
       }
 
-      const angle = Math.atan2(g.trail.length > 0 ? g.cutDir.y : g.inputDir.y, g.trail.length > 0 ? g.cutDir.x : g.inputDir.x);
+       const angle = Math.atan2(g.trail.length > 0 ? g.cutDir.y : g.facingDir.y, g.trail.length > 0 ? g.cutDir.x : g.facingDir.x);
       context.save();
       context.translate(g.player.x, g.player.y);
       context.rotate(Number.isNaN(angle) ? 0 : angle);
@@ -987,7 +1018,7 @@ export default function GameScreen() {
             claimed: makeClaimedRuns(g.grid),
             trail: [...g.trail],
             player: { ...g.player },
-            direction: g.trail.length > 0 ? g.cutDir : g.inputDir,
+             direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
              particles: g.particles.slice(-1000),
             scanY: g.scanY,
