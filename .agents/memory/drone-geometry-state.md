@@ -1,0 +1,10 @@
+---
+name: Drone geometry states
+description: The drone uses geometric perimeter states instead of treating the blue border or outer band as grid collisions.
+---
+
+The drone has four distinct states: free outside the blue perimeter, crossing the perimeter, free inside the playfield, and active cutting. The blue perimeter is a transition boundary, never a damage collider.
+
+**Why:** Mixing the drone radius, safe-band cells, blue border, and claimed grid caused false stops, blocked entry, and spurious explosions.
+
+**How to apply:** Clamp only to the physical screen edge outside; allow exact center crossing at the perimeter; start the red trail only on an interior empty cell; use segment distance for red-trail collisions and body distance for enemies.

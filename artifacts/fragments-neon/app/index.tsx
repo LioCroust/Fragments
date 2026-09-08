@@ -162,12 +162,21 @@ const perimeterBounds = (width: number, height: number, cell: number) => ({
   bottom: height - cell * PERIMETER_INSET_CELLS,
 });
 
-const playerInOuterSafeBand = (player: Point, bounds: ReturnType<typeof perimeterBounds>, radius: number) => (
-  player.x <= bounds.left + radius
-  || player.x >= bounds.right - radius
-  || player.y <= bounds.top + radius
-  || player.y >= bounds.bottom - radius
+const pointInsidePerimeter = (point: Point, bounds: ReturnType<typeof perimeterBounds>) => (
+  point.x > bounds.left && point.x < bounds.right
+  && point.y > bounds.top && point.y < bounds.bottom
 );
+
+const perimeterContact = (
+  point: Point,
+  direction: Direction,
+  bounds: ReturnType<typeof perimeterBounds>,
+) => ({
+  x: direction.x < 0 ? bounds.right : direction.x > 0 ? bounds.left : point.x,
+  y: direction.y < 0 ? bounds.bottom : direction.y > 0 ? bounds.top : point.y,
+});
+
+const playerBodyRadius = (cell: number) => cell * 0.34;
 
 const spriteFrames: Record<EnemyKind, any[]> = {
   SHIP: [
@@ -471,8 +480,8 @@ export default function GameScreen() {
         if (g.trail.length > 0) {
           g.cutDir = direction;
           g.cutCoordinate = direction.x !== 0
-            ? Math.round(g.player.y / g.cell) * g.cell
-            : Math.round(g.player.x / g.cell) * g.cell;
+            ? g.player.y
+            : g.player.x;
         }
       },
       onPanResponderRelease: () => {
@@ -828,16 +837,9 @@ export default function GameScreen() {
           enemy.blockedTime = Math.max(0, enemy.blockedTime - dt * 1.8);
         }
 
-        const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
-        const safePerimeterTolerance = Math.max(1, g.cell * 0.08);
-        const playerOnSafePerimeter = (
-          g.player.x <= bounds.left + playerRadius + safePerimeterTolerance
-          || g.player.x >= bounds.right - playerRadius - safePerimeterTolerance
-          || g.player.y <= bounds.top + playerRadius + safePerimeterTolerance
-          || g.player.y >= bounds.bottom - playerRadius - safePerimeterTolerance
-        );
-        const collisionRadius = enemyRadius(enemy, g.cell) + playerRadius * 0.52;
-        if (!playerOnSafePerimeter && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
+        const droneIsActive = g.trail.length > 0 || pointInsidePerimeter(g.player, bounds);
+        const collisionRadius = enemyRadius(enemy, g.cell) + playerBodyRadius(g.cell);
+        if (droneIsActive && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
           explode(g, now);
         }
         for (let i = 1; i < g.trail.length; i += 1) {
@@ -932,49 +934,29 @@ export default function GameScreen() {
 
         for (let i = 0; i < steps; i += 1) {
           const bounds = perimeterBounds(g.width, g.height, g.cell);
-          const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
-          const enteringPlayfieldFromSafeBand = (
-            (g.player.y > bounds.bottom && direction.y < 0)
-            || (g.player.y < bounds.top && direction.y > 0)
-            || (g.player.x > bounds.right && direction.x < 0)
-            || (g.player.x < bounds.left && direction.x > 0)
-          );
-          if (g.trail.length === 0 && enteringPlayfieldFromSafeBand) {
-            if (direction.y < 0) g.player.y = bounds.bottom - 1;
-            if (direction.y > 0) g.player.y = bounds.top + 1;
-            if (direction.x < 0) g.player.x = bounds.right - 1;
-            if (direction.x > 0) g.player.x = bounds.left + 1;
-          }
-          const isInOuterSafeBand = playerInOuterSafeBand(g.player, bounds, playerRadius);
-          if (g.trail.length === 0 && !isInOuterSafeBand) {
-            if (direction.x !== 0) {
-              g.cutCoordinate = clamp(Math.round(g.player.y / g.cell) * g.cell, bounds.top + playerRadius, bounds.bottom - playerRadius);
-              g.player.y = g.cutCoordinate;
-            } else {
-              g.cutCoordinate = clamp(Math.round(g.player.x / g.cell) * g.cell, bounds.left + playerRadius, bounds.right - playerRadius);
-              g.player.x = g.cutCoordinate;
-            }
-          } else if (g.cutDir.x !== 0) {
-            g.player.y = g.cutCoordinate;
-          } else if (g.cutDir.y !== 0) {
-            g.player.x = g.cutCoordinate;
-          }
-          g.player.x = clamp(g.player.x + stepX, playerRadius, g.width - playerRadius);
-          g.player.y = clamp(g.player.y + stepY, playerRadius, g.height - playerRadius);
+          const previous = { ...g.player };
+          const activeTrail = g.trail.length > 0;
+          let next = {
+            x: g.player.x + stepX,
+            y: g.player.y + stepY,
+          };
 
-          const reachedPerimeter = g.trail.length > 0 && (
-            (direction.x < 0 && g.player.x <= bounds.left + playerRadius)
-            || (direction.x > 0 && g.player.x >= bounds.right - playerRadius)
-            || (direction.y < 0 && g.player.y <= bounds.top + playerRadius)
-            || (direction.y > 0 && g.player.y >= bounds.bottom - playerRadius)
+          if (activeTrail) {
+            if (direction.x !== 0) next.y = g.cutCoordinate;
+            if (direction.y !== 0) next.x = g.cutCoordinate;
+          }
+
+          const reachedPerimeter = activeTrail && (
+            (direction.x < 0 && next.x <= bounds.left)
+            || (direction.x > 0 && next.x >= bounds.right)
+            || (direction.y < 0 && next.y <= bounds.top)
+            || (direction.y > 0 && next.y >= bounds.bottom)
           );
           if (reachedPerimeter) {
-            const perimeterContact = {
-              x: direction.x < 0 ? bounds.left : direction.x > 0 ? bounds.right : g.player.x,
-              y: direction.y < 0 ? bounds.top : direction.y > 0 ? bounds.bottom : g.player.y,
-            };
-            if (g.trail.length > 3) {
-              g.trail.push(perimeterContact);
+            const contact = perimeterContact(next, direction, bounds);
+            g.player = contact;
+            if (g.trail.length > 2) {
+              g.trail.push(contact);
               capture(g);
             } else {
               g.trail = [];
@@ -982,48 +964,42 @@ export default function GameScreen() {
             break;
           }
 
+          next.x = clamp(next.x, playerBodyRadius(g.cell), g.width - playerBodyRadius(g.cell));
+          next.y = clamp(next.y, playerBodyRadius(g.cell), g.height - playerBodyRadius(g.cell));
+          g.player = next;
+
+          if (activeTrail && pointTouchesOldTrail(g.player, g.trail, g.cell)) {
+            explode(g, now);
+            break;
+          }
+
+          const inside = pointInsidePerimeter(g.player, bounds);
+          if (!inside) continue;
+
           const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
           const y = clamp(Math.floor(g.player.y / g.cell), 0, g.rows - 1);
           const state = g.grid[y][x];
 
           if (state === EMPTY) {
-            if (g.trail.length === 0) g.cutDir = direction;
-            g.grid[y][x] = TRAIL;
             if (g.trail.length === 0) {
-              const anchor = {
-                x: direction.x !== 0 ? (direction.x > 0 ? bounds.left : bounds.right) : g.player.x,
-                y: direction.y !== 0 ? (direction.y > 0 ? bounds.top : bounds.bottom) : g.player.y,
-              };
-              g.trail.push(anchor);
+              g.cutDir = direction;
+              g.cutCoordinate = direction.x !== 0 ? g.player.y : g.player.x;
+              g.trail.push(perimeterContact(previous, direction, bounds));
             }
-            g.trail.push({ x: g.player.x, y: g.player.y });
+            g.grid[y][x] = TRAIL;
+            g.trail.push({ ...g.player });
             for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
           } else if (state === TRAIL) {
-            if (pointTouchesOldTrail({ x: g.player.x, y: g.player.y }, g.trail, g.cell)) {
-              explode(g, now);
-              break;
-            }
-            g.trail.push({ x: g.player.x, y: g.player.y });
-          } else if (state === CLAIMED) {
-            if (g.trail.length > 3) {
-              const safeContact = {
-                x: direction.x > 0 ? x * g.cell : direction.x < 0 ? (x + 1) * g.cell : g.player.x,
-                y: direction.y > 0 ? y * g.cell : direction.y < 0 ? (y + 1) * g.cell : g.player.y,
-              };
-              g.trail.push(safeContact);
-              g.player.x = clamp(safeContact.x - direction.x * playerRadius, bounds.left + playerRadius, bounds.right - playerRadius);
-              g.player.y = clamp(safeContact.y - direction.y * playerRadius, bounds.top + playerRadius, bounds.bottom - playerRadius);
-              capture(g);
-              break;
-            }
-            if (g.trail.length > 0) {
-              g.trail.forEach((point) => {
-                const tx = Math.floor(point.x / g.cell);
-                const ty = Math.floor(point.y / g.cell);
-                if (g.grid[ty]?.[tx] === TRAIL) g.grid[ty][tx] = EMPTY;
-              });
-              g.trail = [];
-            }
+            g.trail.push({ ...g.player });
+          } else if (state === CLAIMED && g.trail.length > 2) {
+            const safeContact = {
+              x: direction.x > 0 ? x * g.cell : direction.x < 0 ? (x + 1) * g.cell : g.player.x,
+              y: direction.y > 0 ? y * g.cell : direction.y < 0 ? (y + 1) * g.cell : g.player.y,
+            };
+            g.player = safeContact;
+            g.trail.push(safeContact);
+            capture(g);
+            break;
           }
         }
       }
