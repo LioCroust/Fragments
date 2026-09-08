@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, PanResponder, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, PanResponder, Pressable, Image, LayoutChangeEvent } from 'react-native';
 import Svg, { Rect, Polyline, Circle, Line, Defs, RadialGradient, Stop, Filter, FeGaussianBlur } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from 'expo-audio';
@@ -11,8 +11,8 @@ const EMPTY = 0;
 const CLAIMED = 1;
 const TRAIL = 2;
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SCREEN_HEIGHT = Dimensions.get('window').height;
+const FALLBACK_SCREEN_WIDTH = Dimensions.get('window').width;
+const FALLBACK_SCREEN_HEIGHT = Dimensions.get('window').height;
 const GRID_W = 40;
 const TARGET_PERCENT = 75;
 const playerSprite = require('@/assets/images/player-arcwing.png');
@@ -54,6 +54,7 @@ export default function GameScreen() {
   const [enemies, setEnemies] = useState<{x:number, y:number}[]>([]);
   const [shards, setShards] = useState<{x:number, y:number, gx:number, gy:number}[]>([]);
   const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
+  const arenaSizeRef = useRef({ width: 0, height: 0 });
   
   const gameRef = useRef({
     grid: [] as number[][],
@@ -336,10 +337,14 @@ export default function GameScreen() {
     setProgress(0);
     setGameState('PLAYING');
     
-    const cellW = SCREEN_WIDTH / GRID_W;
     const topPadding = Math.max(insets.top, 20) + 80;
     const bottomPadding = insets.bottom + 40;
-    const arenaHeight = SCREEN_HEIGHT - topPadding - bottomPadding; 
+    const measuredWidth = arenaSizeRef.current.width || FALLBACK_SCREEN_WIDTH;
+    const measuredHeight = arenaSizeRef.current.height || (
+      FALLBACK_SCREEN_HEIGHT - topPadding - bottomPadding
+    );
+    const cellW = measuredWidth / GRID_W;
+    const arenaHeight = measuredHeight;
     const gridH = Math.floor(arenaHeight / cellW);
     
     const g = gameRef.current;
@@ -409,6 +414,23 @@ export default function GameScreen() {
     cancelAnimationFrame(g.animFrame);
     g.animFrame = requestAnimationFrame(gameLoop);
   }, [insets]);
+
+  const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width <= 0 || height <= 0) return;
+
+    const previous = arenaSizeRef.current;
+    const changed = Math.abs(previous.width - width) > 1 || Math.abs(previous.height - height) > 1;
+    arenaSizeRef.current = { width, height };
+
+    // The canvas preview is an iframe, so its layout size can be different
+    // from the browser window. Rebuild once using the measured arena instead
+    // of the global Dimensions value.
+    if (changed && gameRef.current.status === 'PLAYING') {
+      const g = gameRef.current;
+      initLevel(g.level, g.score, g.shields);
+    }
+  }, [initLevel]);
 
   const syncGrid = () => {
     const g = gameRef.current;
@@ -541,7 +563,11 @@ export default function GameScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {gameState === 'PLAYING' && (
-        <View style={[styles.arena, { top: Math.max(insets.top, 20) + 80, bottom: insets.bottom + 40 }]} testID="game-arena">
+        <View
+          style={[styles.arena, { top: Math.max(insets.top, 20) + 80, bottom: insets.bottom + 40 }]}
+          onLayout={handleArenaLayout}
+          testID="game-arena"
+        >
           <Svg style={StyleSheet.absoluteFill}>
             <Defs>
               <Filter id="blur">
