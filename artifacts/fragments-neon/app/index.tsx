@@ -491,12 +491,7 @@ const buildContinuousCapturePolygon = (
   }
   if (candidates.length === 0) return null;
 
-  const outsideExistingClaim = candidates.filter((polygon) => {
-    const center = polygonCentroid(polygon);
-    return claimedPolygons.every((claimedPolygon) => !pointInPolygon(center, claimedPolygon));
-  });
-  const selectable = outsideExistingClaim.length > 0 ? outsideExistingClaim : candidates;
-  return selectable.reduce((smallest, polygon) => (
+  return candidates.reduce((smallest, polygon) => (
     polygonArea(polygon) < polygonArea(smallest) ? polygon : smallest
   ));
 };
@@ -1761,6 +1756,19 @@ export default function GameScreen() {
                 });
               }
             }
+            g.enemies.forEach((enemy) => {
+              if (enemy.respawnAt > now) return;
+              const motion = enemyAnimationTransform(enemy, g.cell);
+              const enemyPoints = [
+                { x: enemy.x, y: enemy.y + motion.offsetY },
+                ...enemySpriteCorners(enemy, g.cell, enemy.x, enemy.y),
+              ];
+              const enemyInside = enemyPoints.some((point) => (
+                pointInPolygon(point, completedPolygon)
+                || polygonBoundaryDistance(point, completedPolygon) <= g.cell * 0.12
+              ));
+              if (enemyInside) burstEnemy(g, enemy, now);
+            });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (g.level === 1 && g.capturedArea / g.totalPlayableArea >= 0.8) {
               g.level = 2;
@@ -1905,7 +1913,15 @@ export default function GameScreen() {
       context.fillRect(0, 0, g.width, g.height);
 
        context.globalCompositeOperation = 'source-over';
-       context.globalAlpha = ZONE_FILL_OPACITY;
+       context.globalAlpha = INITIAL_MAP_OPACITY;
+       context.fillStyle = ZONE_COLOR;
+       context.fillRect(
+         g.cell * PERIMETER_INSET_CELLS,
+         g.cell * PERIMETER_INSET_CELLS,
+         g.width - g.cell * PERIMETER_INSET_CELLS * 2,
+         g.height - g.cell * PERIMETER_INSET_CELLS * 2,
+       );
+       context.globalAlpha = CAPTURED_ZONE_LAYER_OPACITY;
        context.fillStyle = ZONE_COLOR;
        context.beginPath();
        g.claimedPolygons.forEach((polygon) => {
@@ -2077,7 +2093,7 @@ export default function GameScreen() {
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
              diamond: { ...g.diamond },
-             particles: g.particles.slice(-120),
+              particles: g.particles.slice(-200),
              smokePuffs: g.smokePuffs,
              claimedPolygons: g.claimedPolygons,
             scanY: g.scanY,

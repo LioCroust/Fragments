@@ -8,4 +8,5 @@
 - [Enemy ship smoke](enemy-ship-smoke.md) — Decorative smoke belongs behind the enemy ship, not the player drone, and must remain non-functional.
 - [Continuous cut geometry](continuous-cut-geometry.md) — Cyan keeps gameplay meaning, but the player's red cut must end at its continuous position rather than a cell boundary.
 - [Capture union geometry](capture-union-geometry.md) — Normalize sampled boundary joins to exact cut endpoints and measure secured area as a union, not a polygon sum.
+- [Capture fill visual rules](capture-fill-visual-rules.md) — Keep the initial playable map at 20% cyan, captured areas at 40%, and resolve the smaller candidate region.
 - [Fill chime device validation](fill-chime-device-validation.md) — Confirmed on Android Expo Go; iOS silent-mode behavior still needs a real-device check.
