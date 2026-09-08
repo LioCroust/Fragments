@@ -249,6 +249,32 @@ const buildContinuousCapturePolygon = (
   );
   const start = trail[0];
   const end = trail[trail.length - 1];
+
+  // A cut can close by crossing an earlier part of its own red path instead
+  // of returning to the perimeter. In that case the boundary is the
+  // continuous sub-path after the crossing, not a cell-derived approximation.
+  for (let index = trail.length - 3; index >= 1; index -= 1) {
+    const segmentStart = trail[index - 1];
+    const segmentEnd = trail[index];
+    const dx = segmentEnd.x - segmentStart.x;
+    const dy = segmentEnd.y - segmentStart.y;
+    const lengthSquared = dx * dx + dy * dy || 1;
+    const progress = clamp(
+      ((end.x - segmentStart.x) * dx + (end.y - segmentStart.y) * dy) / lengthSquared,
+      0,
+      1,
+    );
+    const crossing = {
+      x: segmentStart.x + dx * progress,
+      y: segmentStart.y + dy * progress,
+    };
+    if (Math.hypot(end.x - crossing.x, end.y - crossing.y) <= cell * 0.7) {
+      const selfClosed = [crossing, ...trail.slice(index)];
+      if (polygonArea(selfClosed) > cell * cell * 0.04) return selfClosed;
+      break;
+    }
+  }
+
   const boundaryLoops = [perimeterLoop, ...claimedPolygons];
   const startLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(start, loop) <= cell * 1.5);
   const endLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(end, loop) <= cell * 1.5);
@@ -282,7 +308,7 @@ const buildContinuousCapturePolygon = (
   const candidates = [
     [...trail, ...boundaryArc(endIndex, startIndex).slice(1)],
     [...trail.slice().reverse(), ...boundaryArc(startIndex, endIndex).slice(1)],
-  ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.25);
+  ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.04);
   if (candidates.length === 0) return null;
 
   const outsideExistingClaim = candidates.filter((polygon) => {
