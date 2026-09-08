@@ -170,10 +170,10 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
 
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
-  if (kind === 'DRAGON') return { width: cell * 3.65, height: cell * 4.4 };
-  if (kind === 'SEVEN') return { width: cell * 4.4, height: cell * 4.4 };
-  if (kind === 'SPIDER') return { width: cell * 4.3, height: cell * 4.05 };
-  return { width: cell * 3.15, height: cell * 4.4 };
+  if (kind === 'DRAGON') return { width: cell * 4.7, height: cell * 4.7 };
+  if (kind === 'SEVEN') return { width: cell * 4.9, height: cell * 4.9 };
+  if (kind === 'SPIDER') return { width: cell * 4.9, height: cell * 4.9 };
+  return { width: cell * 4.8, height: cell * 4.8 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
