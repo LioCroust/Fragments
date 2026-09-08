@@ -706,6 +706,178 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   return enemies.slice(0, clamp(Math.floor(level), 1, enemies.length));
 };
 
+type NativeArenaStaticProps = {
+  width: number;
+  height: number;
+  cell: number;
+  rows: number;
+  claimedPolygons: Point[][];
+  protectedTrails: Point[][];
+  claimedCount: number;
+  protectedTrailCount: number;
+};
+
+const NativeArenaStatic = React.memo(({
+  width,
+  height,
+  cell,
+  rows,
+  claimedPolygons,
+  protectedTrails,
+  claimedCount,
+  protectedTrailCount,
+}: NativeArenaStaticProps) => {
+  const gridLines = [];
+  for (let x = 0; x <= COLS; x += 1) {
+    gridLines.push(
+      <Line
+        key={`v${x}`}
+        x1={x * cell}
+        y1={0}
+        x2={x * cell}
+        y2={height}
+        stroke="#00f3ff"
+        opacity={0.11}
+        strokeWidth={0.6}
+      />,
+    );
+  }
+  for (let y = 0; y <= rows; y += 1) {
+    gridLines.push(
+      <Line
+        key={`h${y}`}
+        x1={0}
+        y1={y * cell}
+        x2={width}
+        y2={y * cell}
+        stroke="#00f3ff"
+        opacity={0.11}
+        strokeWidth={0.6}
+      />,
+    );
+  }
+  const bounds = perimeterBounds(width, height, cell);
+  return (
+    <>
+      <Rect width={width} height={height} fill="#000000" />
+      {claimedPolygons.slice(0, claimedCount).map((polygon, index) => (
+        <Polygon
+          key={`claimed-polygon-${index}`}
+          points={pointsToString(polygon)}
+          fill={ZONE_COLOR}
+          opacity={ZONE_FILL_OPACITY}
+        />
+      ))}
+      {gridLines}
+      <Rect
+        x={bounds.left}
+        y={bounds.top}
+        width={bounds.right - bounds.left}
+        height={bounds.bottom - bounds.top}
+        fill="none"
+        stroke="#00f3ff"
+        strokeWidth={PERIMETER_STROKE_WIDTH}
+        opacity={0.95}
+      />
+      {protectedTrails.slice(0, protectedTrailCount).map((trail, index) => (
+        trail.length > 1 && (
+          <Polyline
+            key={`protected-trail-${index}`}
+            points={pointsToString(trail)}
+            fill="none"
+            stroke="#ff5500"
+            strokeWidth={5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )
+      ))}
+    </>
+  );
+});
+
+const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
+  const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
+  const playerRotationDegrees = angle * (180 / Math.PI) + 90;
+  const playerSize = playerSpriteSize(snapshot.cell);
+  return (
+    <>
+      {!snapshot.diamond.collected && (
+        <SvgImage
+          href={diamondSource}
+          x={snapshot.diamond.x - snapshot.cell * 0.75}
+          y={snapshot.diamond.y - snapshot.cell * 0.75}
+          width={snapshot.cell * 1.5}
+          height={snapshot.cell * 1.5}
+          opacity={0.98}
+        />
+      )}
+      {snapshot.particles.map((particle, index) => (
+        <Circle
+          key={`spark${index}`}
+          cx={particle.x}
+          cy={particle.y}
+          r={particle.size}
+          fill={particle.color}
+          opacity={clamp(particle.life / 0.4, 0, 1)}
+        />
+      ))}
+      {snapshot.enemies.map((enemy, enemyIndex) => {
+        if (enemy.respawnAt > Date.now()) return null;
+        const frame = enemyFrameIndex(enemy);
+        const size = enemySpriteSize(enemy.kind, snapshot.cell);
+        const motion = enemyAnimationTransform(enemy, snapshot.cell);
+        const centerY = enemy.y + motion.offsetY;
+        const rotationDegrees = motion.rotation * (180 / Math.PI);
+        return (
+          <G
+            key={`enemy-sprite-${enemyIndex}`}
+            transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${motion.scale}) translate(${-enemy.x} ${-enemy.y})`}
+          >
+            <SvgImage
+              href={spriteFrames[enemy.kind][frame]}
+              x={enemy.x - size.width / 2}
+              y={enemy.y - size.height / 2}
+              width={size.width}
+              height={size.height}
+              opacity={0.98}
+            />
+          </G>
+        );
+      })}
+      {snapshot.scanY > 0 && (
+        <Line
+          x1={0}
+          y1={snapshot.scanY}
+          x2={snapshot.width}
+          y2={snapshot.scanY}
+          stroke="#ffffff"
+          strokeWidth={2}
+        />
+      )}
+      {snapshot.smokePuffs.map((puff, index) => {
+        const opacity = clamp(puff.life / puff.maxLife, 0, 1);
+        return (
+          <G key={`smoke-${index}`} opacity={opacity * 0.22}>
+            <Circle cx={puff.x} cy={puff.y} r={puff.size} fill="#00f3ff" />
+            <Circle cx={puff.x} cy={puff.y} r={puff.size * 0.42} fill="#ffffff" opacity={0.55} />
+          </G>
+        );
+      })}
+      <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
+        <SvgImage
+          href={playerSource}
+          x={-playerSize.width / 2}
+          y={-playerSize.height / 2}
+          width={playerSize.width}
+          height={playerSize.height}
+          opacity={0.98}
+        />
+      </G>
+    </>
+  );
+};
+
 export default function GameScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -1837,98 +2009,29 @@ export default function GameScreen() {
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
-    const gridLines = [];
-    const bounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
-     for (let x = 0; x <= COLS; x += 1) {
-       gridLines.push(<Line key={`v${x}`} x1={x * snapshot.cell} y1={0} x2={x * snapshot.cell} y2={snapshot.height} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
-    }
-     for (let y = 0; y <= snapshot.rows; y += 1) {
-       gridLines.push(<Line key={`h${y}`} x1={0} y1={y * snapshot.cell} x2={snapshot.width} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
-    }
-    const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
-    const playerRotationDegrees = angle * (180 / Math.PI) + 90;
-    const playerSize = playerSpriteSize(snapshot.cell);
     return (
       <Svg style={StyleSheet.absoluteFill}>
-        <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
-        {snapshot.claimedPolygons.map((polygon, index) => (
-          <Polygon
-            key={`claimed-polygon-${index}`}
-            points={pointsToString(polygon)}
-            fill={ZONE_COLOR}
-            opacity={ZONE_FILL_OPACITY}
+        <NativeArenaStatic
+          width={snapshot.width}
+          height={snapshot.height}
+          cell={snapshot.cell}
+          rows={snapshot.rows}
+          claimedPolygons={snapshot.claimedPolygons}
+          protectedTrails={snapshot.protectedTrails}
+          claimedCount={snapshot.claimedPolygons.length}
+          protectedTrailCount={snapshot.protectedTrails.length}
+        />
+        {snapshot.trail.length > 1 && (
+          <Polyline
+            points={pointsToString(snapshot.trail)}
+            fill="none"
+            stroke="#ff5500"
+            strokeWidth={5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
-        ))}
-        {gridLines}
-        <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
-          {snapshot.protectedTrails.map((trail, index) => (
-            trail.length > 1 && (
-              <Polyline
-                key={`protected-trail-${index}`}
-                points={pointsToString(trail)}
-                fill="none"
-                stroke="#ff5500"
-                strokeWidth={5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )
-          ))}
-          {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
-         {!snapshot.diamond.collected && (
-           <SvgImage
-             href={diamondSource}
-             x={snapshot.diamond.x - snapshot.cell * 0.75}
-             y={snapshot.diamond.y - snapshot.cell * 0.75}
-             width={snapshot.cell * 1.5}
-             height={snapshot.cell * 1.5}
-             opacity={0.98}
-           />
-         )}
-        {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
-          {snapshot.enemies.map((enemy, enemyIndex) => {
-            if (enemy.respawnAt > Date.now()) return null;
-           const frame = enemyFrameIndex(enemy);
-           const size = enemySpriteSize(enemy.kind, snapshot.cell);
-            const motion = enemyAnimationTransform(enemy, snapshot.cell);
-            const centerY = enemy.y + motion.offsetY;
-            const rotationDegrees = motion.rotation * (180 / Math.PI);
-           return (
-              <G
-                key={`enemy-sprite-${enemyIndex}`}
-                transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${motion.scale}) translate(${-enemy.x} ${-enemy.y})`}
-              >
-                <SvgImage
-                  href={spriteFrames[enemy.kind][frame]}
-                  x={enemy.x - size.width / 2}
-                  y={enemy.y - size.height / 2}
-                  width={size.width}
-                  height={size.height}
-                  opacity={0.98}
-                />
-              </G>
-           );
-         })}
-        {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
-          {snapshot.smokePuffs.map((puff, index) => {
-            const opacity = clamp(puff.life / puff.maxLife, 0, 1);
-            return (
-              <G key={`smoke-${index}`} opacity={opacity * 0.22}>
-                <Circle cx={puff.x} cy={puff.y} r={puff.size} fill="#00f3ff" />
-                <Circle cx={puff.x} cy={puff.y} r={puff.size * 0.42} fill="#ffffff" opacity={0.55} />
-              </G>
-            );
-          })}
-         <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
-           <SvgImage
-             href={playerSource}
-             x={-playerSize.width / 2}
-             y={-playerSize.height / 2}
-             width={playerSize.width}
-             height={playerSize.height}
-             opacity={0.98}
-           />
-         </G>
+        )}
+        <NativeArenaDynamic snapshot={snapshot} />
       </Svg>
     );
   };
