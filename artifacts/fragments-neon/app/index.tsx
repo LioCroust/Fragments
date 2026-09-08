@@ -904,14 +904,22 @@ export default function GameScreen() {
         };
         const enemyTouchesTrail = (x: number, y: number) => {
           if (g.trail.length < 2) return false;
-          const footprintTouchesTrail = enemySpriteFootprint(enemy, g.cell, x, y).some((point) => (
-            cellAt(point.x, point.y) === TRAIL
-          ));
-          if (footprintTouchesTrail) return true;
-          const collisionDistance = enemyRadius(enemy, g.cell) + g.cell * 0.12;
-          return g.trail.slice(1).some((point, index) => (
-            distanceToSegment({ x, y }, g.trail[index], point) < collisionDistance
-          ));
+          const corners = enemySpriteCorners(enemy, g.cell, x, y);
+          const edges = corners.map((corner, index) => ({
+            start: corner,
+            end: corners[(index + 1) % corners.length],
+          }));
+          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
+          return g.trail.slice(1).some((trailPoint, index) => {
+            const trailStart = g.trail[index];
+            const trailEnd = trailPoint;
+            if (pointInPolygon(trailStart, corners) || pointInPolygon(trailEnd, corners)) return true;
+            return edges.some((edge) => (
+              segmentsIntersect(edge.start, edge.end, trailStart, trailEnd)
+              || distanceToSegment(edge.start, trailStart, trailEnd) <= trailStrokeRadius
+              || distanceToSegment(edge.end, trailStart, trailEnd) <= trailStrokeRadius
+            ));
+          });
         };
         if (enemyTouchesTrail(enemy.x, enemy.y)) {
           explode(g, now);
