@@ -136,7 +136,12 @@ const distanceToSegment = (point: Point, a: Point, b: Point) => {
   return Math.hypot(point.x - closest.x, point.y - closest.y);
 };
 
-const pointTouchesOldTrail = (point: Point, trail: Point[], cell: number) => {
+const pointTouchesOldTrail = (
+  point: Point,
+  trail: Point[],
+  cell: number,
+  direction: Direction,
+) => {
   // Ignore the continuous laser immediately behind the drone. The player
   // must be at least one cell away along the trail before a crossing can be
   // considered a real self-collision.
@@ -149,6 +154,15 @@ const pointTouchesOldTrail = (point: Point, trail: Point[], cell: number) => {
     const end = trail[index + 1];
     distanceBehindDrone += Math.hypot(end.x - start.x, end.y - start.y);
     if (distanceBehindDrone < trailingClearance) continue;
+
+    // Segments that are entirely behind the drone in its current travel
+    // direction are the path it is following, not a crossing. Without this
+    // check, leaving a claimed zone immediately looked like a self-hit after
+    // roughly one cell of movement.
+    const startBehind = (start.x - point.x) * direction.x + (start.y - point.y) * direction.y < 0;
+    const endBehind = (end.x - point.x) * direction.x + (end.y - point.y) * direction.y < 0;
+    if (startBehind && endBehind) continue;
+
     if (distanceToSegment(point, start, end) <= collisionDistance) return true;
   }
   return false;
@@ -1003,7 +1017,7 @@ export default function GameScreen() {
           next.y = clamp(next.y, screenRadius, g.height - screenRadius);
           g.player = next;
 
-          if (activeTrail && pointTouchesOldTrail(g.player, g.trail, g.cell)) {
+          if (activeTrail && pointTouchesOldTrail(g.player, g.trail, g.cell, direction)) {
             // Touching the temporary red trail cancels this cut, but does not
             // destroy the drone or consume a shield.
             g.player = previous;
@@ -1022,7 +1036,14 @@ export default function GameScreen() {
             if (g.trail.length === 0) {
               g.cutDir = direction;
               g.cutCoordinate = direction.x !== 0 ? g.player.y : g.player.x;
-              g.trail.push(perimeterEntryContact(previous, direction, bounds));
+              // A cut can start by leaving an already claimed zone. In that
+              // case the trail begins at the actual transition point, not at
+              // the outer perimeter. Only an outside-to-arena entry uses the
+              // perimeter anchor.
+              const trailStart = pointInsidePerimeter(previous, bounds)
+                ? previous
+                : perimeterEntryContact(previous, direction, bounds);
+              g.trail.push(trailStart);
             }
             g.grid[y][x] = TRAIL;
             g.trail.push({ ...g.player });
