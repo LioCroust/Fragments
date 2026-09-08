@@ -13,7 +13,9 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
-const COLS = 24;
+const COLS = 16;
+const PERIMETER_INSET_CELLS = 1.5;
+const PERIMETER_STROKE_WIDTH = 3;
 const EMPTY = 0;
 const CLAIMED = 1;
 const TRAIL = 2;
@@ -29,8 +31,12 @@ type Enemy = Point & {
   kind: EnemyKind;
   vx: number;
   vy: number;
+  speed: number;
+  agility: number;
   phase: number;
   spin: number;
+  blockedTime: number;
+  respawnAt: number;
 };
 
 type Game = {
@@ -132,6 +138,13 @@ const qixPoints = (qix: Point & { phase: number }, radius: number, arm: number) 
 
 const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
 
+const perimeterBounds = (width: number, height: number, cell: number) => ({
+  left: cell * PERIMETER_INSET_CELLS,
+  top: cell * PERIMETER_INSET_CELLS,
+  right: width - cell * PERIMETER_INSET_CELLS,
+  bottom: height - cell * PERIMETER_INSET_CELLS,
+});
+
 const spriteFrames: Record<EnemyKind, any[]> = {
   SHIP: [
     require('../assets/images/enemy-ship-final-frame-0.png'),
@@ -173,6 +186,8 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
   const phase = enemy.phase;
   const directionRotation = enemy.kind === 'SHIP'
     ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2
+    : enemy.kind === 'DRAGON'
+      ? enemy.spin + Math.sin(phase * 0.45) * 0.035
     : enemy.kind === 'SEVEN'
       ? enemy.spin
       : 0;
@@ -189,16 +204,7 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
 };
 
 const enemyGlowColor = (kind: EnemyKind) => {
-  switch (kind) {
-    case 'SHIP':
-      return '#8dff3c';
-    case 'DRAGON':
-      return '#dfff45';
-    case 'SEVEN':
-      return '#ffe05a';
-    case 'SPIDER':
-      return '#52ff9d';
-  }
+  return kind === 'DRAGON' ? '#ffffff' : '#b8faff';
 };
 
 const drawEnemySpriteWithGlow = (
@@ -213,11 +219,8 @@ const drawEnemySpriteWithGlow = (
   context.save();
   context.globalCompositeOperation = 'lighter';
   context.shadowColor = glowColor;
-  context.globalAlpha = 0.12;
-  context.shadowBlur = 13;
-  context.drawImage(image, x, y, size.width, size.height);
-  context.globalAlpha = 0.2;
-  context.shadowBlur = 4;
+  context.globalAlpha = 0.07;
+  context.shadowBlur = 8;
   context.drawImage(image, x, y, size.width, size.height);
   context.restore();
 
@@ -231,9 +234,9 @@ const drawEnemySpriteWithGlow = (
 
   context.save();
   context.globalCompositeOperation = 'lighter';
-  context.globalAlpha = 0.34;
+  context.globalAlpha = 0.12;
   context.shadowColor = glowColor;
-  context.shadowBlur = 1.5;
+  context.shadowBlur = 2;
   context.drawImage(image, x, y, size.width, size.height);
   context.restore();
 };
@@ -252,15 +255,20 @@ const enemyRadius = (enemy: Enemy, cell: number) => {
   return cell * 1.25;
 };
 
+const enemyVisualRadius = (enemy: Enemy, cell: number) => {
+  const sprite = enemySpriteSize(enemy.kind, cell);
+  return Math.max(enemyRadius(enemy, cell), sprite.width, sprite.height) * 0.5;
+};
+
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
-  const speed = 1 + Math.min(level - 1, 4) * 0.06;
+  const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
   return [
-    { kind: 'SHIP', x: safeX(0.28), y: safeY(0.28), vx: 38 * speed, vy: 25 * speed, phase: 0.4, spin: 0.2 },
-    { kind: 'DRAGON', x: safeX(0.73), y: safeY(0.31), vx: -29 * speed, vy: 34 * speed, phase: 2.1, spin: -0.15 },
-    { kind: 'SEVEN', x: safeX(0.30), y: safeY(0.64), vx: 27 * speed, vy: -31 * speed, phase: 4.3, spin: 0.35 },
-    { kind: 'SPIDER', x: safeX(0.72), y: safeY(0.68), vx: -34 * speed, vy: -22 * speed, phase: 5.7, spin: -0.28 },
+    { kind: 'SHIP', x: safeX(0.28), y: safeY(0.28), vx: 38 * levelSpeed, vy: 25 * levelSpeed, speed: 46 * levelSpeed, agility: 0.65, phase: 0.4, spin: 0.2, blockedTime: 0, respawnAt: 0 },
+    { kind: 'DRAGON', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 48 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, blockedTime: 0, respawnAt: 0 },
+    { kind: 'SEVEN', x: safeX(0.30), y: safeY(0.64), vx: 27 * levelSpeed, vy: -31 * levelSpeed, speed: 35 * levelSpeed, agility: 0.42, phase: 4.3, spin: 0.35, blockedTime: 0, respawnAt: 0 },
+    { kind: 'SPIDER', x: safeX(0.72), y: safeY(0.68), vx: -34 * levelSpeed, vy: -22 * levelSpeed, speed: 41 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, blockedTime: 0, respawnAt: 0 },
   ];
 };
 
@@ -339,6 +347,7 @@ export default function GameScreen() {
     const previousShields = preserveStats ? g.shields : 3;
     const previousLevel = preserveStats ? g.level : 1;
     const cell = width / COLS;
+    const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(24, Math.floor(height / cell));
     const grid: number[][] = [];
     let totalEmpty = 0;
@@ -360,7 +369,7 @@ export default function GameScreen() {
       cell,
       rows,
       grid,
-      player: { x: 2.5 * cell, y: (rows - 2.5) * cell },
+      player: { x: bounds.left, y: bounds.bottom },
       inputDir: ZERO,
       cutDir: ZERO,
       trail: [],
@@ -515,25 +524,123 @@ export default function GameScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     };
 
-    const moveEnemies = (g: Game, dt: number, now: number) => {
-      g.enemies.forEach((enemy) => {
-        enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
-        enemy.spin += dt * (enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
+    const spawnPointAfterBurst = (g: Game, enemy: Enemy) => {
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      const visualRadius = enemyVisualRadius(enemy, g.cell);
+      const candidates = [
+        { x: g.width * 0.5, y: g.height * 0.34 },
+        { x: g.width * 0.32, y: g.height * 0.5 },
+        { x: g.width * 0.68, y: g.height * 0.5 },
+        { x: g.width * 0.5, y: g.height * 0.66 },
+      ];
+      const candidate = candidates.find((point) => {
+        const x = clamp(point.x, bounds.left + visualRadius, bounds.right - visualRadius);
+        const y = clamp(point.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
+        const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
+        const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
+        return g.grid[cy]?.[cx] !== CLAIMED;
+      }) ?? candidates[0];
+      enemy.x = clamp(candidate.x, bounds.left + visualRadius, bounds.right - visualRadius);
+      enemy.y = clamp(candidate.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
+    };
 
-        const nextX = enemy.x + enemy.vx * dt;
-        const nextY = enemy.y + enemy.vy * dt;
-        const margin = g.cell * 3.15;
+    const burstEnemy = (g: Game, enemy: Enemy, now: number) => {
+      const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
+      for (let i = 0; i < 1000; i += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 45 + Math.random() * 260;
+        const life = 0.55 + Math.random() * 0.85;
+        g.particles.push({
+          x: enemy.x,
+          y: enemy.y,
+          vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 55,
+          vy: Math.sin(angle) * speed + (Math.random() - 0.5) * 55,
+          life,
+          size: 0.45 + Math.random() * 1.65,
+          color: colors[i % colors.length],
+        });
+      }
+      enemy.blockedTime = 0;
+      enemy.respawnAt = now + 900;
+      enemy.vx = 0;
+      enemy.vy = 0;
+      spawnPointAfterBurst(g, enemy);
+    };
+
+    const moveEnemies = (g: Game, dt: number, now: number) => {
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      g.enemies.forEach((enemy) => {
+        if (enemy.respawnAt > now) return;
+        if (enemy.respawnAt > 0) {
+          enemy.respawnAt = 0;
+          enemy.blockedTime = 0;
+          enemy.vx = enemy.kind === 'DRAGON' ? -enemy.speed * 0.55 : enemy.speed * 0.55;
+          enemy.vy = enemy.kind === 'SPIDER' ? -enemy.speed * 0.45 : enemy.speed * 0.45;
+        }
+
+        enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
+        enemy.spin += dt * (enemy.kind === 'DRAGON' ? 1.15 : enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
+
+        const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
+        const maxDistance = Math.hypot(g.width, g.height) * 0.56;
+        const farSlowdown = clamp(1 - distanceToPlayer / maxDistance, 0.42, 1);
+        const desiredSpeed = enemy.speed * farSlowdown;
+        const towardPlayer = {
+          x: g.player.x - enemy.x,
+          y: g.player.y - enemy.y,
+        };
+        const towardLength = Math.hypot(towardPlayer.x, towardPlayer.y) || 1;
+        const currentLength = Math.hypot(enemy.vx, enemy.vy) || desiredSpeed;
+        const steeringPull = distanceToPlayer > Math.min(g.width, g.height) * 0.34 ? 0.36 : 0.12;
+        const desiredVelocity = {
+          x: (enemy.vx / currentLength) * (1 - steeringPull) + (towardPlayer.x / towardLength) * steeringPull,
+          y: (enemy.vy / currentLength) * (1 - steeringPull) + (towardPlayer.y / towardLength) * steeringPull,
+        };
+        const desiredLength = Math.hypot(desiredVelocity.x, desiredVelocity.y) || 1;
+        const steering = clamp(enemy.agility * dt * 3.4, 0, 1);
+        enemy.vx += ((desiredVelocity.x / desiredLength) * desiredSpeed - enemy.vx) * steering;
+        enemy.vy += ((desiredVelocity.y / desiredLength) * desiredSpeed - enemy.vy) * steering;
+
+        const visualRadius = enemyVisualRadius(enemy, g.cell) * (1 + Math.abs(Math.sin(enemy.phase * 1.25)) * 0.035);
+        const minX = bounds.left + visualRadius;
+        const maxX = bounds.right - visualRadius;
+        const minY = bounds.top + visualRadius;
+        const maxY = bounds.bottom - visualRadius;
         const cellAt = (x: number, y: number) => {
           const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
           const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
           return g.grid[cy]?.[cx] ?? CLAIMED;
         };
-        const blockedX = nextX < margin || nextX > g.width - margin || cellAt(nextX, enemy.y) === CLAIMED;
-        const blockedY = nextY < margin || nextY > g.height - margin || cellAt(enemy.x, nextY) === CLAIMED;
-        if (blockedX) enemy.vx *= -1;
-        else enemy.x = nextX;
-        if (blockedY) enemy.vy *= -1;
-        else enemy.y = nextY;
+        const nextX = enemy.x + enemy.vx * dt;
+        const nextY = enemy.y + enemy.vy * dt;
+        const blockedX = nextX < minX || nextX > maxX || cellAt(nextX, enemy.y) === CLAIMED;
+        const blockedY = nextY < minY || nextY > maxY || cellAt(enemy.x, nextY) === CLAIMED;
+        if (blockedX) {
+          enemy.vx *= -1;
+          enemy.x = clamp(enemy.x, minX, maxX);
+        } else {
+          enemy.x = nextX;
+        }
+        if (blockedY) {
+          enemy.vy *= -1;
+          enemy.y = clamp(enemy.y, minY, maxY);
+        } else {
+          enemy.y = nextY;
+        }
+
+        const probe = Math.max(g.cell * 0.6, visualRadius * 0.44);
+        const enclosed = (
+          cellAt(enemy.x - probe, enemy.y) === CLAIMED
+          && cellAt(enemy.x + probe, enemy.y) === CLAIMED
+          && cellAt(enemy.x, enemy.y - probe) === CLAIMED
+          && cellAt(enemy.x, enemy.y + probe) === CLAIMED
+        );
+        if (enclosed || (blockedX && blockedY)) {
+          enemy.blockedTime += dt;
+          if (enemy.blockedTime > 0.38 && enemy.respawnAt <= now) burstEnemy(g, enemy, now);
+        } else {
+          enemy.blockedTime = Math.max(0, enemy.blockedTime - dt * 1.8);
+        }
 
         const radius = enemyRadius(enemy, g.cell);
         if (Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < radius + g.cell * 0.42) explode(g, now);
