@@ -20,6 +20,7 @@ const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
+const ZONE_FILL_OPACITY = 0.5;
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 
@@ -1469,6 +1470,17 @@ export default function GameScreen() {
       context.fillRect(0, 0, g.width, g.height);
 
       context.globalCompositeOperation = 'source-over';
+       context.globalAlpha = ZONE_FILL_OPACITY;
+       context.fillStyle = ZONE_COLOR;
+       g.claimedPolygons.forEach((polygon) => {
+         if (polygon.length < 3) return;
+         context.beginPath();
+         context.moveTo(polygon[0].x, polygon[0].y);
+         polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+         context.closePath();
+         context.fill();
+       });
+       context.globalAlpha = 1;
       context.strokeStyle = 'rgba(0,243,255,0.11)';
       context.lineWidth = 0.65;
       const bounds = perimeterBounds(g.width, g.height, g.cell);
@@ -1484,18 +1496,6 @@ export default function GameScreen() {
          context.lineTo(g.width, y * g.cell);
         context.stroke();
       }
-
-       context.globalCompositeOperation = 'source-over';
-       context.globalAlpha = 1;
-       context.fillStyle = ZONE_COLOR;
-       context.beginPath();
-      g.claimedPolygons.forEach((polygon) => {
-        if (polygon.length < 3) return;
-        context.moveTo(polygon[0].x, polygon[0].y);
-        polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-        context.closePath();
-      });
-       context.fill();
 
       context.globalCompositeOperation = 'lighter';
       context.strokeStyle = '#00f3ff';
@@ -1682,15 +1682,15 @@ export default function GameScreen() {
     return (
       <Svg style={StyleSheet.absoluteFill}>
         <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
-        {gridLines}
         {snapshot.claimedPolygons.map((polygon, index) => (
           <Polygon
             key={`claimed-polygon-${index}`}
             points={pointsToString(polygon)}
             fill={ZONE_COLOR}
-            opacity={1}
+            opacity={ZONE_FILL_OPACITY}
           />
         ))}
+        {gridLines}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
           {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
