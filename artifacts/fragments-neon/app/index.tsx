@@ -53,6 +53,7 @@ export default function GameScreen() {
   const [captureFill, setCaptureFill] = useState(0);
   const [enemies, setEnemies] = useState<{x:number, y:number}[]>([]);
   const [shards, setShards] = useState<{x:number, y:number, gx:number, gy:number}[]>([]);
+  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 });
   
   const gameRef = useRef({
     grid: [] as number[][],
@@ -60,6 +61,8 @@ export default function GameScreen() {
     gridH: 0,
     player: { x: 0, y: 0, startX: 0, startY: 0 },
     target: { x: 0, y: 0 },
+    control: { x: 0, y: 0 },
+    cutDirection: { x: 0, y: 0 },
     trailGrid: [] as {x: number, y: number}[],
     trailPts: [] as {x: number, y: number}[],
     enemies: [] as {x: number, y: number, vx: number, vy: number}[],
@@ -143,18 +146,16 @@ export default function GameScreen() {
 
     }
 
-    // Player Movement
-    const MAX_SPEED = 400 * dt;
-    const dx = g.target.x - g.player.x;
-    const dy = g.target.y - g.player.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    // Player Movement: Qix-style cardinal movement. On safe territory the
+    // joystick can choose any cardinal direction; once a cut starts, its
+    // direction is locked until the player reaches the safe border again.
+    const moveDirection = g.trailGrid.length > 0 ? g.cutDirection : g.control;
+    const MOVE_SPEED = 300 * dt;
+    const moveX = moveDirection.x * MOVE_SPEED;
+    const moveY = moveDirection.y * MOVE_SPEED;
 
-    if (dist > 0) {
-      const moveDist = Math.min(dist, MAX_SPEED);
-      const moveX = (dx / dist) * moveDist;
-      const moveY = (dy / dist) * moveDist;
-      
-      const steps = Math.ceil(moveDist);
+    if (moveX !== 0 || moveY !== 0) {
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(moveX), Math.abs(moveY))));
       const stepX = moveX / steps;
       const stepY = moveY / steps;
       
@@ -171,6 +172,9 @@ export default function GameScreen() {
         const state = g.grid[gy][gx];
         
         if (state === EMPTY) {
+          if (g.trailGrid.length === 0) {
+            g.cutDirection = { x: moveDirection.x, y: moveDirection.y };
+          }
           g.grid[gy][gx] = TRAIL;
           g.trailGrid.push({x: gx, y: gy});
           if (g.trailPts.length === 0) {
@@ -246,25 +250,44 @@ export default function GameScreen() {
     g.animFrame = requestAnimationFrame(gameLoop);
   }, []);
 
-  const panResponder = useRef(
+  const joystickPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => gameRef.current.status === 'PLAYING',
       onPanResponderGrant: () => {
         const g = gameRef.current;
-        g.target = { x: g.player.x, y: g.player.y };
+        g.control = { x: 0, y: 0 };
+        setJoystickOffset({ x: 0, y: 0 });
       },
       onPanResponderMove: (evt, gestureState) => {
         const g = gameRef.current;
         if (g.status === 'PLAYING') {
-          const maxX = (GRID_W - 1) * g.cellW;
-          const maxY = (g.gridH - 1) * g.cellW;
-          // Follow the finger directly in arena coordinates so entering
-          // unsecured territory never feels like hitting an invisible wall.
-          g.target.x = Math.max(0, Math.min(maxX, gestureState.moveX));
-          g.target.y = Math.max(0, Math.min(maxY, gestureState.moveY - g.arenaTop));
+          const radius = 42;
+          const deadZone = 12;
+          const distance = Math.sqrt(gestureState.dx ** 2 + gestureState.dy ** 2);
+          const clampedDistance = Math.min(radius, distance);
+          const angle = Math.atan2(gestureState.dy, gestureState.dx);
+          const knobX = Math.cos(angle) * clampedDistance;
+          const knobY = Math.sin(angle) * clampedDistance;
+
+          setJoystickOffset({ x: knobX, y: knobY });
+
+          if (distance < deadZone) {
+            g.control = { x: 0, y: 0 };
+          } else if (Math.abs(gestureState.dx) >= Math.abs(gestureState.dy)) {
+            g.control = { x: gestureState.dx > 0 ? 1 : -1, y: 0 };
+          } else {
+            g.control = { x: 0, y: gestureState.dy > 0 ? 1 : -1 };
+          }
         }
       },
-      onPanResponderRelease: () => {},
+      onPanResponderRelease: () => {
+        gameRef.current.control = { x: 0, y: 0 };
+        setJoystickOffset({ x: 0, y: 0 });
+      },
+      onPanResponderTerminate: () => {
+        gameRef.current.control = { x: 0, y: 0 };
+        setJoystickOffset({ x: 0, y: 0 });
+      },
       onPanResponderTerminationRequest: () => false,
     })
   ).current;
