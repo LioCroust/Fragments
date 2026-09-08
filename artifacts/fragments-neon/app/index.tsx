@@ -1404,12 +1404,9 @@ export default function GameScreen() {
             // space or traversal along the captured area.
             g.inputDir = direction;
           } else if (state === CLAIMED && g.trail.length > 2) {
-            const safeContact = {
-              x: direction.x > 0 ? x * g.cell : direction.x < 0 ? (x + 1) * g.cell : g.player.x,
-              y: direction.y > 0 ? y * g.cell : direction.y < 0 ? (y + 1) * g.cell : g.player.y,
-            };
-            g.player = safeContact;
-            g.trail.push(safeContact);
+            // Cyan remains a gameplay surface for enemies, but it must not
+            // snap the player's freeform cut to a cell boundary.
+            g.trail.push({ ...g.player });
             capture(g);
             break;
           }
