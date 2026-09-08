@@ -224,6 +224,7 @@ const perimeterEntryContact = (
 });
 
 const playerBodyRadius = (cell: number) => cell * 0.34;
+const playerSpriteSize = (cell: number) => ({ width: cell * 1.18, height: cell * 1.68 });
 const OUTER_STOP_GAP = 5;
 
 const playerOuterBounds = (
@@ -274,6 +275,7 @@ const spriteFrames: Record<EnemyKind, any[]> = {
   ],
 };
 const diamondSource = require('../assets/images/neon-diamond-fragment.png');
+const playerSource = require('../assets/images/player-drone-prism-arrow.png');
 
 const createDiamond = (grid: number[][], width: number, cell: number): Diamond => {
   const emptyCells: Cell[] = [];
@@ -459,6 +461,7 @@ export default function GameScreen() {
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const diamondImageRef = useRef<any>(null);
+  const playerImageRef = useRef<any>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
@@ -483,11 +486,19 @@ export default function GameScreen() {
       if (!cancelled) diamondImageRef.current = diamondImage;
     };
     diamondImage.src = resolvedDiamond?.uri ?? diamondSource;
+    const resolvedPlayer = (RNImage as any).resolveAssetSource?.(playerSource);
+    const playerImage = new (globalThis as any).Image();
+    playerImage.decoding = 'async';
+    playerImage.onload = () => {
+      if (!cancelled) playerImageRef.current = playerImage;
+    };
+    playerImage.src = resolvedPlayer?.uri ?? playerSource;
 
     return () => {
       cancelled = true;
       spriteImagesRef.current = {};
       diamondImageRef.current = null;
+      playerImageRef.current = null;
     };
   }, []);
 
@@ -1437,21 +1448,62 @@ export default function GameScreen() {
        const angle = Math.atan2(g.trail.length > 0 ? g.cutDir.y : g.facingDir.y, g.trail.length > 0 ? g.cutDir.x : g.facingDir.x);
       context.save();
       context.translate(g.player.x, g.player.y);
-      context.rotate(Number.isNaN(angle) ? 0 : angle);
-      context.fillStyle = '#ffffff';
-      context.shadowColor = '#00f3ff';
-      context.shadowBlur = 20;
-      context.beginPath();
-      context.moveTo(g.cell * PLAYER_RADIUS_CELLS, 0);
-      context.lineTo(-g.cell * 0.55, -g.cell * 0.48);
-      context.lineTo(-g.cell * 0.24, 0);
-      context.lineTo(-g.cell * 0.55, g.cell * 0.48);
-      context.closePath();
-      context.fill();
-      context.fillStyle = '#00f3ff';
-      context.beginPath();
-      context.arc(0, 0, g.cell * 0.22, 0, Math.PI * 2);
-      context.fill();
+       context.rotate((Number.isNaN(angle) ? 0 : angle) + Math.PI / 2);
+
+       // Decorative Tron-like wake. It is rendered behind the drone only and
+       // never enters the game state or collision system.
+       context.save();
+       context.globalCompositeOperation = 'lighter';
+       const wakeGradient = context.createLinearGradient(-g.cell * 1.08, 0, -g.cell * 0.08, 0);
+       wakeGradient.addColorStop(0, 'rgba(0,243,255,0)');
+       wakeGradient.addColorStop(0.42, 'rgba(0,243,255,0.12)');
+       wakeGradient.addColorStop(0.82, 'rgba(255,43,181,0.24)');
+       wakeGradient.addColorStop(1, 'rgba(255,255,255,0.34)');
+       context.fillStyle = wakeGradient;
+       context.shadowColor = '#00f3ff';
+       context.shadowBlur = 9;
+       context.beginPath();
+       context.moveTo(-g.cell * 0.14, -g.cell * 0.12);
+       context.lineTo(-g.cell * 1.08, -g.cell * 0.035);
+       context.lineTo(-g.cell * 1.08, g.cell * 0.035);
+       context.lineTo(-g.cell * 0.14, g.cell * 0.12);
+       context.closePath();
+       context.fill();
+       context.globalAlpha = 0.32;
+       context.strokeStyle = '#ff2bb5';
+       context.lineWidth = Math.max(1, g.cell * 0.035);
+       context.beginPath();
+       context.moveTo(-g.cell * 0.2, -g.cell * 0.075);
+       context.lineTo(-g.cell * 0.68, -g.cell * 0.025);
+       context.moveTo(-g.cell * 0.2, g.cell * 0.075);
+       context.lineTo(-g.cell * 0.68, g.cell * 0.025);
+       context.stroke();
+       context.restore();
+
+       const playerImage = playerImageRef.current;
+       if (playerImage) {
+         drawEnemySpriteWithGlow(
+           context,
+           playerImage,
+           playerSpriteSize(g.cell),
+           '#00f3ff',
+         );
+       } else {
+         context.fillStyle = '#ffffff';
+         context.shadowColor = '#00f3ff';
+         context.shadowBlur = 20;
+         context.beginPath();
+         context.moveTo(g.cell * PLAYER_RADIUS_CELLS, 0);
+         context.lineTo(-g.cell * 0.55, -g.cell * 0.48);
+         context.lineTo(-g.cell * 0.24, 0);
+         context.lineTo(-g.cell * 0.55, g.cell * 0.48);
+         context.closePath();
+         context.fill();
+         context.fillStyle = '#00f3ff';
+         context.beginPath();
+         context.arc(0, 0, g.cell * 0.22, 0, Math.PI * 2);
+         context.fill();
+       }
       context.restore();
       context.globalCompositeOperation = 'source-over';
     };
@@ -1511,11 +1563,9 @@ export default function GameScreen() {
       gridLines.push(<Line key={`h${y}`} x1={bounds.left} y1={y * snapshot.cell} x2={bounds.right} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
     }
     const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
-    const playerPoints = [
-      [snapshot.player.x + Math.cos(angle) * snapshot.cell * PLAYER_RADIUS_CELLS, snapshot.player.y + Math.sin(angle) * snapshot.cell * PLAYER_RADIUS_CELLS],
-      [snapshot.player.x + Math.cos(angle + 2.5) * snapshot.cell * 0.62, snapshot.player.y + Math.sin(angle + 2.5) * snapshot.cell * 0.62],
-      [snapshot.player.x + Math.cos(angle - 2.5) * snapshot.cell * 0.62, snapshot.player.y + Math.sin(angle - 2.5) * snapshot.cell * 0.62],
-    ].map((point) => point.join(',')).join(' ');
+    const playerRotationDegrees = angle * (180 / Math.PI) + 90;
+    const playerSize = playerSpriteSize(snapshot.cell);
+    const wakeTransform = `translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`;
     return (
       <Svg style={StyleSheet.absoluteFill}>
         <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
@@ -1563,8 +1613,34 @@ export default function GameScreen() {
            );
          })}
         {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
-        <Polygon points={playerPoints} fill="#ffffff" stroke="#00f3ff" strokeWidth={2} />
-        <Circle cx={snapshot.player.x} cy={snapshot.player.y} r={snapshot.cell * 0.22} fill="#00f3ff" />
+         <G transform={wakeTransform} opacity={0.3}>
+           <Polygon
+             points={`${-snapshot.cell * 0.14},${-snapshot.cell * 0.12} ${-snapshot.cell * 1.08},${-snapshot.cell * 0.035} ${-snapshot.cell * 1.08},${snapshot.cell * 0.035} ${-snapshot.cell * 0.14},${snapshot.cell * 0.12}`}
+             fill="#00f3ff"
+           />
+           <Polyline
+             points={`${-snapshot.cell * 0.2},${-snapshot.cell * 0.075} ${-snapshot.cell * 0.68},${-snapshot.cell * 0.025}`}
+             fill="none"
+             stroke="#ff2bb5"
+             strokeWidth={Math.max(1, snapshot.cell * 0.035)}
+           />
+           <Polyline
+             points={`${-snapshot.cell * 0.2},${snapshot.cell * 0.075} ${-snapshot.cell * 0.68},${snapshot.cell * 0.025}`}
+             fill="none"
+             stroke="#ff2bb5"
+             strokeWidth={Math.max(1, snapshot.cell * 0.035)}
+           />
+         </G>
+         <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
+           <SvgImage
+             href={playerSource}
+             x={-playerSize.width / 2}
+             y={-playerSize.height / 2}
+             width={playerSize.width}
+             height={playerSize.height}
+             opacity={0.98}
+           />
+         </G>
       </Svg>
     );
   };

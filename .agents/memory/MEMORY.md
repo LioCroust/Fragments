@@ -4,3 +4,4 @@
 - [Safe band controls](safe-band-controls.md) — Preserve swipe direction through the outer safe band so the drone can reach the empty playfield.
 - [Enemy edge navigation](enemy-edge-navigation.md) — Turn enemies inward after perimeter contact instead of letting them ping-pong between blue borders.
 - [Drone geometry states](drone-geometry-state.md) — Keep outside movement, perimeter crossing, interior play, and cutting as separate geometric states.
+- [Selected drone concept](selected-drone-concept.md) — Keep the Prism Arrow as the player drone until the user explicitly chooses a different concept.
