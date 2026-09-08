@@ -241,7 +241,7 @@ const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 4.7, height: cell * 4.7 };
   if (kind === 'SEVEN') return { width: cell * 4.9, height: cell * 4.9 };
   if (kind === 'SPIDER') return { width: cell * 4.9, height: cell * 4.9 };
-  return { width: cell * 4.8, height: cell * 4.8 };
+  return { width: cell * 3.5, height: cell * 3.5 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
@@ -367,9 +367,9 @@ export default function GameScreen() {
       cell,
       rows,
       grid,
-      player: { x: (SAFE_BAND_CELLS + 1) * cell, y: bounds.bottom - cell * PLAYER_RADIUS_CELLS },
+      player: { x: (SAFE_BAND_CELLS + 1) * cell, y: bounds.bottom + cell * PLAYER_RADIUS_CELLS },
       inputDir: ZERO,
-      facingDir: { x: 0, y: 1 },
+      facingDir: { x: 0, y: -1 },
       cutDir: ZERO,
       cutCoordinate: 0,
       trail: [],
@@ -798,8 +798,8 @@ export default function GameScreen() {
           } else if (g.cutDir.y !== 0) {
             g.player.x = g.cutCoordinate;
           }
-          g.player.x = clamp(g.player.x + stepX, bounds.left + playerRadius, bounds.right - playerRadius);
-          g.player.y = clamp(g.player.y + stepY, bounds.top + playerRadius, bounds.bottom - playerRadius);
+          g.player.x = clamp(g.player.x + stepX, playerRadius, g.width - playerRadius);
+          g.player.y = clamp(g.player.y + stepY, playerRadius, g.height - playerRadius);
 
           const reachedPerimeter = g.trail.length > 0 && (
             (direction.x < 0 && g.player.x <= bounds.left + playerRadius)
