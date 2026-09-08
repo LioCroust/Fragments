@@ -115,6 +115,7 @@ type Hud = {
   score: number;
   shields: number;
   capture: number;
+  level: number;
   mode: Mode;
   feedback: string;
 };
@@ -219,6 +220,60 @@ const polygonArea = (polygon: Point[]) => Math.abs(polygon.reduce((area, point, 
   return area + point.x * next.y - next.x * point.y;
 }, 0) * 0.5);
 
+const claimedUnionArea = (
+  polygons: Point[][],
+  bounds: ReturnType<typeof perimeterBounds>,
+  cell: number,
+) => {
+  if (polygons.length === 0) return 0;
+  const step = Math.max(1.5, cell * 0.08);
+  const minY = bounds.top;
+  const maxY = bounds.bottom;
+  let area = 0;
+
+  for (let y = minY + step * 0.5; y < maxY; y += step) {
+    const intervals: Array<[number, number]> = [];
+    polygons.forEach((polygon) => {
+      const intersections: number[] = [];
+      for (let index = 0; index < polygon.length; index += 1) {
+        const start = polygon[index];
+        const end = polygon[(index + 1) % polygon.length];
+        if ((start.y > y) === (end.y > y)) continue;
+        const progress = (y - start.y) / (end.y - start.y);
+        intersections.push(start.x + (end.x - start.x) * progress);
+      }
+      intersections.sort((first, second) => first - second);
+      for (let index = 0; index + 1 < intersections.length; index += 2) {
+        intervals.push([
+          clamp(intersections[index], bounds.left, bounds.right),
+          clamp(intersections[index + 1], bounds.left, bounds.right),
+        ]);
+      }
+    });
+    intervals.sort((first, second) => first[0] - second[0]);
+    let coveredStart = -1;
+    let coveredEnd = -1;
+    intervals.forEach(([start, end]) => {
+      if (end <= start) return;
+      if (coveredStart < 0) {
+        coveredStart = start;
+        coveredEnd = end;
+      } else if (start <= coveredEnd) {
+        coveredEnd = Math.max(coveredEnd, end);
+      } else {
+        area += (coveredEnd - coveredStart) * step;
+        coveredStart = start;
+        coveredEnd = end;
+      }
+    });
+    if (coveredStart >= 0) {
+      area += (coveredEnd - coveredStart) * step;
+    }
+  }
+
+  return Math.min(area, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
+};
+
 const polygonBoundaryDistance = (point: Point, polygon: Point[]) => {
   let nearest = Number.POSITIVE_INFINITY;
   for (let index = 0; index < polygon.length; index += 1) {
@@ -266,7 +321,14 @@ const buildContinuousCapturePolygon = (
     });
     return nearestIndex;
   };
-  const boundaryArc = (boundaryLoop: Point[], from: number, to: number, step = 1) => {
+  const boundaryArc = (
+    boundaryLoop: Point[],
+    from: number,
+    to: number,
+    step = 1,
+    fromPoint?: Point,
+    toPoint?: Point,
+  ) => {
     const points: Point[] = [];
     let index = from;
     for (let count = 0; count <= boundaryLoop.length; count += 1) {
@@ -274,11 +336,19 @@ const buildContinuousCapturePolygon = (
       if (index === to) break;
       index = (index + step + boundaryLoop.length) % boundaryLoop.length;
     }
+    if (fromPoint) points[0] = fromPoint;
+    if (toPoint) points[points.length - 1] = toPoint;
     return points;
   };
-  const boundaryArcs = (boundaryLoop: Point[], from: number, to: number) => [
-    boundaryArc(boundaryLoop, from, to),
-    boundaryArc(boundaryLoop, from, to, -1),
+  const boundaryArcs = (
+    boundaryLoop: Point[],
+    from: number,
+    to: number,
+    fromPoint?: Point,
+    toPoint?: Point,
+  ) => [
+    boundaryArc(boundaryLoop, from, to, 1, fromPoint, toPoint),
+    boundaryArc(boundaryLoop, from, to, -1, fromPoint, toPoint),
   ];
   const perimeterContactIndices = (boundaryLoop: Point[]) => {
     const contact = boundaryLoop.map((point) => distanceToPerimeter(point, bounds) <= cell * 0.55);
@@ -296,8 +366,8 @@ const buildContinuousCapturePolygon = (
     const startIndex = nearestBoundaryIndex(boundaryLoop, start);
     const endIndex = nearestBoundaryIndex(boundaryLoop, end);
     candidates = [
-      [...trail, ...boundaryArc(boundaryLoop, endIndex, startIndex).slice(1)],
-      [...trail.slice().reverse(), ...boundaryArc(boundaryLoop, startIndex, endIndex).slice(1)],
+      [...trail, ...boundaryArc(boundaryLoop, endIndex, startIndex, 1, end, start).slice(1)],
+      [...trail.slice().reverse(), ...boundaryArc(boundaryLoop, startIndex, endIndex, 1, start, end).slice(1)],
     ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.04);
   } else if (
     startLoopIndex >= 0
@@ -327,8 +397,20 @@ const buildContinuousCapturePolygon = (
         y: (nonPerimeterLoop[junctionIndex].y + perimeterLoop[junctionPerimeterIndex].y) * 0.5,
       };
       if (startIsPerimeter) {
-        boundaryArcs(nonPerimeterLoop, nonPerimeterIndex, junctionIndex).forEach((nonPerimeterArc) => {
-          boundaryArcs(perimeterLoop, junctionPerimeterIndex, perimeterIndex).forEach((perimeterArc) => {
+        boundaryArcs(
+          nonPerimeterLoop,
+          nonPerimeterIndex,
+          junctionIndex,
+          nonPerimeterPoint,
+          nonPerimeterLoop[junctionIndex],
+        ).forEach((nonPerimeterArc) => {
+          boundaryArcs(
+            perimeterLoop,
+            junctionPerimeterIndex,
+            perimeterIndex,
+            perimeterLoop[junctionPerimeterIndex],
+            perimeterPoint,
+          ).forEach((perimeterArc) => {
             const normalizedNonPerimeterArc = [
               ...nonPerimeterArc.slice(0, -1),
               junctionPoint,
@@ -345,8 +427,20 @@ const buildContinuousCapturePolygon = (
           });
         });
       } else {
-        boundaryArcs(perimeterLoop, perimeterIndex, junctionPerimeterIndex).forEach((perimeterArc) => {
-          boundaryArcs(nonPerimeterLoop, junctionIndex, nonPerimeterIndex).forEach((nonPerimeterArc) => {
+          boundaryArcs(
+            perimeterLoop,
+            perimeterIndex,
+            junctionPerimeterIndex,
+            perimeterPoint,
+            perimeterLoop[junctionPerimeterIndex],
+          ).forEach((perimeterArc) => {
+            boundaryArcs(
+              nonPerimeterLoop,
+              junctionIndex,
+              nonPerimeterIndex,
+              nonPerimeterLoop[junctionIndex],
+              nonPerimeterPoint,
+            ).forEach((nonPerimeterArc) => {
             const normalizedPerimeterArc = [
               ...perimeterArc.slice(0, -1),
               junctionPoint,
@@ -766,9 +860,6 @@ const NativeArenaStatic = React.memo(({
             key={`claimed-polygon-${index}`}
             points={pointsToString(polygon)}
             fill={ZONE_COLOR}
-            stroke={ZONE_COLOR}
-            strokeWidth={2}
-            strokeLinejoin="round"
           />
         ))}
       </G>
@@ -928,6 +1019,7 @@ export default function GameScreen() {
     score: 0,
     shields: 3,
     capture: 0,
+    level: 1,
     mode: 'SLOW',
     feedback: '',
   });
@@ -987,7 +1079,7 @@ export default function GameScreen() {
     };
   }, []);
 
-  const resetGame = useCallback((preserveStats = false) => {
+  const resetGame = useCallback((preserveStats = false, resetBoard = false) => {
     const g = gameRef.current;
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
@@ -995,13 +1087,13 @@ export default function GameScreen() {
     const previousScore = preserveStats ? g.score : 0;
     const previousShields = preserveStats ? g.shields : 3;
     const previousLevel = preserveStats ? g.level : 1;
-    const previousClaimedPolygons = preserveStats
+    const previousClaimedPolygons = preserveStats && !resetBoard
       ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
       : [];
-    const previousProtectedTrails = preserveStats
+    const previousProtectedTrails = preserveStats && !resetBoard
       ? g.protectedTrails.map((trail) => trail.map((point) => ({ ...point })))
       : [];
-    const previousCapturedArea = preserveStats ? g.capturedArea : 0;
+    const previousCapturedArea = preserveStats && !resetBoard ? g.capturedArea : 0;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
@@ -1048,6 +1140,7 @@ export default function GameScreen() {
       score: previousScore,
       shields: previousShields,
       capture: 0,
+      level: previousLevel,
       mode: 'SLOW',
       feedback: '',
     });
@@ -1657,7 +1750,11 @@ export default function GameScreen() {
             g.claimedPolygons.push(completedPolygon);
             g.capturedArea = Math.min(
               g.totalPlayableArea,
-              g.capturedArea + g.pendingCaptureArea,
+              claimedUnionArea(
+                g.claimedPolygons,
+                perimeterBounds(g.width, g.height, g.cell),
+                g.cell,
+              ),
             );
             if (!g.diamond.collected && pointInPolygon(g.diamond, completedPolygon)) {
               g.diamond.collected = true;
@@ -1677,6 +1774,11 @@ export default function GameScreen() {
               }
             }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
+            if (g.level === 1 && g.capturedArea / g.totalPlayableArea >= 0.8) {
+              g.level = 2;
+              resetGame(true, true);
+              return;
+            }
           }
           g.fillQueue = [];
           g.fillCursor = 0;
@@ -1817,9 +1919,6 @@ export default function GameScreen() {
        context.globalCompositeOperation = 'source-over';
        context.globalAlpha = ZONE_FILL_OPACITY;
        context.fillStyle = ZONE_COLOR;
-       context.strokeStyle = ZONE_COLOR;
-       context.lineWidth = 2;
-       context.lineJoin = 'round';
        context.beginPath();
        g.claimedPolygons.forEach((polygon) => {
          if (polygon.length < 3) return;
@@ -1828,7 +1927,6 @@ export default function GameScreen() {
          context.closePath();
        });
        context.fill();
-       context.stroke();
        context.globalAlpha = 1;
       context.strokeStyle = 'rgba(0,243,255,0.11)';
       context.lineWidth = 0.65;
@@ -2002,6 +2100,7 @@ export default function GameScreen() {
             score: g.score,
             shields: Math.max(0, g.shields),
             capture: Math.floor((g.capturedArea / g.totalPlayableArea) * 100),
+            level: g.level,
             mode: g.mode,
             feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : g.fillQueue.length > 0 ? 'SECTEUR EN SYNCHRONISATION' : '',
           });
@@ -2057,7 +2156,9 @@ export default function GameScreen() {
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudRow}>
-          <Text style={[styles.hudText, { color: colors.primary }]}>SECTEUR 01</Text>
+          <Text style={[styles.hudText, { color: colors.primary }]}>
+            SECTEUR {hud.level.toString().padStart(2, '0')}
+          </Text>
           <Text style={[styles.scoreText, { color: colors.foreground }]}>SCORE {hud.score.toString().padStart(6, '0')}</Text>
         </View>
         <View style={styles.hudRow}>
