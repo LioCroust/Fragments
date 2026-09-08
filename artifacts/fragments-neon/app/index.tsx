@@ -409,6 +409,51 @@ const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) 
   return points;
 };
 
+const enemySpriteCorners = (enemy: Enemy, cell: number, x: number, y: number) => {
+  const sprite = enemySpriteSize(enemy.kind, cell);
+  const motion = enemyAnimationTransform(enemy, cell);
+  const halfWidth = sprite.width * motion.scale * 0.5;
+  const halfHeight = sprite.height * motion.scale * 0.5;
+  const cos = Math.cos(motion.rotation);
+  const sin = Math.sin(motion.rotation);
+  return [
+    { x: -halfWidth, y: -halfHeight },
+    { x: halfWidth, y: -halfHeight },
+    { x: halfWidth, y: halfHeight },
+    { x: -halfWidth, y: halfHeight },
+  ].map((point) => ({
+    x: x + point.x * cos - point.y * sin,
+    y: y + motion.offsetY + point.x * sin + point.y * cos,
+  }));
+};
+
+const pointInPolygon = (point: Point, polygon: Point[]) => {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[previous];
+    const intersects = (
+      (currentPoint.y > point.y) !== (previousPoint.y > point.y)
+      && point.x < ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y))
+        / (previousPoint.y - currentPoint.y || 1e-9) + currentPoint.x
+    );
+    if (intersects) inside = !inside;
+  }
+  return inside;
+};
+
+const segmentsIntersect = (firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point) => {
+  const orientation = (a: Point, b: Point, c: Point) => (
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+  );
+  const first = orientation(firstStart, firstEnd, secondStart);
+  const second = orientation(firstStart, firstEnd, secondEnd);
+  const third = orientation(secondStart, secondEnd, firstStart);
+  const fourth = orientation(secondStart, secondEnd, firstEnd);
+  return ((first > 0 && second < 0) || (first < 0 && second > 0))
+    && ((third > 0 && fourth < 0) || (third < 0 && fourth > 0));
+};
+
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
