@@ -1,0 +1,1 @@
+- [Approved enemy art](approved-enemy-art.md) — The Canva concept board is the visual source of truth; animate its pixels instead of regenerating enemy designs.

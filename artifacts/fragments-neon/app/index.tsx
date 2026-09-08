@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Image as SvgImage, Line, Polygon, Polyline, Rect } from 'react-native-svg';
+import Svg, { Circle, G, Image as SvgImage, Line, Polygon, Polyline, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -168,6 +168,25 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 };
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
+
+const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
+  const phase = enemy.phase;
+  const directionRotation = enemy.kind === 'SHIP'
+    ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2
+    : enemy.kind === 'SEVEN'
+      ? enemy.spin
+      : 0;
+  const sway = enemy.kind === 'DRAGON'
+    ? Math.sin(phase * 0.75) * 0.06
+    : enemy.kind === 'SPIDER'
+      ? Math.sin(phase * 1.2) * 0.035
+      : 0;
+  return {
+    rotation: directionRotation + sway,
+    scale: 1 + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
+    offsetY: Math.sin(phase * 1.05) * cell * 0.08,
+  };
+};
 
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 4.7, height: cell * 4.7 };
@@ -662,14 +681,11 @@ export default function GameScreen() {
         const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
         if (!image) return;
         const size = enemySpriteSize(enemy.kind, g.cell);
-        const rotation = enemy.kind === 'SHIP'
-          ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2
-          : enemy.kind === 'SEVEN'
-            ? enemy.spin
-            : 0;
+        const motion = enemyAnimationTransform(enemy, g.cell);
         context.save();
-        context.translate(enemy.x, enemy.y);
-        context.rotate(rotation);
+        context.translate(enemy.x, enemy.y + motion.offsetY);
+        context.rotate(motion.rotation);
+        context.scale(motion.scale, motion.scale);
         context.globalCompositeOperation = 'lighter';
         context.globalAlpha = 0.98;
         context.shadowColor = enemy.kind === 'SHIP' || enemy.kind === 'SPIDER' ? '#00f3ff' : '#ff0077';
@@ -795,16 +811,23 @@ export default function GameScreen() {
          {snapshot.enemies.map((enemy, enemyIndex) => {
            const frame = enemyFrameIndex(enemy);
            const size = enemySpriteSize(enemy.kind, snapshot.cell);
+            const motion = enemyAnimationTransform(enemy, snapshot.cell);
+            const centerY = enemy.y + motion.offsetY;
+            const rotationDegrees = motion.rotation * (180 / Math.PI);
            return (
-             <SvgImage
-               key={`enemy-sprite-${enemyIndex}`}
-               href={spriteFrames[enemy.kind][frame]}
-               x={enemy.x - size.width / 2}
-               y={enemy.y - size.height / 2}
-               width={size.width}
-               height={size.height}
-               opacity={0.98}
-             />
+              <G
+                key={`enemy-sprite-${enemyIndex}`}
+                transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${motion.scale}) translate(${-enemy.x} ${-enemy.y})`}
+              >
+                <SvgImage
+                  href={spriteFrames[enemy.kind][frame]}
+                  x={enemy.x - size.width / 2}
+                  y={enemy.y - size.height / 2}
+                  width={size.width}
+                  height={size.height}
+                  opacity={0.98}
+                />
+              </G>
            );
          })}
         {Array.from({ length: 10 }).map((_, arm) => <Polyline key={`qix${arm}`} points={pointsToString([{ x: snapshot.qix.x, y: snapshot.qix.y }, ...qixPoints(snapshot.qix, snapshot.cell * (2.3 + (arm % 3) * 0.35), arm)])} fill="none" stroke={arm % 2 === 0 ? '#7b00ff' : '#ff0077'} strokeWidth={2} />)}
