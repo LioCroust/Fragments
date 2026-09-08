@@ -803,6 +803,15 @@ export default function GameScreen() {
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
+      g.smokePuffs = g.smokePuffs
+        .map((puff) => ({
+          ...puff,
+          x: puff.x + puff.driftX * dt,
+          y: puff.y + puff.driftY * dt,
+          life: puff.life - dt,
+          size: puff.size + g.cell * dt * 0.08,
+        }))
+        .filter((puff) => puff.life > 0);
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         if (enemy.respawnAt > 0) {
@@ -1114,6 +1123,31 @@ export default function GameScreen() {
           explode(g, now);
         }
         if (enemyTouchesTrail(enemy.x, enemy.y)) explode(g, now);
+
+        if (enemy.kind === 'SHIP') {
+          const velocityLength = Math.hypot(enemy.vx, enemy.vy);
+          if (velocityLength > 8) {
+            g.smokeAccumulator += dt;
+            if (g.smokeAccumulator >= 0.045) {
+              const backwardX = -enemy.vx / velocityLength;
+              const backwardY = -enemy.vy / velocityLength;
+              const sideX = -backwardY;
+              const sideY = backwardX;
+              const sideOffset = (Math.random() - 0.5) * g.cell * 0.34;
+              const maxLife = 0.24 + Math.random() * 0.12;
+              g.smokePuffs.push({
+                x: enemy.x + backwardX * g.cell * 0.88 + sideX * sideOffset,
+                y: enemy.y + backwardY * g.cell * 0.88 + sideY * sideOffset,
+                life: maxLife,
+                maxLife,
+                size: g.cell * (0.13 + Math.random() * 0.08),
+                driftX: backwardX * (8 + Math.random() * 18) + sideX * (Math.random() - 0.5) * 10,
+                driftY: backwardY * (8 + Math.random() * 18) + sideY * (Math.random() - 0.5) * 10,
+              });
+              g.smokeAccumulator = 0;
+            }
+          }
+        }
       });
 
       for (let firstIndex = 0; firstIndex < g.enemies.length; firstIndex += 1) {
@@ -1415,6 +1449,20 @@ export default function GameScreen() {
       context.globalAlpha = 1;
 
       context.globalCompositeOperation = 'lighter';
+       g.smokePuffs.forEach((puff) => {
+         const lifeRatio = clamp(puff.life / puff.maxLife, 0, 1);
+         const gradient = context.createRadialGradient(puff.x, puff.y, 0, puff.x, puff.y, puff.size);
+         gradient.addColorStop(0, `rgba(255,255,255,${lifeRatio * 0.2})`);
+         gradient.addColorStop(0.3, `rgba(0,243,255,${lifeRatio * 0.16})`);
+         gradient.addColorStop(0.72, `rgba(255,43,181,${lifeRatio * 0.08})`);
+         gradient.addColorStop(1, 'rgba(0,243,255,0)');
+         context.fillStyle = gradient;
+         context.beginPath();
+         context.arc(puff.x, puff.y, puff.size, 0, Math.PI * 2);
+         context.fill();
+       });
+
+       context.globalCompositeOperation = 'lighter';
       const diamondImage = diamondImageRef.current;
       if (!g.diamond.collected && diamondImage) {
         const diamondSize = g.cell * 1.5;
@@ -1543,6 +1591,7 @@ export default function GameScreen() {
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
              diamond: { ...g.diamond },
              particles: g.particles.slice(-1000),
+             smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
             scanY: g.scanY,
           });
         }
