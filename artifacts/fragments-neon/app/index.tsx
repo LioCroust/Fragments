@@ -254,37 +254,117 @@ const buildContinuousCapturePolygon = (
   const boundaryLoops = [perimeterLoop, ...claimedPolygons];
   const startLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(start, loop) <= cell * 1.5);
   const endLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(end, loop) <= cell * 1.5);
+  const nearestBoundaryIndex = (boundaryLoop: Point[], point: Point) => {
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    boundaryLoop.forEach((boundaryPoint, index) => {
+      const distance = Math.hypot(point.x - boundaryPoint.x, point.y - boundaryPoint.y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+    return nearestIndex;
+  };
+  const boundaryArc = (boundaryLoop: Point[], from: number, to: number, step = 1) => {
+    const points: Point[] = [];
+    let index = from;
+    for (let count = 0; count <= boundaryLoop.length; count += 1) {
+      points.push(boundaryLoop[index]);
+      if (index === to) break;
+      index = (index + step + boundaryLoop.length) % boundaryLoop.length;
+    }
+    return points;
+  };
+  const boundaryArcs = (boundaryLoop: Point[], from: number, to: number) => [
+    boundaryArc(boundaryLoop, from, to),
+    boundaryArc(boundaryLoop, from, to, -1),
+  ];
+  const perimeterContactIndices = (boundaryLoop: Point[]) => {
+    const contact = boundaryLoop.map((point) => distanceToPerimeter(point, bounds) <= cell * 0.55);
+    if (contact.every(Boolean)) return [];
+    return contact.flatMap((isContact, index) => {
+      if (!isContact) return [];
+      const previous = contact[(index - 1 + contact.length) % contact.length];
+      const next = contact[(index + 1) % contact.length];
+      return !previous || !next ? [index] : [];
+    });
+  };
   let candidates: Point[][] = [];
   if (startLoopIndex >= 0 && startLoopIndex === endLoopIndex) {
     const boundaryLoop = boundaryLoops[startLoopIndex];
-    const nearestBoundaryIndex = (point: Point) => {
-      let nearestIndex = 0;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-      boundaryLoop.forEach((boundaryPoint, index) => {
-        const distance = Math.hypot(point.x - boundaryPoint.x, point.y - boundaryPoint.y);
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearestIndex = index;
-        }
-      });
-      return nearestIndex;
-    };
-    const startIndex = nearestBoundaryIndex(start);
-    const endIndex = nearestBoundaryIndex(end);
-    const boundaryArc = (from: number, to: number) => {
-      const points: Point[] = [];
-      let index = from;
-      for (let count = 0; count <= boundaryLoop.length; count += 1) {
-        points.push(boundaryLoop[index]);
-        if (index === to) break;
-        index = (index + 1) % boundaryLoop.length;
-      }
-      return points;
-    };
+    const startIndex = nearestBoundaryIndex(boundaryLoop, start);
+    const endIndex = nearestBoundaryIndex(boundaryLoop, end);
     candidates = [
-      [...trail, ...boundaryArc(endIndex, startIndex).slice(1)],
-      [...trail.slice().reverse(), ...boundaryArc(startIndex, endIndex).slice(1)],
+      [...trail, ...boundaryArc(boundaryLoop, endIndex, startIndex).slice(1)],
+      [...trail.slice().reverse(), ...boundaryArc(boundaryLoop, startIndex, endIndex).slice(1)],
     ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.04);
+  } else if (
+    startLoopIndex >= 0
+    && endLoopIndex >= 0
+    && (startLoopIndex === 0) !== (endLoopIndex === 0)
+  ) {
+    // A new cut can start on an existing claimed boundary and finish on the
+    // perimeter (or the reverse). The two loops are connected where the
+    // claimed polygon meets the perimeter. Build candidates through each
+    // such junction instead of dropping the cut as an unclosed trail.
+    const startIsPerimeter = startLoopIndex === 0;
+    const nonPerimeterLoopIndex = startIsPerimeter ? endLoopIndex : startLoopIndex;
+    const nonPerimeterLoop = boundaryLoops[nonPerimeterLoopIndex];
+    const junctionIndices = perimeterContactIndices(nonPerimeterLoop);
+    const nonPerimeterPoint = startIsPerimeter ? end : start;
+    const nonPerimeterIndex = nearestBoundaryIndex(nonPerimeterLoop, nonPerimeterPoint);
+    const perimeterPoint = startIsPerimeter ? start : end;
+    const perimeterIndex = nearestBoundaryIndex(perimeterLoop, perimeterPoint);
+
+    junctionIndices.forEach((junctionIndex) => {
+      const junctionPerimeterIndex = nearestBoundaryIndex(
+        perimeterLoop,
+        nonPerimeterLoop[junctionIndex],
+      );
+      const junctionPoint = {
+        x: (nonPerimeterLoop[junctionIndex].x + perimeterLoop[junctionPerimeterIndex].x) * 0.5,
+        y: (nonPerimeterLoop[junctionIndex].y + perimeterLoop[junctionPerimeterIndex].y) * 0.5,
+      };
+      if (startIsPerimeter) {
+        boundaryArcs(nonPerimeterLoop, nonPerimeterIndex, junctionIndex).forEach((nonPerimeterArc) => {
+          boundaryArcs(perimeterLoop, junctionPerimeterIndex, perimeterIndex).forEach((perimeterArc) => {
+            const normalizedNonPerimeterArc = [
+              ...nonPerimeterArc.slice(0, -1),
+              junctionPoint,
+            ];
+            const normalizedPerimeterArc = [
+              junctionPoint,
+              ...perimeterArc.slice(1),
+            ];
+            candidates.push([
+              ...trail,
+              ...normalizedNonPerimeterArc.slice(1),
+              ...normalizedPerimeterArc.slice(1),
+            ]);
+          });
+        });
+      } else {
+        boundaryArcs(perimeterLoop, perimeterIndex, junctionPerimeterIndex).forEach((perimeterArc) => {
+          boundaryArcs(nonPerimeterLoop, junctionIndex, nonPerimeterIndex).forEach((nonPerimeterArc) => {
+            const normalizedPerimeterArc = [
+              ...perimeterArc.slice(0, -1),
+              junctionPoint,
+            ];
+            const normalizedNonPerimeterArc = [
+              junctionPoint,
+              ...nonPerimeterArc.slice(1),
+            ];
+            candidates.push([
+              ...trail,
+              ...normalizedPerimeterArc.slice(1),
+              ...normalizedNonPerimeterArc.slice(1),
+            ]);
+          });
+        });
+      }
+    });
+    candidates = candidates.filter((polygon) => polygonArea(polygon) > cell * cell * 0.04);
   } else {
     // A cut can close by crossing an earlier part of its own red path
     // instead of returning to the perimeter or a protected boundary.
