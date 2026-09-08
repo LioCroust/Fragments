@@ -1560,7 +1560,7 @@ export default function GameScreen() {
       context.strokeRect(g.cell * PERIMETER_INSET_CELLS, g.cell * PERIMETER_INSET_CELLS, g.width - g.cell * PERIMETER_INSET_CELLS * 2, g.height - g.cell * PERIMETER_INSET_CELLS * 2);
       context.shadowBlur = 0;
 
-      if (g.completedTrail.length > 1 || g.trail.length > 1) {
+       if (g.protectedTrails.length > 0 || g.trail.length > 1) {
         context.strokeStyle = '#ff5500';
         context.shadowColor = '#ff5500';
         context.shadowBlur = 18;
@@ -1574,7 +1574,7 @@ export default function GameScreen() {
           trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
           context.stroke();
         };
-        drawTrail(g.completedTrail);
+         g.protectedTrails.forEach(drawTrail);
         drawTrail(g.trail);
         context.lineCap = 'butt';
         context.lineJoin = 'miter';
@@ -1692,7 +1692,7 @@ export default function GameScreen() {
             cell: g.cell,
             rows: g.rows,
             trail: [...g.trail],
-             completedTrail: [...g.completedTrail],
+             protectedTrails: g.protectedTrails.map((trail) => trail.map((point) => ({ ...point }))),
             player: { ...g.player },
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
@@ -1747,7 +1747,19 @@ export default function GameScreen() {
         ))}
         {gridLines}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
-          {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
+          {snapshot.protectedTrails.map((trail, index) => (
+            trail.length > 1 && (
+              <Polyline
+                key={`protected-trail-${index}`}
+                points={pointsToString(trail)}
+                fill="none"
+                stroke="#ff5500"
+                strokeWidth={5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )
+          ))}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
          {!snapshot.diamond.collected && (
            <SvgImage
