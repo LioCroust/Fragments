@@ -49,7 +49,6 @@ type Game = {
   inputDir: Direction;
   cutDir: Direction;
   trail: Point[];
-  qix: Point & { vx: number; vy: number; phase: number };
   enemies: Enemy[];
   particles: Particle[];
   fillQueue: Cell[];
@@ -119,20 +118,6 @@ const distanceToSegment = (point: Point, a: Point, b: Point) => {
   const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared, 0, 1);
   const closest = { x: a.x + t * dx, y: a.y + t * dy };
   return Math.hypot(point.x - closest.x, point.y - closest.y);
-};
-
-const qixPoints = (qix: Point & { phase: number }, radius: number, arm: number) => {
-  const points: Point[] = [];
-  const segments = 8 + (arm % 4);
-  for (let i = 0; i <= segments; i += 1) {
-    const angle = qix.phase * 0.8 + arm * 0.7 + (i / segments) * Math.PI * 2;
-    const wave = Math.sin(qix.phase * 3 + i * 1.7 + arm) * 0.28;
-    points.push({
-      x: qix.x + Math.cos(angle) * radius * (1 + wave),
-      y: qix.y + Math.sin(angle) * radius * (1 + wave),
-    });
-  }
-  return points;
 };
 
 const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
@@ -256,7 +241,7 @@ const enemyRadius = (enemy: Enemy, cell: number) => {
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell);
-  return Math.max(enemyRadius(enemy, cell), sprite.width, sprite.height) * 0.5;
+  return Math.max(enemyRadius(enemy, cell), Math.hypot(sprite.width, sprite.height) * 0.5) + PERIMETER_STROKE_WIDTH * 0.5;
 };
 
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
@@ -286,7 +271,6 @@ export default function GameScreen() {
     inputDir: ZERO,
     cutDir: ZERO,
     trail: [],
-    qix: { x: 0, y: 0, vx: 70, vy: 54, phase: 0 },
     enemies: [],
     particles: [],
     fillQueue: [],
@@ -368,17 +352,10 @@ export default function GameScreen() {
       cell,
       rows,
       grid,
-      player: { x: bounds.left, y: bounds.bottom },
+      player: { x: bounds.left + cell * 0.7, y: bounds.bottom - cell * 0.7 },
       inputDir: ZERO,
       cutDir: ZERO,
       trail: [],
-      qix: {
-        x: width * 0.52,
-        y: height * 0.46,
-        vx: 62 + previousLevel * 8,
-        vy: 48 + previousLevel * 6,
-        phase: 0,
-      },
       enemies: createEnemies(width, height, cell, previousLevel),
       particles: [],
       fillQueue: [],
@@ -701,8 +678,9 @@ export default function GameScreen() {
         const stepY = (direction.y * distance) / steps;
 
         for (let i = 0; i < steps; i += 1) {
-          g.player.x = clamp(g.player.x + stepX, 0, g.width - g.cell);
-          g.player.y = clamp(g.player.y + stepY, 0, g.height - g.cell);
+          const bounds = perimeterBounds(g.width, g.height, g.cell);
+          g.player.x = clamp(g.player.x + stepX, bounds.left, bounds.right);
+          g.player.y = clamp(g.player.y + stepY, bounds.top, bounds.bottom);
           const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
           const y = clamp(Math.floor(g.player.y / g.cell), 0, g.rows - 1);
           const state = g.grid[y][x];
@@ -799,6 +777,7 @@ export default function GameScreen() {
         context.stroke();
       }
 
+      context.globalCompositeOperation = 'lighter';
       g.particles.forEach((particle) => {
         context.globalAlpha = clamp(particle.life / 0.4, 0, 1);
         context.fillStyle = particle.color;
@@ -876,7 +855,7 @@ export default function GameScreen() {
             player: { ...g.player },
             direction: g.trail.length > 0 ? g.cutDir : g.inputDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
-            particles: g.particles.slice(-150),
+             particles: g.particles.slice(-1000),
             scanY: g.scanY,
           });
         }
@@ -920,10 +899,11 @@ export default function GameScreen() {
         {snapshot.claimed.map((run, index) => (
           <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
         ))}
-        <Rect x={snapshot.cell * 1.5} y={snapshot.cell * 1.5} width={snapshot.width - snapshot.cell * 3} height={snapshot.height - snapshot.cell * 3} fill="none" stroke="#00f3ff" strokeWidth={3} opacity={0.95} />
+        <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
         {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} />}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
-         {snapshot.enemies.map((enemy, enemyIndex) => {
+          {snapshot.enemies.map((enemy, enemyIndex) => {
+            if (enemy.respawnAt > Date.now()) return null;
            const frame = enemyFrameIndex(enemy);
            const size = enemySpriteSize(enemy.kind, snapshot.cell);
             const motion = enemyAnimationTransform(enemy, snapshot.cell);
@@ -945,7 +925,6 @@ export default function GameScreen() {
               </G>
            );
          })}
-        {Array.from({ length: 10 }).map((_, arm) => <Polyline key={`qix${arm}`} points={pointsToString([{ x: snapshot.qix.x, y: snapshot.qix.y }, ...qixPoints(snapshot.qix, snapshot.cell * (2.3 + (arm % 3) * 0.35), arm)])} fill="none" stroke={arm % 2 === 0 ? '#7b00ff' : '#ff0077'} strokeWidth={2} />)}
         {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
         <Polygon points={playerPoints} fill="#ffffff" stroke="#00f3ff" strokeWidth={2} />
         <Circle cx={snapshot.player.x} cy={snapshot.player.y} r={snapshot.cell * 0.34} fill="#00f3ff" />
