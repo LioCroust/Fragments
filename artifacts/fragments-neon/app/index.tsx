@@ -50,6 +50,7 @@ export default function GameScreen() {
   const [playerPos, setPlayerPos] = useState({x: 0, y: 0});
   const [trailPoints, setTrailPoints] = useState<string>("");
   const [trailAngle, setTrailAngle] = useState(0);
+  const [captureFill, setCaptureFill] = useState(0);
   const [enemies, setEnemies] = useState<{x:number, y:number}[]>([]);
   const [shards, setShards] = useState<{x:number, y:number, gx:number, gy:number}[]>([]);
   
@@ -70,7 +71,10 @@ export default function GameScreen() {
     totalEmptyCells: 0,
     score: 0,
     shields: 3,
-    level: 1
+    level: 1,
+    fillQueue: [] as {x: number, y: number}[],
+    fillCursor: 0,
+    fillCaptured: 0
   });
 
   const gameLoop = useCallback(() => {
@@ -84,6 +88,61 @@ export default function GameScreen() {
 
     let gridChanged = false;
     let entityChanged = false;
+
+    // Capture animation: reveal the secured territory progressively before
+    // changing state to victory. This keeps the payoff visible and gives the
+    // UI a full-frame, 60fps moment to celebrate the player's move.
+    if (g.fillQueue.length > 0) {
+      const cellsPerFrame = Math.max(4, Math.min(18, Math.ceil(g.fillQueue.length / 24)));
+      for (let i = 0; i < cellsPerFrame && g.fillCursor < g.fillQueue.length; i++) {
+        const cell = g.fillQueue[g.fillCursor];
+        if (g.grid[cell.y][cell.x] !== CLAIMED) {
+          g.grid[cell.y][cell.x] = CLAIMED;
+          g.fillCaptured += 1;
+        }
+        g.fillCursor += 1;
+      }
+
+      gridChanged = true;
+      setCaptureFill(Math.min(100, Math.round((g.fillCursor / g.fillQueue.length) * 100)));
+      syncGrid();
+
+      if (g.fillCursor >= g.fillQueue.length) {
+        const newlyCaptured = g.fillCaptured;
+        g.capturedCells += newlyCaptured;
+        g.score += newlyCaptured * 10;
+        g.fillQueue = [];
+        g.fillCursor = 0;
+        g.fillCaptured = 0;
+
+        const newProgress = Math.floor((g.capturedCells / g.totalEmptyCells) * 100);
+        setProgress(newProgress);
+        setCaptureFill(100);
+
+        g.shards = g.shards.filter(s => {
+          if (g.grid[s.gy][s.gx] === CLAIMED) {
+            playSound('pickup');
+            saveData(0, 1);
+            g.score += 500;
+            return false;
+          }
+          return true;
+        });
+
+        if (newProgress >= TARGET_PERCENT) {
+          g.status = 'VICTORY';
+          setGameState('VICTORY');
+        } else {
+          setCaptureFill(0);
+        }
+
+        syncGrid();
+        syncEntities();
+      }
+
+      g.animFrame = requestAnimationFrame(gameLoop);
+      return;
+    }
 
     // Player Movement
     const MAX_SPEED = 400 * dt;
@@ -427,45 +486,25 @@ export default function GameScreen() {
       }
     }
     
-    let newlyCaptured = 0;
+    const fillQueue: {x: number, y: number}[] = [];
     for (let y = 0; y < g.gridH; y++) {
       for (let x = 0; x < GRID_W; x++) {
         if (g.grid[y][x] === EMPTY && !visited[y][x]) {
-          g.grid[y][x] = CLAIMED;
-          newlyCaptured++;
+          fillQueue.push({ x, y });
         }
       }
     }
     
     for (let t of g.trailGrid) {
-      g.grid[t.y][t.x] = CLAIMED;
-      newlyCaptured++;
+      fillQueue.push({ x: t.x, y: t.y });
     }
     
     g.trailGrid = [];
     g.trailPts = [];
-    g.capturedCells += newlyCaptured;
-    
-    g.score += newlyCaptured * 10;
-    
-    const newProgress = Math.floor((g.capturedCells / g.totalEmptyCells) * 100);
-    setProgress(newProgress);
-    
-    if (newProgress >= TARGET_PERCENT) {
-      g.status = 'VICTORY';
-      setGameState('VICTORY');
-    }
-    
-    // Check shards
-    g.shards = g.shards.filter(s => {
-      if (g.grid[s.gy][s.gx] === CLAIMED) {
-        playSound('pickup');
-        saveData(0, 1);
-        g.score += 500;
-        return false;
-      }
-      return true;
-    });
+    g.fillQueue = fillQueue;
+    g.fillCursor = 0;
+    g.fillCaptured = 0;
+    setCaptureFill(0);
   };
 
   return (
@@ -558,6 +597,17 @@ export default function GameScreen() {
                 },
               ]}
             />
+          )}
+
+          {captureFill > 0 && captureFill < 100 && (
+            <View style={styles.captureStatus} pointerEvents="none">
+              <Text style={[styles.captureStatusLabel, { color: colors.primary }]}>
+                SECTEUR EN COURS DE SYNCHRONISATION
+              </Text>
+              <Text style={[styles.captureStatusValue, { color: colors.accent }]}>
+                {captureFill}%
+              </Text>
+            </View>
           )}
           
           <View style={[styles.drone, { transform: [{ translateX: playerPos.x - 16 }, { translateY: playerPos.y - 16 }] }]}>
@@ -669,6 +719,28 @@ const styles = StyleSheet.create({
     height: 28,
     resizeMode: 'contain',
     opacity: 0.94,
+  },
+  captureStatus: {
+    position: 'absolute',
+    top: '46%',
+    left: 24,
+    right: 24,
+    alignItems: 'center',
+    paddingVertical: 12,
+    backgroundColor: 'rgba(5, 5, 16, 0.82)',
+    borderWidth: 1,
+    borderColor: '#00F0FF',
+  },
+  captureStatusLabel: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.5,
+  },
+  captureStatusValue: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 28,
+    letterSpacing: 2,
+    marginTop: 4,
   },
   shardSprite: {
     position: 'absolute',
