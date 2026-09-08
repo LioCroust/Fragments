@@ -201,6 +201,43 @@ const enemyGlowColor = (kind: EnemyKind) => {
   }
 };
 
+const drawEnemySpriteWithGlow = (
+  context: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  size: { width: number; height: number },
+  glowColor: string,
+) => {
+  const x = -size.width / 2;
+  const y = -size.height / 2;
+
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  context.shadowColor = glowColor;
+  context.globalAlpha = 0.12;
+  context.shadowBlur = 13;
+  context.drawImage(image, x, y, size.width, size.height);
+  context.globalAlpha = 0.2;
+  context.shadowBlur = 4;
+  context.drawImage(image, x, y, size.width, size.height);
+  context.restore();
+
+  context.save();
+  context.globalCompositeOperation = 'source-over';
+  context.globalAlpha = 0.97;
+  context.shadowColor = 'transparent';
+  context.shadowBlur = 0;
+  context.drawImage(image, x, y, size.width, size.height);
+  context.restore();
+
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  context.globalAlpha = 0.34;
+  context.shadowColor = glowColor;
+  context.shadowBlur = 1.5;
+  context.drawImage(image, x, y, size.width, size.height);
+  context.restore();
+};
+
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 4.7, height: cell * 4.7 };
   if (kind === 'SEVEN') return { width: cell * 4.9, height: cell * 4.9 };
@@ -699,11 +736,7 @@ export default function GameScreen() {
         context.translate(enemy.x, enemy.y + motion.offsetY);
         context.rotate(motion.rotation);
         context.scale(motion.scale, motion.scale);
-        context.globalCompositeOperation = 'lighter';
-        context.globalAlpha = 0.98;
-        context.shadowColor = enemyGlowColor(enemy.kind);
-        context.shadowBlur = 18;
-        context.drawImage(image, -size.width / 2, -size.height / 2, size.width, size.height);
+        drawEnemySpriteWithGlow(context, image, size, enemyGlowColor(enemy.kind));
         context.restore();
       });
 
