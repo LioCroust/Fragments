@@ -7,4 +7,4 @@ The four generated final sprites in artifacts/fragments-neon/assets/images are t
 
 **Why:** The user explicitly accepted the generated ship, dragon, seven-branch machine, and spider, then asked to remove the old magenta SVG-like motif.
 
-**How to apply:** When changing enemy visuals, start from the existing final PNG sprites and only add animation/rendering behavior. Keep glow controlled so the multicolor details remain sharp.
+**How to apply:** When changing enemy visuals, start from the existing final PNG sprites and only add animation/rendering behavior. Keep glow controlled so the multicolor details remain sharp. New collectible and enemy art should follow the approved diamond's faceted prism, white luminous core, and multicolor neon edge language so the set remains coherent.
