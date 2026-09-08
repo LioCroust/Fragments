@@ -84,7 +84,6 @@ type Snapshot = {
   trail: Point[];
   player: Point;
   direction: Direction;
-  qix: Point & { phase: number };
   enemies: Enemy[];
   particles: Particle[];
   scanY: number;
@@ -490,8 +489,8 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
-      const qx = clamp(Math.floor(g.qix.x / g.cell), 0, COLS - 1);
-      const qy = clamp(Math.floor(g.qix.y / g.cell), 0, g.rows - 1);
+      const qx = clamp(Math.floor((g.width * 0.52) / g.cell), 0, COLS - 1);
+      const qy = clamp(Math.floor((g.height * 0.46) / g.cell), 0, g.rows - 1);
       const visited = Array.from({ length: g.rows }, () => Array(COLS).fill(false));
       const queue: Cell[] = [];
       if (g.grid[qy]?.[qx] === EMPTY) {
@@ -655,8 +654,6 @@ export default function GameScreen() {
 
     const update = (g: Game, dt: number, now: number) => {
       g.frame += 1;
-      g.qix.phase += dt * 4;
-
       g.particles = g.particles
         .map((particle) => ({
           ...particle,
@@ -741,33 +738,9 @@ export default function GameScreen() {
       moveEnemies(g, dt, now);
       if (g.status !== 'PLAYING') return;
 
-      const qixNext = {
-        x: g.qix.x + g.qix.vx * dt,
-        y: g.qix.y + g.qix.vy * dt,
-      };
-      const qixCellX = clamp(Math.floor(qixNext.x / g.cell), 0, COLS - 1);
-      const qixCellY = clamp(Math.floor(qixNext.y / g.cell), 0, g.rows - 1);
-      if (qixNext.x < g.cell * 2 || qixNext.x > g.width - g.cell * 2 || g.grid[qixCellY][qixCellX] === CLAIMED) {
-        g.qix.vx *= -1;
-      } else {
-        g.qix.x = qixNext.x;
-      }
-      if (qixNext.y < g.cell * 2 || qixNext.y > g.height - g.cell * 2 || g.grid[qixCellY][qixCellX] === CLAIMED) {
-        g.qix.vy *= -1;
-      } else {
-        g.qix.y = qixNext.y;
-      }
-
-      if (Math.hypot(g.qix.x - g.player.x, g.qix.y - g.player.y) < g.cell * 1.35) explode(g, now);
-      for (let i = 1; i < g.trail.length; i += 1) {
-        if (distanceToSegment(g.qix, g.trail[i - 1], g.trail[i]) < g.cell * 0.7) {
-          explode(g, now);
-          break;
-        }
-      }
     };
 
-    const drawCanvas = (g: Game) => {
+    const drawCanvas = (g: Game, now: number) => {
       const canvas = canvasRef.current;
       if (!canvas || Platform.OS !== 'web') return;
       const ratio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -785,7 +758,7 @@ export default function GameScreen() {
       context.fillRect(0, 0, g.width, g.height);
 
       context.globalCompositeOperation = 'source-over';
-      context.strokeStyle = 'rgba(0,243,255,0.15)';
+      context.strokeStyle = 'rgba(0,243,255,0.11)';
       context.lineWidth = 0.65;
       for (let x = 0; x <= COLS; x += 1) {
         context.beginPath();
@@ -811,8 +784,8 @@ export default function GameScreen() {
       context.strokeStyle = '#00f3ff';
       context.shadowColor = '#00f3ff';
       context.shadowBlur = 15;
-      context.lineWidth = 3;
-      context.strokeRect(g.cell * 1.5, g.cell * 1.5, g.width - g.cell * 3, g.height - g.cell * 3);
+      context.lineWidth = PERIMETER_STROKE_WIDTH;
+      context.strokeRect(g.cell * PERIMETER_INSET_CELLS, g.cell * PERIMETER_INSET_CELLS, g.width - g.cell * PERIMETER_INSET_CELLS * 2, g.height - g.cell * PERIMETER_INSET_CELLS * 2);
       context.shadowBlur = 0;
 
       if (g.trail.length > 1) {
@@ -833,7 +806,9 @@ export default function GameScreen() {
       });
       context.globalAlpha = 1;
 
+      context.globalCompositeOperation = 'lighter';
       g.enemies.forEach((enemy) => {
+        if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
         const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
         if (!image) return;
@@ -846,18 +821,6 @@ export default function GameScreen() {
         drawEnemySpriteWithGlow(context, image, size, enemyGlowColor(enemy.kind));
         context.restore();
       });
-
-      for (let arm = 0; arm < 10; arm += 1) {
-        const points = qixPoints(g.qix, g.cell * (2.3 + (arm % 3) * 0.35), arm);
-        context.strokeStyle = arm % 2 === 0 ? '#7b00ff' : '#ff0077';
-        context.shadowColor = context.strokeStyle;
-        context.shadowBlur = 14;
-        context.lineWidth = 1.5 + (arm % 3) * 0.5;
-        context.beginPath();
-        context.moveTo(g.qix.x, g.qix.y);
-        points.forEach((point) => context.lineTo(point.x, point.y));
-        context.stroke();
-      }
       context.shadowBlur = 0;
 
       if (g.fillQueue.length > 0) {
@@ -901,7 +864,7 @@ export default function GameScreen() {
       if (!g.initialized && sizeRef.current.width > 0) resetGame(false);
       if (g.initialized) {
         update(g, dt, now);
-        drawCanvas(g);
+        drawCanvas(g, now);
         if (Platform.OS !== 'web' && g.frame % 2 === 0) {
           setNativeSnapshot({
             width: g.width,
@@ -912,7 +875,6 @@ export default function GameScreen() {
             trail: [...g.trail],
             player: { ...g.player },
             direction: g.trail.length > 0 ? g.cutDir : g.inputDir,
-            qix: { x: g.qix.x, y: g.qix.y, phase: g.qix.phase },
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
             particles: g.particles.slice(-150),
             scanY: g.scanY,
