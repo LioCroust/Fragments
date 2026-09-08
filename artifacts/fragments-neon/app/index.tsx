@@ -17,6 +17,7 @@ const COLS = 16;
 const PERIMETER_INSET_CELLS = 2;
 const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
+const PLAYER_RADIUS_CELLS = 0.82;
 const EMPTY = 0;
 const CLAIMED = 1;
 const TRAIL = 2;
@@ -361,7 +362,7 @@ export default function GameScreen() {
       cell,
       rows,
       grid,
-      player: { x: bounds.left + cell * 0.7, y: bounds.bottom - cell * 0.7 },
+      player: { x: bounds.left + cell * PLAYER_RADIUS_CELLS, y: bounds.bottom - cell * PLAYER_RADIUS_CELLS },
       inputDir: ZERO,
       cutDir: ZERO,
       trail: [],
@@ -676,10 +677,10 @@ export default function GameScreen() {
           enemy.blockedTime = Math.max(0, enemy.blockedTime - dt * 1.8);
         }
 
-        const radius = enemyRadius(enemy, g.cell);
-        if (Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < radius + g.cell * 0.42) explode(g, now);
+        const collisionRadius = enemyVisualRadius(enemy, g.cell) * 0.78 + g.cell * PLAYER_RADIUS_CELLS * 0.6;
+        if (Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) explode(g, now);
         for (let i = 1; i < g.trail.length; i += 1) {
-          if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < radius * 0.7) {
+          if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < enemyVisualRadius(enemy, g.cell) * 0.78) {
             explode(g, now);
             break;
           }
@@ -737,8 +738,9 @@ export default function GameScreen() {
 
         for (let i = 0; i < steps; i += 1) {
           const bounds = perimeterBounds(g.width, g.height, g.cell);
-          g.player.x = clamp(g.player.x + stepX, bounds.left, bounds.right);
-          g.player.y = clamp(g.player.y + stepY, bounds.top, bounds.bottom);
+          const playerRadius = g.cell * PLAYER_RADIUS_CELLS;
+          g.player.x = clamp(g.player.x + stepX, bounds.left + playerRadius, bounds.right - playerRadius);
+          g.player.y = clamp(g.player.y + stepY, bounds.top + playerRadius, bounds.bottom - playerRadius);
           const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
           const y = clamp(Math.floor(g.player.y / g.cell), 0, g.rows - 1);
           const state = g.grid[y][x];
@@ -746,6 +748,13 @@ export default function GameScreen() {
           if (state === EMPTY) {
             if (g.trail.length === 0) g.cutDir = direction;
             g.grid[y][x] = TRAIL;
+            if (g.trail.length === 0) {
+              const anchor = {
+                x: direction.x !== 0 ? (direction.x > 0 ? bounds.left : bounds.right) : g.player.x,
+                y: direction.y !== 0 ? (direction.y > 0 ? bounds.top : bounds.bottom) : g.player.y,
+              };
+              g.trail.push(anchor);
+            }
             g.trail.push({ x: g.player.x, y: g.player.y });
             for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
           } else if (state === TRAIL) {
@@ -754,8 +763,10 @@ export default function GameScreen() {
               explode(g, now);
               break;
             }
+            g.trail.push({ x: g.player.x, y: g.player.y });
           } else if (state === CLAIMED) {
             if (g.trail.length > 3) {
+              g.trail.push({ x: g.player.x, y: g.player.y });
               capture(g);
               break;
             }
@@ -889,15 +900,15 @@ export default function GameScreen() {
       context.shadowColor = '#00f3ff';
       context.shadowBlur = 20;
       context.beginPath();
-      context.moveTo(g.cell * 1.35, 0);
-      context.lineTo(-g.cell * 0.85, -g.cell * 0.75);
-      context.lineTo(-g.cell * 0.35, 0);
-      context.lineTo(-g.cell * 0.85, g.cell * 0.75);
+      context.moveTo(g.cell * PLAYER_RADIUS_CELLS, 0);
+      context.lineTo(-g.cell * 0.55, -g.cell * 0.48);
+      context.lineTo(-g.cell * 0.24, 0);
+      context.lineTo(-g.cell * 0.55, g.cell * 0.48);
       context.closePath();
       context.fill();
       context.fillStyle = '#00f3ff';
       context.beginPath();
-      context.arc(0, 0, g.cell * 0.34, 0, Math.PI * 2);
+      context.arc(0, 0, g.cell * 0.22, 0, Math.PI * 2);
       context.fill();
       context.restore();
       context.globalCompositeOperation = 'source-over';
@@ -957,9 +968,9 @@ export default function GameScreen() {
     }
     const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
     const playerPoints = [
-      [snapshot.player.x + Math.cos(angle) * snapshot.cell * 1.35, snapshot.player.y + Math.sin(angle) * snapshot.cell * 1.35],
-      [snapshot.player.x + Math.cos(angle + 2.5) * snapshot.cell, snapshot.player.y + Math.sin(angle + 2.5) * snapshot.cell],
-      [snapshot.player.x + Math.cos(angle - 2.5) * snapshot.cell, snapshot.player.y + Math.sin(angle - 2.5) * snapshot.cell],
+      [snapshot.player.x + Math.cos(angle) * snapshot.cell * PLAYER_RADIUS_CELLS, snapshot.player.y + Math.sin(angle) * snapshot.cell * PLAYER_RADIUS_CELLS],
+      [snapshot.player.x + Math.cos(angle + 2.5) * snapshot.cell * 0.62, snapshot.player.y + Math.sin(angle + 2.5) * snapshot.cell * 0.62],
+      [snapshot.player.x + Math.cos(angle - 2.5) * snapshot.cell * 0.62, snapshot.player.y + Math.sin(angle - 2.5) * snapshot.cell * 0.62],
     ].map((point) => point.join(',')).join(' ');
     return (
       <Svg style={StyleSheet.absoluteFill}>
@@ -996,7 +1007,7 @@ export default function GameScreen() {
          })}
         {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
         <Polygon points={playerPoints} fill="#ffffff" stroke="#00f3ff" strokeWidth={2} />
-        <Circle cx={snapshot.player.x} cy={snapshot.player.y} r={snapshot.cell * 0.34} fill="#00f3ff" />
+        <Circle cx={snapshot.player.x} cy={snapshot.player.y} r={snapshot.cell * 0.22} fill="#00f3ff" />
       </Svg>
     );
   };
