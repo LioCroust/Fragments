@@ -47,6 +47,9 @@ type Enemy = Point & {
   targetY: number;
   blockedTime: number;
   respawnAt: number;
+  edgeTurnTimer: number;
+  edgeDirectionX: number;
+  edgeDirectionY: number;
 };
 
 type Game = {
@@ -308,10 +311,10 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
   const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
   const enemies: Enemy[] = [
-    { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 62 * levelSpeed, vy: 42 * levelSpeed, speed: 72 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
-    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 42 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
-    { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
-    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
+    { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 62 * levelSpeed, vy: 42 * levelSpeed, speed: 72 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 42 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
   ];
   return enemies.slice(0, clamp(Math.floor(level), 1, enemies.length));
 };
@@ -640,6 +643,23 @@ export default function GameScreen() {
           const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
           return g.grid[cy]?.[cx] ?? CLAIMED;
         };
+        const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
+        const enemyFitsAt = (x: number, y: number) => {
+          if (x < minX || x > maxX || y < minY || y > maxY) return false;
+          const footprint = bodyRadius * 0.88;
+          const samples = [
+            [0, 0],
+            [footprint, 0],
+            [-footprint, 0],
+            [0, footprint],
+            [0, -footprint],
+            [footprint * 0.7, footprint * 0.7],
+            [-footprint * 0.7, footprint * 0.7],
+            [footprint * 0.7, -footprint * 0.7],
+            [-footprint * 0.7, -footprint * 0.7],
+          ];
+          return samples.every(([offsetX, offsetY]) => cellAt(x + offsetX, y + offsetY) !== CLAIMED);
+        };
 
         const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
         const maxDistance = Math.hypot(g.width, g.height) * 0.56;
@@ -707,19 +727,51 @@ export default function GameScreen() {
 
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
-        const blockedX = nextX < minX || nextX > maxX || cellAt(nextX, enemy.y) === CLAIMED;
-        const blockedY = nextY < minY || nextY > maxY || cellAt(enemy.x, nextY) === CLAIMED;
-        if (blockedX) {
-          enemy.vx *= -1;
-          enemy.x = nextX < minX ? minX : maxX;
-        } else {
+        const canMoveFull = enemyFitsAt(nextX, nextY);
+        const canMoveX = enemyFitsAt(nextX, enemy.y);
+        const canMoveY = enemyFitsAt(enemy.x, nextY);
+        if (canMoveFull) {
           enemy.x = nextX;
-        }
-        if (blockedY) {
-          enemy.vy *= -1;
-          enemy.y = nextY < minY ? minY : maxY;
-        } else {
           enemy.y = nextY;
+        } else if (canMoveX) {
+          enemy.x = nextX;
+          enemy.vy *= -1;
+        } else if (canMoveY) {
+          enemy.y = nextY;
+          enemy.vx *= -1;
+        } else {
+          const escapeDistance = Math.max(g.cell * 0.72, bodyRadius * 1.18);
+          const escapeDirections = [
+            { x: 0, y: -1 },
+            { x: 0, y: 1 },
+            { x: -1, y: 0 },
+            { x: 1, y: 0 },
+            { x: -0.7, y: -0.7 },
+            { x: 0.7, y: -0.7 },
+            { x: -0.7, y: 0.7 },
+            { x: 0.7, y: 0.7 },
+          ];
+          const escape = escapeDirections
+            .map((direction) => ({
+              x: clamp(enemy.x + direction.x * escapeDistance, minX, maxX),
+              y: clamp(enemy.y + direction.y * escapeDistance, minY, maxY),
+              alignment: direction.x * enemy.vx + direction.y * enemy.vy,
+            }))
+            .filter((candidate) => enemyFitsAt(candidate.x, candidate.y))
+            .sort((first, second) => second.alignment - first.alignment)[0];
+
+          if (escape) {
+            const escapeX = escape.x - enemy.x;
+            const escapeY = escape.y - enemy.y;
+            const escapeLength = Math.hypot(escapeX, escapeY) || 1;
+            enemy.x = escape.x;
+            enemy.y = escape.y;
+            enemy.vx = (escapeX / escapeLength) * enemy.speed * 0.55;
+            enemy.vy = (escapeY / escapeLength) * enemy.speed * 0.55;
+          } else {
+            enemy.vx *= -1;
+            enemy.vy *= -1;
+          }
         }
 
         const probe = Math.max(g.cell * 0.6, visualRadius * 0.44);
