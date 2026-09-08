@@ -126,7 +126,6 @@ type Snapshot = {
   height: number;
   cell: number;
   rows: number;
-  claimed: { x: number; y: number; w: number }[];
   trail: Point[];
   completedTrail: Point[];
   player: Point;
@@ -144,22 +143,6 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 const cardinalDirection = (dx: number, dy: number): Direction => {
   if (Math.abs(dx) >= Math.abs(dy)) return { x: dx >= 0 ? 1 : -1, y: 0 };
   return { x: 0, y: dy >= 0 ? 1 : -1 };
-};
-
-const makeClaimedRuns = (grid: number[][]) => {
-  const runs: { x: number; y: number; w: number }[] = [];
-  grid.forEach((row, y) => {
-    let start = -1;
-    row.forEach((value, x) => {
-      if (value === CLAIMED && start < 0) start = x;
-      if (value !== CLAIMED && start >= 0) {
-        runs.push({ x: start, y, w: x - start });
-        start = -1;
-      }
-    });
-    if (start >= 0) runs.push({ x: start, y, w: row.length - start });
-  });
-  return runs;
 };
 
 const distanceToSegment = (point: Point, a: Point, b: Point) => {
@@ -1546,20 +1529,14 @@ export default function GameScreen() {
       }
 
        context.fillStyle = 'rgba(0,243,255,0.14)';
-      for (let y = 0; y < g.rows; y += 1) {
-        for (let x = 0; x < COLS; x += 1) {
-          if (g.grid[y][x] === CLAIMED) context.fillRect(x * g.cell, y * g.cell, g.cell + 0.5, g.cell + 0.5);
-        }
-      }
-       context.fillStyle = 'rgba(0,243,255,0.14)';
-       g.claimedPolygons.forEach((polygon) => {
-         if (polygon.length < 3) return;
-         context.beginPath();
-         context.moveTo(polygon[0].x, polygon[0].y);
-         polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-         context.closePath();
-         context.fill();
-       });
+      g.claimedPolygons.forEach((polygon) => {
+        if (polygon.length < 3) return;
+        context.beginPath();
+        context.moveTo(polygon[0].x, polygon[0].y);
+        polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+        context.closePath();
+        context.fill();
+      });
 
       context.globalCompositeOperation = 'lighter';
       context.strokeStyle = '#00f3ff';
@@ -1700,7 +1677,6 @@ export default function GameScreen() {
             height: g.height,
             cell: g.cell,
             rows: g.rows,
-            claimed: makeClaimedRuns(g.grid),
             trail: [...g.trail],
              completedTrail: [...g.completedTrail],
             player: { ...g.player },
@@ -1748,17 +1724,14 @@ export default function GameScreen() {
       <Svg style={StyleSheet.absoluteFill}>
         <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
         {gridLines}
-        {snapshot.claimed.map((run, index) => (
-          <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.14} />
+        {snapshot.claimedPolygons.map((polygon, index) => (
+          <Polygon
+            key={`claimed-polygon-${index}`}
+            points={pointsToString(polygon)}
+            fill="#00f3ff"
+            opacity={0.14}
+          />
         ))}
-         {snapshot.claimedPolygons.map((polygon, index) => (
-           <Polygon
-             key={`claimed-polygon-${index}`}
-             points={pointsToString(polygon)}
-             fill="#00f3ff"
-             opacity={0.14}
-           />
-         ))}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
           {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
