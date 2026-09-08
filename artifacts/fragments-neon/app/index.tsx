@@ -560,30 +560,14 @@ export default function GameScreen() {
           enemy.blockedTime = 0;
           enemy.vx = enemy.kind === 'DRAGON' ? -enemy.speed * 0.55 : enemy.speed * 0.55;
           enemy.vy = enemy.kind === 'SPIDER' ? -enemy.speed * 0.45 : enemy.speed * 0.45;
+          enemy.targetX = enemy.x;
+          enemy.targetY = enemy.y;
+          enemy.thinkTimer = 0;
         }
 
         enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
         enemy.spin += dt * (enemy.kind === 'DRAGON' ? 1.15 : enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
-
-        const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
-        const maxDistance = Math.hypot(g.width, g.height) * 0.56;
-        const farSlowdown = clamp(1 - distanceToPlayer / maxDistance, 0.42, 1);
-        const desiredSpeed = enemy.speed * farSlowdown;
-        const towardPlayer = {
-          x: g.player.x - enemy.x,
-          y: g.player.y - enemy.y,
-        };
-        const towardLength = Math.hypot(towardPlayer.x, towardPlayer.y) || 1;
-        const currentLength = Math.hypot(enemy.vx, enemy.vy) || desiredSpeed;
-        const steeringPull = distanceToPlayer > Math.min(g.width, g.height) * 0.34 ? 0.36 : 0.12;
-        const desiredVelocity = {
-          x: (enemy.vx / currentLength) * (1 - steeringPull) + (towardPlayer.x / towardLength) * steeringPull,
-          y: (enemy.vy / currentLength) * (1 - steeringPull) + (towardPlayer.y / towardLength) * steeringPull,
-        };
-        const desiredLength = Math.hypot(desiredVelocity.x, desiredVelocity.y) || 1;
-        const steering = clamp(enemy.agility * dt * 3.4, 0, 1);
-        enemy.vx += ((desiredVelocity.x / desiredLength) * desiredSpeed - enemy.vx) * steering;
-        enemy.vy += ((desiredVelocity.y / desiredLength) * desiredSpeed - enemy.vy) * steering;
+        enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
 
         const visualRadius = enemyVisualRadius(enemy, g.cell) * (1 + Math.abs(Math.sin(enemy.phase * 1.25)) * 0.035);
         const minX = bounds.left + visualRadius;
@@ -595,6 +579,71 @@ export default function GameScreen() {
           const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
           return g.grid[cy]?.[cx] ?? CLAIMED;
         };
+
+        const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
+        const maxDistance = Math.hypot(g.width, g.height) * 0.56;
+        const farSlowdown = clamp(1 - distanceToPlayer / maxDistance, 0.42, 1);
+        const currentLength = Math.hypot(enemy.vx, enemy.vy) || enemy.speed;
+        let desiredSpeed = enemy.speed;
+        let desiredVelocity: Point;
+
+        if (enemy.behavior === 'PLANNED') {
+          enemy.thinkTimer -= dt;
+          if (enemy.thinkTimer <= 0) {
+            const playerAngle = Math.atan2(g.player.y - enemy.y, g.player.x - enemy.x);
+            const orbitDirection = enemy.kind === 'DRAGON' ? 1 : -1;
+            const idealDistance = Math.min(g.width, g.height) * (enemy.kind === 'DRAGON' ? 0.25 : 0.18);
+            let bestScore = Number.POSITIVE_INFINITY;
+            let bestTarget = { x: g.player.x, y: g.player.y };
+
+            for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
+              const candidateAngle = playerAngle + orbitDirection * (0.55 + candidateIndex * 0.62) + Math.sin(enemy.routePhase) * 0.12;
+              const candidateRadius = idealDistance * (0.82 + (candidateIndex % 3) * 0.13);
+              const candidate = {
+                x: clamp(g.player.x + Math.cos(candidateAngle) * candidateRadius, minX, maxX),
+                y: clamp(g.player.y + Math.sin(candidateAngle) * candidateRadius, minY, maxY),
+              };
+              const candidateCell = cellAt(candidate.x, candidate.y);
+              const playerDistance = Math.hypot(candidate.x - g.player.x, candidate.y - g.player.y);
+              const headingDistance = Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y);
+              const blockedPenalty = candidateCell === CLAIMED ? 10000 : 0;
+              const score = blockedPenalty + Math.abs(playerDistance - idealDistance) * 2 + headingDistance * 0.08;
+              if (score < bestScore) {
+                bestScore = score;
+                bestTarget = candidate;
+              }
+            }
+
+            enemy.targetX = bestTarget.x;
+            enemy.targetY = bestTarget.y;
+            enemy.thinkTimer = enemy.kind === 'DRAGON' ? 0.72 : 0.56;
+          }
+
+          const targetVector = {
+            x: enemy.targetX - enemy.x,
+            y: enemy.targetY - enemy.y,
+          };
+          const targetLength = Math.hypot(targetVector.x, targetVector.y) || 1;
+          const planningBias = enemy.kind === 'DRAGON' ? 0.68 : 0.76;
+          desiredVelocity = {
+            x: (enemy.vx / currentLength) * (1 - planningBias) + (targetVector.x / targetLength) * planningBias,
+            y: (enemy.vy / currentLength) * (1 - planningBias) + (targetVector.y / targetLength) * planningBias,
+          };
+          desiredSpeed *= farSlowdown;
+        } else {
+          const currentHeading = Math.atan2(enemy.vy, enemy.vx);
+          const routeBend = enemy.pattern === 'SWEEP'
+            ? Math.sin(enemy.routePhase * 0.75) * 0.58
+            : Math.sin(enemy.routePhase * 1.35) * 1.1;
+          const routeHeading = currentHeading + routeBend * dt;
+          desiredVelocity = { x: Math.cos(routeHeading), y: Math.sin(routeHeading) };
+        }
+
+        const desiredLength = Math.hypot(desiredVelocity.x, desiredVelocity.y) || 1;
+        const steering = clamp(enemy.agility * dt * (enemy.behavior === 'PLANNED' ? 3.4 : 2.2), 0, 1);
+        enemy.vx += ((desiredVelocity.x / desiredLength) * desiredSpeed - enemy.vx) * steering;
+        enemy.vy += ((desiredVelocity.y / desiredLength) * desiredSpeed - enemy.vy) * steering;
+
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
         const blockedX = nextX < minX || nextX > maxX || cellAt(nextX, enemy.y) === CLAIMED;
