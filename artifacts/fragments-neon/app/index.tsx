@@ -948,11 +948,12 @@ export default function GameScreen() {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
     const gridLines = [];
-    for (let x = 0; x <= COLS; x += 1) {
-      gridLines.push(<Line key={`v${x}`} x1={x * snapshot.cell} y1={0} x2={x * snapshot.cell} y2={snapshot.height} stroke="#00f3ff" opacity={0.13} strokeWidth={0.6} />);
+    const bounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
+    for (let x = SAFE_BAND_CELLS; x <= COLS - SAFE_BAND_CELLS; x += 1) {
+      gridLines.push(<Line key={`v${x}`} x1={x * snapshot.cell} y1={bounds.top} x2={x * snapshot.cell} y2={bounds.bottom} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
     }
-    for (let y = 0; y <= snapshot.rows; y += 1) {
-      gridLines.push(<Line key={`h${y}`} x1={0} y1={y * snapshot.cell} x2={snapshot.width} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.13} strokeWidth={0.6} />);
+    for (let y = SAFE_BAND_CELLS; y <= snapshot.rows - SAFE_BAND_CELLS; y += 1) {
+      gridLines.push(<Line key={`h${y}`} x1={bounds.left} y1={y * snapshot.cell} x2={bounds.right} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
     }
     const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
     const playerPoints = [
@@ -968,7 +969,7 @@ export default function GameScreen() {
           <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
         ))}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
-        {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} />}
+         {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
           {snapshot.enemies.map((enemy, enemyIndex) => {
             if (enemy.respawnAt > Date.now()) return null;
