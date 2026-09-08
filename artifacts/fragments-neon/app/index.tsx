@@ -188,6 +188,19 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
   };
 };
 
+const enemyGlowColor = (kind: EnemyKind) => {
+  switch (kind) {
+    case 'SHIP':
+      return '#8dff3c';
+    case 'DRAGON':
+      return '#dfff45';
+    case 'SEVEN':
+      return '#ffe05a';
+    case 'SPIDER':
+      return '#52ff9d';
+  }
+};
+
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 4.7, height: cell * 4.7 };
   if (kind === 'SEVEN') return { width: cell * 4.9, height: cell * 4.9 };
@@ -688,7 +701,7 @@ export default function GameScreen() {
         context.scale(motion.scale, motion.scale);
         context.globalCompositeOperation = 'lighter';
         context.globalAlpha = 0.98;
-        context.shadowColor = enemy.kind === 'SHIP' || enemy.kind === 'SPIDER' ? '#00f3ff' : '#ff0077';
+        context.shadowColor = enemyGlowColor(enemy.kind);
         context.shadowBlur = 18;
         context.drawImage(image, -size.width / 2, -size.height / 2, size.width, size.height);
         context.restore();
