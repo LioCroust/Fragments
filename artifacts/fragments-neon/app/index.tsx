@@ -132,6 +132,18 @@ const distanceToSegment = (point: Point, a: Point, b: Point) => {
   return Math.hypot(point.x - closest.x, point.y - closest.y);
 };
 
+const pointTouchesOldTrail = (point: Point, trail: Point[], cell: number) => {
+  // Ignore the last few segments: they are the laser immediately behind
+  // the drone and are expected to be within its own collision envelope.
+  const safeSegmentCount = trail.length - 6;
+  if (safeSegmentCount <= 0) return false;
+  const collisionDistance = cell * 0.38;
+  for (let index = 0; index < safeSegmentCount; index += 1) {
+    if (distanceToSegment(point, trail[index], trail[index + 1]) <= collisionDistance) return true;
+  }
+  return false;
+};
+
 const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
 
 const perimeterBounds = (width: number, height: number, cell: number) => ({
@@ -721,12 +733,12 @@ export default function GameScreen() {
           || g.player.y <= bounds.top + playerRadius + safePerimeterTolerance
           || g.player.y >= bounds.bottom - playerRadius - safePerimeterTolerance
         );
-        const collisionRadius = enemyVisualRadius(enemy, g.cell) * 0.78 + playerRadius * 0.6;
+        const collisionRadius = enemyRadius(enemy, g.cell) + playerRadius * 0.52;
         if (!playerOnSafePerimeter && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
           explode(g, now);
         }
         for (let i = 1; i < g.trail.length; i += 1) {
-          if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < enemyVisualRadius(enemy, g.cell) * 0.78) {
+          if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < enemyRadius(enemy, g.cell) + g.cell * 0.12) {
             explode(g, now);
             break;
           }
@@ -871,8 +883,7 @@ export default function GameScreen() {
             g.trail.push({ x: g.player.x, y: g.player.y });
             for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
           } else if (state === TRAIL) {
-            const recent = g.trail.slice(-6);
-            if (!recent.some((point) => Math.floor(point.x / g.cell) === x && Math.floor(point.y / g.cell) === y)) {
+            if (pointTouchesOldTrail({ x: g.player.x, y: g.player.y }, g.trail, g.cell)) {
               explode(g, now);
               break;
             }
