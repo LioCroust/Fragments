@@ -7,4 +7,4 @@ The drone has four distinct states: free outside the blue perimeter, crossing th
 
 **Why:** Mixing the drone radius, safe-band cells, blue border, and claimed grid caused false stops, blocked entry, and spurious explosions.
 
-**How to apply:** Clamp only to the physical screen edge outside; allow exact center crossing at the perimeter; start the red trail only on an interior empty cell; use segment distance for red-trail collisions and body distance for enemies. Keep entry contacts (behind the drone) separate from exit contacts (in the travel direction) so rightward travel cannot map to the left edge.
+**How to apply:** Clamp only to the physical screen edge outside; allow exact center crossing at the perimeter; start the red trail only on an interior empty cell; use segment distance for red-trail collisions and body distance for enemies. Keep entry contacts (behind the drone) separate from exit contacts (in the travel direction) so rightward travel cannot map to the left edge. Captured cells are walkable for the drone; only enemies treat them as blocked.

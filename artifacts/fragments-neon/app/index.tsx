@@ -61,6 +61,7 @@ type Game = {
   player: Point;
   inputDir: Direction;
   facingDir: Direction;
+  hasMoveCommand: boolean;
   cutDir: Direction;
   cutCoordinate: number;
   trail: Point[];
@@ -353,6 +354,7 @@ export default function GameScreen() {
     player: { x: 0, y: 0 },
     inputDir: ZERO,
     facingDir: { x: 0, y: 1 },
+    hasMoveCommand: false,
     cutDir: ZERO,
     cutCoordinate: 0,
     trail: [],
@@ -440,6 +442,7 @@ export default function GameScreen() {
       player: { x: (SAFE_BAND_CELLS + 1) * cell, y: bounds.bottom + cell * PLAYER_RADIUS_CELLS },
       inputDir: ZERO,
       facingDir: { x: 0, y: -1 },
+      hasMoveCommand: false,
       cutDir: ZERO,
       cutCoordinate: 0,
       trail: [],
@@ -486,6 +489,7 @@ export default function GameScreen() {
         if (g.status !== 'PLAYING' || Math.hypot(gesture.dx, gesture.dy) < 10) return;
         const direction = cardinalDirection(gesture.dx, gesture.dy);
         g.inputDir = direction;
+        g.hasMoveCommand = true;
         // A new cardinal swipe can redirect an active cut at 90 degrees.
         // Releasing still leaves the drone travelling until it reaches safety.
         if (g.trail.length > 0) {
@@ -563,7 +567,6 @@ export default function GameScreen() {
         if (g.grid[y]?.[x] === TRAIL) g.grid[y][x] = EMPTY;
       });
       g.trail = [];
-      g.inputDir = ZERO;
       g.cutDir = ZERO;
       g.cutCoordinate = 0;
     };
@@ -946,7 +949,13 @@ export default function GameScreen() {
         }
       }
 
-      const direction = g.trail.length > 0 ? g.cutDir : g.inputDir;
+      const direction = g.trail.length > 0
+        ? g.cutDir
+        : (g.inputDir.x !== 0 || g.inputDir.y !== 0)
+          ? g.inputDir
+          : g.hasMoveCommand
+            ? g.facingDir
+            : ZERO;
       if (direction.x !== 0 || direction.y !== 0) g.facingDir = direction;
       const speed = 118;
       const distance = speed * dt;
@@ -1020,6 +1029,11 @@ export default function GameScreen() {
             for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
           } else if (state === TRAIL) {
             g.trail.push({ ...g.player });
+          } else if (state === CLAIMED && g.trail.length === 0) {
+            // Claimed cells are safe, walkable ground for the drone. They
+            // only block enemies; never stop the player's exit toward empty
+            // space or traversal along the captured area.
+            g.inputDir = direction;
           } else if (state === CLAIMED && g.trail.length > 2) {
             const safeContact = {
               x: direction.x > 0 ? x * g.cell : direction.x < 0 ? (x + 1) * g.cell : g.player.x,
