@@ -240,6 +240,7 @@ const buildContinuousCapturePolygon = (
   bounds: ReturnType<typeof perimeterBounds>,
   cell: number,
   claimedPolygons: Point[][],
+  occupantPoints: Point[],
 ) => {
   if (trail.length < 3) return null;
   const perimeterSamples = 128;
@@ -250,72 +251,80 @@ const buildContinuousCapturePolygon = (
   const start = trail[0];
   const end = trail[trail.length - 1];
 
-  // A cut can close by crossing an earlier part of its own red path instead
-  // of returning to the perimeter. In that case the boundary is the
-  // continuous sub-path after the crossing, not a cell-derived approximation.
-  for (let index = trail.length - 3; index >= 1; index -= 1) {
-    const segmentStart = trail[index - 1];
-    const segmentEnd = trail[index];
-    const dx = segmentEnd.x - segmentStart.x;
-    const dy = segmentEnd.y - segmentStart.y;
-    const lengthSquared = dx * dx + dy * dy || 1;
-    const progress = clamp(
-      ((end.x - segmentStart.x) * dx + (end.y - segmentStart.y) * dy) / lengthSquared,
-      0,
-      1,
-    );
-    const crossing = {
-      x: segmentStart.x + dx * progress,
-      y: segmentStart.y + dy * progress,
-    };
-    if (Math.hypot(end.x - crossing.x, end.y - crossing.y) <= cell * 0.7) {
-      const selfClosed = [crossing, ...trail.slice(index)];
-      if (polygonArea(selfClosed) > cell * cell * 0.04) return selfClosed;
-      break;
-    }
-  }
-
   const boundaryLoops = [perimeterLoop, ...claimedPolygons];
   const startLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(start, loop) <= cell * 1.5);
   const endLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(end, loop) <= cell * 1.5);
-  if (startLoopIndex < 0 || startLoopIndex !== endLoopIndex) return null;
-
-  const boundaryLoop = boundaryLoops[startLoopIndex];
-  const nearestBoundaryIndex = (point: Point) => {
-    let nearestIndex = 0;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    boundaryLoop.forEach((boundaryPoint, index) => {
-      const distance = Math.hypot(point.x - boundaryPoint.x, point.y - boundaryPoint.y);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestIndex = index;
+  let candidates: Point[][] = [];
+  if (startLoopIndex >= 0 && startLoopIndex === endLoopIndex) {
+    const boundaryLoop = boundaryLoops[startLoopIndex];
+    const nearestBoundaryIndex = (point: Point) => {
+      let nearestIndex = 0;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      boundaryLoop.forEach((boundaryPoint, index) => {
+        const distance = Math.hypot(point.x - boundaryPoint.x, point.y - boundaryPoint.y);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      });
+      return nearestIndex;
+    };
+    const startIndex = nearestBoundaryIndex(start);
+    const endIndex = nearestBoundaryIndex(end);
+    const boundaryArc = (from: number, to: number) => {
+      const points: Point[] = [];
+      let index = from;
+      for (let count = 0; count <= boundaryLoop.length; count += 1) {
+        points.push(boundaryLoop[index]);
+        if (index === to) break;
+        index = (index + 1) % boundaryLoop.length;
       }
-    });
-    return nearestIndex;
-  };
-  const startIndex = nearestBoundaryIndex(start);
-  const endIndex = nearestBoundaryIndex(end);
-  const boundaryArc = (from: number, to: number) => {
-    const points: Point[] = [];
-    let index = from;
-    for (let count = 0; count <= boundaryLoop.length; count += 1) {
-      points.push(boundaryLoop[index]);
-      if (index === to) break;
-      index = (index + 1) % boundaryLoop.length;
+      return points;
+    };
+    candidates = [
+      [...trail, ...boundaryArc(endIndex, startIndex).slice(1)],
+      [...trail.slice().reverse(), ...boundaryArc(startIndex, endIndex).slice(1)],
+    ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.04);
+  } else {
+    // A cut can close by crossing an earlier part of its own red path
+    // instead of returning to the perimeter or a protected boundary.
+    for (let index = trail.length - 3; index >= 1; index -= 1) {
+      const segmentStart = trail[index - 1];
+      const segmentEnd = trail[index];
+      const dx = segmentEnd.x - segmentStart.x;
+      const dy = segmentEnd.y - segmentStart.y;
+      const lengthSquared = dx * dx + dy * dy || 1;
+      const progress = clamp(
+        ((end.x - segmentStart.x) * dx + (end.y - segmentStart.y) * dy) / lengthSquared,
+        0,
+        1,
+      );
+      const crossing = {
+        x: segmentStart.x + dx * progress,
+        y: segmentStart.y + dy * progress,
+      };
+      if (Math.hypot(end.x - crossing.x, end.y - crossing.y) <= cell * 0.7) {
+        const selfClosed = [crossing, ...trail.slice(index)];
+        if (polygonArea(selfClosed) > cell * cell * 0.04) {
+          candidates = [selfClosed];
+        }
+        break;
+      }
     }
-    return points;
-  };
-  const candidates = [
-    [...trail, ...boundaryArc(endIndex, startIndex).slice(1)],
-    [...trail.slice().reverse(), ...boundaryArc(startIndex, endIndex).slice(1)],
-  ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.04);
+  }
   if (candidates.length === 0) return null;
 
-  const outsideExistingClaim = candidates.filter((polygon) => {
+  const containsOccupant = (polygon: Point[]) => occupantPoints.some((point) => (
+    pointInPolygon(point, polygon)
+    || polygonBoundaryDistance(point, polygon) <= cell * 0.12
+  ));
+  const enemyFreeCandidates = candidates.filter((polygon) => !containsOccupant(polygon));
+  if (enemyFreeCandidates.length === 0) return null;
+  const outsideExistingClaim = enemyFreeCandidates.filter((polygon) => {
     const center = polygonCentroid(polygon);
     return claimedPolygons.every((claimedPolygon) => !pointInPolygon(center, claimedPolygon));
   });
-  const selectable = outsideExistingClaim.length > 0 ? outsideExistingClaim : candidates;
+  const selectable = outsideExistingClaim.length > 0 ? outsideExistingClaim : enemyFreeCandidates;
   return selectable.reduce((smallest, polygon) => (
     polygonArea(polygon) < polygonArea(smallest) ? polygon : smallest
   ));
