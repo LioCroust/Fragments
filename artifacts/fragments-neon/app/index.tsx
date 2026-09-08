@@ -65,6 +65,7 @@ type Game = {
   cutDir: Direction;
   cutCoordinate: number;
   trail: Point[];
+  completedTrail: Point[];
   enemies: Enemy[];
   particles: Particle[];
   fillQueue: Cell[];
@@ -97,6 +98,7 @@ type Snapshot = {
   rows: number;
   claimed: { x: number; y: number; w: number }[];
   trail: Point[];
+  completedTrail: Point[];
   player: Point;
   direction: Direction;
   enemies: Enemy[];
@@ -203,6 +205,20 @@ const perimeterEntryContact = (
 });
 
 const playerBodyRadius = (cell: number) => cell * 0.34;
+const OUTER_STOP_GAP = 5;
+
+const playerOuterBounds = (
+  bounds: ReturnType<typeof perimeterBounds>,
+  cell: number,
+) => {
+  const radius = playerBodyRadius(cell);
+  return {
+    left: bounds.left - radius - OUTER_STOP_GAP,
+    right: bounds.right + radius + OUTER_STOP_GAP,
+    top: bounds.top - radius - OUTER_STOP_GAP,
+    bottom: bounds.bottom + radius + OUTER_STOP_GAP,
+  };
+};
 
 const spriteFrames: Record<EnemyKind, any[]> = {
   SHIP: [
@@ -301,22 +317,43 @@ const drawEnemySpriteWithGlow = (
 };
 
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
-  if (kind === 'DRAGON') return { width: cell * 4.7, height: cell * 4.7 };
-  if (kind === 'SEVEN') return { width: cell * 4.9, height: cell * 4.9 };
-  if (kind === 'SPIDER') return { width: cell * 4.9, height: cell * 4.9 };
-  return { width: cell * 3.5, height: cell * 3.5 };
+  if (kind === 'DRAGON') return { width: cell * 4.0, height: cell * 4.0 };
+  if (kind === 'SEVEN') return { width: cell * 4.15, height: cell * 4.15 };
+  if (kind === 'SPIDER') return { width: cell * 4.15, height: cell * 4.15 };
+  return { width: cell * 3.0, height: cell * 3.0 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
-  if (enemy.kind === 'DRAGON') return cell * 1.35;
-  if (enemy.kind === 'SPIDER') return cell * 1.15;
-  if (enemy.kind === 'SEVEN') return cell * 1.5;
-  return cell * 1.25;
+  if (enemy.kind === 'DRAGON') return cell * 1.2;
+  if (enemy.kind === 'SPIDER') return cell * 1.0;
+  if (enemy.kind === 'SEVEN') return cell * 1.32;
+  return cell * 1.08;
 };
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell);
   return Math.max(enemyRadius(enemy, cell), Math.hypot(sprite.width, sprite.height) * 0.5) + PERIMETER_STROKE_WIDTH * 0.5;
+};
+
+const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) => {
+  const sprite = enemySpriteSize(enemy.kind, cell);
+  const motion = enemyAnimationTransform(enemy, cell);
+  const halfWidth = sprite.width * motion.scale * 0.5;
+  const halfHeight = sprite.height * motion.scale * 0.5;
+  const step = Math.max(3, cell * 0.22);
+  const cos = Math.cos(motion.rotation);
+  const sin = Math.sin(motion.rotation);
+  const points: Point[] = [];
+
+  for (let localY = -halfHeight; localY <= halfHeight + step * 0.5; localY += step) {
+    for (let localX = -halfWidth; localX <= halfWidth + step * 0.5; localX += step) {
+      points.push({
+        x: x + localX * cos - localY * sin,
+        y: y + localX * sin + localY * cos,
+      });
+    }
+  }
+  return points;
 };
 
 const enemyBoundaryMargins = (enemy: Enemy, cell: number) => {
@@ -372,6 +409,7 @@ export default function GameScreen() {
     cutDir: ZERO,
     cutCoordinate: 0,
     trail: [],
+    completedTrail: [],
     enemies: [],
     particles: [],
     fillQueue: [],
@@ -460,6 +498,7 @@ export default function GameScreen() {
       cutDir: ZERO,
       cutCoordinate: 0,
       trail: [],
+      completedTrail: [],
       enemies: createEnemies(width, height, cell, previousLevel),
       particles: [],
       fillQueue: [],
@@ -566,23 +605,13 @@ export default function GameScreen() {
         if (g.grid[y]?.[x] === TRAIL) g.grid[y][x] = EMPTY;
       });
       g.trail = [];
+      g.completedTrail = [];
       g.inputDir = ZERO;
       g.cutDir = ZERO;
       g.shields -= 1;
       g.status = 'RESPAWN';
       g.respawnAt = now + (g.shields > 0 ? 520 : 1050);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    };
-
-    const cancelCut = (g: Game) => {
-      g.trail.forEach((point) => {
-        const x = Math.floor(point.x / g.cell);
-        const y = Math.floor(point.y / g.cell);
-        if (g.grid[y]?.[x] === TRAIL) g.grid[y][x] = EMPTY;
-      });
-      g.trail = [];
-      g.cutDir = ZERO;
-      g.cutCoordinate = 0;
     };
 
     const capture = (g: Game) => {
@@ -614,6 +643,7 @@ export default function GameScreen() {
         }
       }
       g.trail.forEach((point) => g.fillQueue.push({ x: Math.floor(point.x / g.cell), y: Math.floor(point.y / g.cell) }));
+      g.completedTrail = [...g.trail];
       g.trail = [];
       g.fillCursor = 0;
       g.scanY = 0;
@@ -632,9 +662,11 @@ export default function GameScreen() {
       const candidate = candidates.find((point) => {
         const x = clamp(point.x, bounds.left + visualRadius, bounds.right - visualRadius);
         const y = clamp(point.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
-        const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
-        const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
-        return g.grid[cy]?.[cx] !== CLAIMED;
+        return enemySpriteFootprint(enemy, g.cell, x, y).every((sample) => {
+          const cx = clamp(Math.floor(sample.x / g.cell), 0, COLS - 1);
+          const cy = clamp(Math.floor(sample.y / g.cell), 0, g.rows - 1);
+          return g.grid[cy]?.[cx] === EMPTY;
+        });
       }) ?? candidates[0];
       enemy.x = clamp(candidate.x, bounds.left + visualRadius, bounds.right - visualRadius);
       enemy.y = clamp(candidate.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
@@ -699,19 +731,8 @@ export default function GameScreen() {
         const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
         const enemyFitsAt = (x: number, y: number) => {
           if (x < minX || x > maxX || y < minY || y > maxY) return false;
-          const footprint = bodyRadius * 0.88;
-          const samples = [
-            [0, 0],
-            [footprint, 0],
-            [-footprint, 0],
-            [0, footprint],
-            [0, -footprint],
-            [footprint * 0.7, footprint * 0.7],
-            [-footprint * 0.7, footprint * 0.7],
-            [footprint * 0.7, -footprint * 0.7],
-            [-footprint * 0.7, -footprint * 0.7],
-          ];
-          return samples.every(([offsetX, offsetY]) => cellAt(x + offsetX, y + offsetY) !== CLAIMED);
+          return enemySpriteFootprint(enemy, g.cell, x, y)
+            .every((point) => cellAt(point.x, point.y) === EMPTY);
         };
 
         const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
@@ -862,14 +883,10 @@ export default function GameScreen() {
           }
         }
 
-        const probe = Math.max(g.cell * 0.6, visualRadius * 0.44);
         const centerIsSafe = cellAt(enemy.x, enemy.y) === CLAIMED;
-        const enclosed = centerIsSafe && (
-          cellAt(enemy.x - probe, enemy.y) === CLAIMED
-          && cellAt(enemy.x + probe, enemy.y) === CLAIMED
-          && cellAt(enemy.x, enemy.y - probe) === CLAIMED
-          && cellAt(enemy.x, enemy.y + probe) === CLAIMED
-        );
+        const enclosed = centerIsSafe
+          && enemySpriteFootprint(enemy, g.cell, enemy.x, enemy.y)
+            .every((point) => cellAt(point.x, point.y) === CLAIMED);
         if (enclosed) {
           enemy.blockedTime += dt;
           if (enemy.blockedTime > 0.38 && enemy.respawnAt <= now) burstEnemy(g, enemy, now);
@@ -959,6 +976,7 @@ export default function GameScreen() {
           g.fillQueue = [];
           g.fillCursor = 0;
           g.scanY = 0;
+          g.completedTrail = [];
           g.score += Math.max(100, Math.floor(g.captured / 6));
         }
       }
@@ -1010,18 +1028,18 @@ export default function GameScreen() {
             break;
           }
 
-          // Physical screen edges are hard stops. Never wrap the drone from
-          // one side of the screen to the other.
-          const screenRadius = playerBodyRadius(g.cell);
-          next.x = clamp(next.x, screenRadius, g.width - screenRadius);
-          next.y = clamp(next.y, screenRadius, g.height - screenRadius);
+          // Keep the outer playable band narrow: the drone can stop only a
+          // few pixels outside the blue perimeter, never at the phone edge.
+          const outerBounds = playerOuterBounds(bounds, g.cell);
+          next.x = clamp(next.x, outerBounds.left, outerBounds.right);
+          next.y = clamp(next.y, outerBounds.top, outerBounds.bottom);
           g.player = next;
 
           if (activeTrail && pointTouchesOldTrail(g.player, g.trail, g.cell, direction)) {
-            // Touching the temporary red trail cancels this cut, but does not
-            // destroy the drone or consume a shield.
-            g.player = previous;
-            cancelCut(g);
+            // Touching an earlier red segment closes the shape. Keep the
+            // completed boundary visible while the enclosed area fills cyan.
+            g.trail.push({ ...g.player });
+            capture(g);
             break;
           }
 
@@ -1127,17 +1145,22 @@ export default function GameScreen() {
       context.strokeRect(g.cell * PERIMETER_INSET_CELLS, g.cell * PERIMETER_INSET_CELLS, g.width - g.cell * PERIMETER_INSET_CELLS * 2, g.height - g.cell * PERIMETER_INSET_CELLS * 2);
       context.shadowBlur = 0;
 
-      if (g.trail.length > 1) {
+      if (g.completedTrail.length > 1 || g.trail.length > 1) {
         context.strokeStyle = '#ff5500';
         context.shadowColor = '#ff5500';
         context.shadowBlur = 18;
         context.lineWidth = 5;
         context.lineCap = 'round';
         context.lineJoin = 'round';
-        context.beginPath();
-        context.moveTo(g.trail[0].x, g.trail[0].y);
-        g.trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-        context.stroke();
+        const drawTrail = (trail: Point[]) => {
+          if (trail.length < 2) return;
+          context.beginPath();
+          context.moveTo(trail[0].x, trail[0].y);
+          trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+          context.stroke();
+        };
+        drawTrail(g.completedTrail);
+        drawTrail(g.trail);
         context.lineCap = 'butt';
         context.lineJoin = 'miter';
       }
@@ -1217,6 +1240,7 @@ export default function GameScreen() {
             rows: g.rows,
             claimed: makeClaimedRuns(g.grid),
             trail: [...g.trail],
+             completedTrail: [...g.completedTrail],
             player: { ...g.player },
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
@@ -1266,7 +1290,8 @@ export default function GameScreen() {
           <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
         ))}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
-         {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
+          {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
+          {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
           {snapshot.enemies.map((enemy, enemyIndex) => {
             if (enemy.respawnAt > Date.now()) return null;
