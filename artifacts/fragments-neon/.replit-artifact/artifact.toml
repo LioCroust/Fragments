@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "Fragments Neon"
+description = "A vertical mobile arcade game inspired by classic territory-capture games: guide a neon laser, carve safe zones, dodge futuristic enemies, collect upgrades, and evolve your visual loadout."
+version = "1.0.0"
+id = "artifacts/fragments-neon"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 25420
+
+[services.development]
+run = "pnpm --filter @workspace/fragments-neon run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/fragments-neon", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/fragments-neon", "run", "serve" ]
+
+[services.env]
+PORT = "25420"
+BASE_PATH = "/"
