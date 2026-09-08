@@ -7,3 +7,4 @@
 - [Selected drone concept](selected-drone-concept.md) — Keep the Prism Arrow as the player drone until the user explicitly chooses a different concept.
 - [Enemy ship smoke](enemy-ship-smoke.md) — Decorative smoke belongs behind the enemy ship, not the player drone, and must remain non-functional.
 - [Continuous cut geometry](continuous-cut-geometry.md) — Cyan keeps gameplay meaning, but the player's red cut must end at its continuous position rather than a cell boundary.
+- [Fill chime device validation](fill-chime-device-validation.md) — Confirmed on Android Expo Go; iOS silent-mode behavior still needs a real-device check.

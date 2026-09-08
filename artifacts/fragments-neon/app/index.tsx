@@ -1557,7 +1557,7 @@ export default function GameScreen() {
       }
       context.restore();
 
-      context.fillStyle = 'rgba(0,243,255,0.10)';
+       context.fillStyle = 'rgba(0,243,255,0.14)';
       for (let y = 0; y < g.rows; y += 1) {
         for (let x = 0; x < COLS; x += 1) {
           if (g.grid[y][x] === CLAIMED) context.fillRect(x * g.cell, y * g.cell, g.cell + 0.5, g.cell + 0.5);
@@ -1763,7 +1763,7 @@ export default function GameScreen() {
         <Rect width={snapshot.width} height={snapshot.height} fill="#000000" />
         {gridLines}
         {snapshot.claimed.map((run, index) => (
-          <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
+          <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.14} />
         ))}
          {snapshot.claimedPolygons.map((polygon, index) => (
            <Polygon
