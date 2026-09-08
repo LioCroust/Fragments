@@ -15,7 +15,10 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const GRID_W = 40;
 const TARGET_PERCENT = 75;
-const shardSprite = require('@/assets/images/energy-shard.png');
+const playerSprite = require('@/assets/images/player-arcwing.png');
+const enemySprite = require('@/assets/images/enemy-void-mantis.png');
+const shardSprite = require('@/assets/images/energy-tesseract.png');
+const beamCapsuleSprite = require('@/assets/images/laser-beam-capsule.png');
 
 const isClaimedSafe = (grid: number[][], x: number, y: number, w: number, h: number) => {
   if (x < 0 || x >= w || y < 0 || y >= h) return true;
@@ -46,6 +49,7 @@ export default function GameScreen() {
   const [renderedGrid, setRenderedGrid] = useState<{x:number, y:number, w:number}[]>([]);
   const [playerPos, setPlayerPos] = useState({x: 0, y: 0});
   const [trailPoints, setTrailPoints] = useState<string>("");
+  const [trailAngle, setTrailAngle] = useState(0);
   const [enemies, setEnemies] = useState<{x:number, y:number}[]>([]);
   const [shards, setShards] = useState<{x:number, y:number, gx:number, gy:number}[]>([]);
   
@@ -348,8 +352,14 @@ export default function GameScreen() {
     setEnemies(g.enemies.map(e => ({ x: e.x, y: e.y })));
     if (g.trailPts.length > 0) {
       setTrailPoints(g.trailPts.map(p => `${p.x},${p.y}`).join(' '));
+      if (g.trailPts.length > 1) {
+        const previous = g.trailPts[g.trailPts.length - 2];
+        const current = g.trailPts[g.trailPts.length - 1];
+        setTrailAngle(Math.atan2(current.y - previous.y, current.x - previous.x) * 180 / Math.PI);
+      }
     } else {
       setTrailPoints("");
+      setTrailAngle(0);
     }
     
     // Sync UI states
@@ -535,14 +545,28 @@ export default function GameScreen() {
               ]}
             />
           ))}
+
+          {trailPoints.length > 0 && (
+            <Image
+              source={beamCapsuleSprite}
+              style={[
+                styles.beamCapsule,
+                {
+                  left: playerPos.x - 44,
+                  top: playerPos.y - 14,
+                  transform: [{ rotate: `${trailAngle}deg` }],
+                },
+              ]}
+            />
+          )}
           
           <View style={[styles.drone, { transform: [{ translateX: playerPos.x - 16 }, { translateY: playerPos.y - 16 }] }]}>
-            <Image source={require('@/assets/images/player-drone.png')} style={{width: 32, height: 32}} />
+            <Image source={playerSprite} style={styles.playerSprite} />
           </View>
 
           {enemies.map((e, i) => (
              <View key={`e${i}`} style={[styles.enemy, { transform: [{ translateX: e.x - 16 }, { translateY: e.y - 16 }] }]}>
-               <Image source={require('@/assets/images/enemy-sentinel.png')} style={{width: 32, height: 32}} />
+               <Image source={enemySprite} style={styles.enemySprite} />
              </View>
           ))}
         </View>
@@ -617,22 +641,39 @@ const styles = StyleSheet.create({
   },
   drone: {
     position: 'absolute',
-    width: 32,
-    height: 32,
+    width: 56,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  playerSprite: {
+    width: 56,
+    height: 56,
+    resizeMode: 'contain',
   },
   enemy: {
     position: 'absolute',
-    width: 32,
-    height: 32,
+    width: 54,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  enemySprite: {
+    width: 54,
+    height: 54,
+    resizeMode: 'contain',
+  },
+  beamCapsule: {
+    position: 'absolute',
+    width: 88,
+    height: 28,
+    resizeMode: 'contain',
+    opacity: 0.94,
+  },
   shardSprite: {
     position: 'absolute',
-    width: 34,
-    height: 34,
+    width: 48,
+    height: 48,
     resizeMode: 'contain',
   },
   header: {
