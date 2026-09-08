@@ -545,6 +545,18 @@ export default function GameScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     };
 
+    const cancelCut = (g: Game) => {
+      g.trail.forEach((point) => {
+        const x = Math.floor(point.x / g.cell);
+        const y = Math.floor(point.y / g.cell);
+        if (g.grid[y]?.[x] === TRAIL) g.grid[y][x] = EMPTY;
+      });
+      g.trail = [];
+      g.inputDir = ZERO;
+      g.cutDir = ZERO;
+      g.cutCoordinate = 0;
+    };
+
     const capture = (g: Game) => {
       const qx = clamp(Math.floor((g.width * 0.52) / g.cell), 0, COLS - 1);
       const qy = clamp(Math.floor((g.height * 0.46) / g.cell), 0, g.rows - 1);
@@ -964,12 +976,18 @@ export default function GameScreen() {
             break;
           }
 
-          next.x = clamp(next.x, playerBodyRadius(g.cell), g.width - playerBodyRadius(g.cell));
-          next.y = clamp(next.y, playerBodyRadius(g.cell), g.height - playerBodyRadius(g.cell));
+          // Physical screen edges are hard stops. Never wrap the drone from
+          // one side of the screen to the other.
+          const screenRadius = playerBodyRadius(g.cell);
+          next.x = clamp(next.x, screenRadius, g.width - screenRadius);
+          next.y = clamp(next.y, screenRadius, g.height - screenRadius);
           g.player = next;
 
           if (activeTrail && pointTouchesOldTrail(g.player, g.trail, g.cell)) {
-            explode(g, now);
+            // Touching the temporary red trail cancels this cut, but does not
+            // destroy the drone or consume a shield.
+            g.player = previous;
+            cancelCut(g);
             break;
           }
 
