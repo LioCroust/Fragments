@@ -3,7 +3,6 @@ import {
   LayoutChangeEvent,
   PanResponder,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -24,6 +23,14 @@ type Point = { x: number; y: number };
 type Cell = { x: number; y: number };
 type Mode = 'SLOW';
 type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
+type EnemyKind = 'SHIP' | 'DRAGON' | 'SEVEN' | 'SPIDER';
+type Enemy = Point & {
+  kind: EnemyKind;
+  vx: number;
+  vy: number;
+  phase: number;
+  spin: number;
+};
 
 type Game = {
   width: number;
@@ -36,6 +43,7 @@ type Game = {
   cutDir: Direction;
   trail: Point[];
   qix: Point & { vx: number; vy: number; phase: number };
+  enemies: Enemy[];
   particles: Particle[];
   fillQueue: Cell[];
   fillCursor: number;
@@ -70,6 +78,7 @@ type Snapshot = {
   player: Point;
   direction: Direction;
   qix: Point & { phase: number };
+  enemies: Enemy[];
   particles: Particle[];
   scanY: number;
 };
@@ -122,6 +131,25 @@ const qixPoints = (qix: Point & { phase: number }, radius: number, arm: number) 
 
 const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
 
+const enemyRadius = (enemy: Enemy, cell: number) => {
+  if (enemy.kind === 'DRAGON') return cell * 1.35;
+  if (enemy.kind === 'SPIDER') return cell * 1.15;
+  if (enemy.kind === 'SEVEN') return cell * 1.5;
+  return cell * 1.25;
+};
+
+const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
+  const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
+  const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
+  const speed = 1 + Math.min(level - 1, 4) * 0.06;
+  return [
+    { kind: 'SHIP', x: safeX(0.28), y: safeY(0.28), vx: 38 * speed, vy: 25 * speed, phase: 0.4, spin: 0.2 },
+    { kind: 'DRAGON', x: safeX(0.73), y: safeY(0.31), vx: -29 * speed, vy: 34 * speed, phase: 2.1, spin: -0.15 },
+    { kind: 'SEVEN', x: safeX(0.30), y: safeY(0.64), vx: 27 * speed, vy: -31 * speed, phase: 4.3, spin: 0.35 },
+    { kind: 'SPIDER', x: safeX(0.72), y: safeY(0.68), vx: -34 * speed, vy: -22 * speed, phase: 5.7, spin: -0.28 },
+  ];
+};
+
 export default function GameScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -138,6 +166,7 @@ export default function GameScreen() {
     cutDir: ZERO,
     trail: [],
     qix: { x: 0, y: 0, vx: 70, vy: 54, phase: 0 },
+    enemies: [],
     particles: [],
     fillQueue: [],
     fillCursor: 0,
@@ -204,6 +233,7 @@ export default function GameScreen() {
         vy: 48 + previousLevel * 6,
         phase: 0,
       },
+      enemies: createEnemies(width, height, cell, previousLevel),
       particles: [],
       fillQueue: [],
       fillCursor: 0,
@@ -284,6 +314,7 @@ export default function GameScreen() {
     };
 
     const explode = (g: Game, now: number) => {
+      if (g.status !== 'PLAYING') return;
       for (let i = 0; i < 170; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 300;
@@ -344,6 +375,37 @@ export default function GameScreen() {
       g.fillCursor = 0;
       g.scanY = 0;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    };
+
+    const moveEnemies = (g: Game, dt: number, now: number) => {
+      g.enemies.forEach((enemy) => {
+        enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
+        enemy.spin += dt * (enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
+
+        const nextX = enemy.x + enemy.vx * dt;
+        const nextY = enemy.y + enemy.vy * dt;
+        const margin = g.cell * 3.15;
+        const cellAt = (x: number, y: number) => {
+          const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
+          const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
+          return g.grid[cy]?.[cx] ?? CLAIMED;
+        };
+        const blockedX = nextX < margin || nextX > g.width - margin || cellAt(nextX, enemy.y) === CLAIMED;
+        const blockedY = nextY < margin || nextY > g.height - margin || cellAt(enemy.x, nextY) === CLAIMED;
+        if (blockedX) enemy.vx *= -1;
+        else enemy.x = nextX;
+        if (blockedY) enemy.vy *= -1;
+        else enemy.y = nextY;
+
+        const radius = enemyRadius(enemy, g.cell);
+        if (Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < radius + g.cell * 0.42) explode(g, now);
+        for (let i = 1; i < g.trail.length; i += 1) {
+          if (distanceToSegment(enemy, g.trail[i - 1], g.trail[i]) < radius * 0.7) {
+            explode(g, now);
+            break;
+          }
+        }
+      });
     };
 
     const update = (g: Game, dt: number, now: number) => {
@@ -430,6 +492,9 @@ export default function GameScreen() {
           }
         }
       }
+
+      moveEnemies(g, dt, now);
+      if (g.status !== 'PLAYING') return;
 
       const qixNext = {
         x: g.qix.x + g.qix.vx * dt,
@@ -523,6 +588,141 @@ export default function GameScreen() {
       });
       context.globalAlpha = 1;
 
+      g.enemies.forEach((enemy) => {
+        const pulse = 0.82 + Math.sin(enemy.phase * 2.4) * 0.18;
+        context.save();
+        context.translate(enemy.x, enemy.y);
+        context.globalCompositeOperation = 'lighter';
+        context.shadowBlur = 14;
+
+        if (enemy.kind === 'SHIP') {
+          const heading = Math.atan2(enemy.vy, enemy.vx) + Math.sin(enemy.phase * 1.7) * 0.09;
+          context.rotate(heading);
+          context.shadowColor = '#00f3ff';
+          context.fillStyle = '#b9ffff';
+          context.beginPath();
+          context.moveTo(g.cell * 1.45, 0);
+          context.lineTo(-g.cell * 0.8, -g.cell * 0.72);
+          context.lineTo(-g.cell * 0.48, 0);
+          context.lineTo(-g.cell * 0.8, g.cell * 0.72);
+          context.closePath();
+          context.fill();
+          context.strokeStyle = '#00f3ff';
+          context.lineWidth = 1.4;
+          context.stroke();
+          context.fillStyle = '#ff2aa8';
+          context.shadowColor = '#ff2aa8';
+          context.beginPath();
+          context.arc(-g.cell * 0.42, 0, g.cell * 0.27 * pulse, 0, Math.PI * 2);
+          context.fill();
+          context.strokeStyle = '#ff8bd4';
+          context.beginPath();
+          context.moveTo(-g.cell * 0.95, -g.cell * 0.24);
+          context.lineTo(-g.cell * (1.38 + pulse * 0.25), -g.cell * 0.52);
+          context.moveTo(-g.cell * 0.95, g.cell * 0.24);
+          context.lineTo(-g.cell * (1.38 + pulse * 0.25), g.cell * 0.52);
+          context.stroke();
+        } else if (enemy.kind === 'DRAGON') {
+          context.shadowColor = '#ff0077';
+          context.strokeStyle = '#ff0077';
+          context.lineCap = 'round';
+          context.lineWidth = g.cell * 0.42;
+          context.beginPath();
+          for (let i = 0; i < 6; i += 1) {
+            const wave = Math.sin(enemy.phase * 2.1 + i * 0.9) * g.cell * 0.52;
+            const x = (i - 2.5) * g.cell * 0.52;
+            const y = wave;
+            if (i === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          }
+          context.stroke();
+          context.lineWidth = g.cell * 0.12;
+          context.strokeStyle = '#ff9bd6';
+          context.beginPath();
+          for (let i = 0; i < 6; i += 1) {
+            const wave = Math.sin(enemy.phase * 2.1 + i * 0.9) * g.cell * 0.52;
+            const x = (i - 2.5) * g.cell * 0.52;
+            if (i === 0) context.moveTo(x, wave);
+            else context.lineTo(x, wave);
+          }
+          context.stroke();
+          context.fillStyle = '#ff168f';
+          context.shadowColor = '#ff168f';
+          context.beginPath();
+          context.arc(g.cell * 1.55, Math.sin(enemy.phase * 2.1 + 5.2) * g.cell * 0.52, g.cell * 0.64, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = '#ffb7e5';
+          context.beginPath();
+          context.arc(g.cell * 1.78, -g.cell * 0.22, g.cell * 0.11, 0, Math.PI * 2);
+          context.arc(g.cell * 1.78, g.cell * 0.22, g.cell * 0.11, 0, Math.PI * 2);
+          context.fill();
+          context.strokeStyle = '#ffb7e5';
+          context.lineWidth = g.cell * 0.11;
+          context.beginPath();
+          context.moveTo(g.cell * 1.75, g.cell * 0.2);
+          context.quadraticCurveTo(g.cell * 2.15, g.cell * 0.5, g.cell * 1.8, g.cell * 0.58);
+          context.stroke();
+        } else if (enemy.kind === 'SEVEN') {
+          context.rotate(enemy.spin + Math.sin(enemy.phase) * 0.08);
+          context.shadowColor = '#7b00ff';
+          context.strokeStyle = '#b778ff';
+          context.lineWidth = g.cell * 0.18;
+          for (let branch = 0; branch < 7; branch += 1) {
+            const angle = branch * (Math.PI * 2 / 7) + Math.sin(enemy.phase * 1.4 + branch) * 0.18;
+            const length = g.cell * (1.15 + (branch % 4) * 0.3);
+            context.beginPath();
+            context.moveTo(Math.cos(angle) * g.cell * 0.2, Math.sin(angle) * g.cell * 0.2);
+            context.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
+            context.stroke();
+            context.fillStyle = branch % 2 === 0 ? '#ff44bd' : '#00f3ff';
+            context.beginPath();
+            context.arc(Math.cos(angle) * length, Math.sin(angle) * length, g.cell * 0.16, 0, Math.PI * 2);
+            context.fill();
+          }
+          context.fillStyle = '#fff1ff';
+          context.shadowColor = '#ff0077';
+          context.beginPath();
+          context.arc(0, 0, g.cell * (0.45 + pulse * 0.13), 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = '#ff0077';
+          context.beginPath();
+          context.arc(0, 0, g.cell * 0.2, 0, Math.PI * 2);
+          context.fill();
+        } else {
+          context.shadowColor = '#00f3ff';
+          context.strokeStyle = '#00f3ff';
+          context.lineWidth = g.cell * 0.12;
+          for (let leg = 0; leg < 8; leg += 1) {
+            const angle = leg * (Math.PI * 2 / 8) + Math.sin(enemy.phase * 2 + leg) * 0.12;
+            const step = Math.sin(enemy.phase * 3.2 + leg * Math.PI) * g.cell * 0.28;
+            const knee = {
+              x: Math.cos(angle) * (g.cell * 0.82 + step),
+              y: Math.sin(angle) * (g.cell * 0.82 + step),
+            };
+            const foot = {
+              x: Math.cos(angle) * (g.cell * 1.65 + step * 1.2),
+              y: Math.sin(angle) * (g.cell * 1.65 + step * 1.2),
+            };
+            context.beginPath();
+            context.moveTo(Math.cos(angle) * g.cell * 0.32, Math.sin(angle) * g.cell * 0.32);
+            context.lineTo(knee.x, knee.y);
+            context.lineTo(foot.x, foot.y);
+            context.stroke();
+          }
+          context.fillStyle = '#ff44bd';
+          context.shadowColor = '#ff0077';
+          context.beginPath();
+          context.ellipse(0, 0, g.cell * 0.62, g.cell * 0.48, 0, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = '#e4ffff';
+          context.beginPath();
+          context.arc(-g.cell * 0.2, -g.cell * 0.1, g.cell * 0.1, 0, Math.PI * 2);
+          context.arc(g.cell * 0.2, -g.cell * 0.1, g.cell * 0.1, 0, Math.PI * 2);
+          context.fill();
+        }
+        context.restore();
+      });
+
       for (let arm = 0; arm < 10; arm += 1) {
         const points = qixPoints(g.qix, g.cell * (2.3 + (arm % 3) * 0.35), arm);
         context.strokeStyle = arm % 2 === 0 ? '#7b00ff' : '#ff0077';
@@ -589,6 +789,7 @@ export default function GameScreen() {
             player: { ...g.player },
             direction: g.trail.length > 0 ? g.cutDir : g.inputDir,
             qix: { x: g.qix.x, y: g.qix.y, phase: g.qix.phase },
+             enemies: g.enemies.map((enemy) => ({ ...enemy })),
             particles: g.particles.slice(-150),
             scanY: g.scanY,
           });
@@ -636,6 +837,71 @@ export default function GameScreen() {
         <Rect x={snapshot.cell * 1.5} y={snapshot.cell * 1.5} width={snapshot.width - snapshot.cell * 3} height={snapshot.height - snapshot.cell * 3} fill="none" stroke="#00f3ff" strokeWidth={3} opacity={0.95} />
         {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} />}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
+         {snapshot.enemies.map((enemy, enemyIndex) => {
+           const pulse = 0.82 + Math.sin(enemy.phase * 2.4) * 0.18;
+           const enemyKey = `enemy${enemyIndex}`;
+           if (enemy.kind === 'SHIP') {
+             const angle = Math.atan2(enemy.vy, enemy.vx) + Math.sin(enemy.phase * 1.7) * 0.09;
+             const point = (distance: number, offset: number) => `${enemy.x + Math.cos(angle + offset) * distance},${enemy.y + Math.sin(angle + offset) * distance}`;
+             return (
+               <React.Fragment key={enemyKey}>
+                 <Polygon points={[point(snapshot.cell * 1.45, 0), point(snapshot.cell * 0.8, 2.45), point(snapshot.cell * 0.48, Math.PI), point(snapshot.cell * 0.8, -2.45)].join(' ')} fill="#b9ffff" stroke="#00f3ff" strokeWidth={1.4} />
+                 <Circle cx={enemy.x - Math.cos(angle) * snapshot.cell * 0.42} cy={enemy.y - Math.sin(angle) * snapshot.cell * 0.42} r={snapshot.cell * 0.27 * pulse} fill="#ff2aa8" />
+                 <Line x1={enemy.x - Math.cos(angle) * snapshot.cell * 0.95 + Math.sin(angle) * snapshot.cell * 0.24} y1={enemy.y - Math.sin(angle) * snapshot.cell * 0.95 - Math.cos(angle) * snapshot.cell * 0.24} x2={enemy.x - Math.cos(angle) * snapshot.cell * (1.38 + pulse * 0.25) + Math.sin(angle) * snapshot.cell * 0.52} y2={enemy.y - Math.sin(angle) * snapshot.cell * (1.38 + pulse * 0.25) - Math.cos(angle) * snapshot.cell * 0.52} stroke="#ff8bd4" strokeWidth={1.2} />
+                 <Line x1={enemy.x - Math.cos(angle) * snapshot.cell * 0.95 - Math.sin(angle) * snapshot.cell * 0.24} y1={enemy.y - Math.sin(angle) * snapshot.cell * 0.95 + Math.cos(angle) * snapshot.cell * 0.24} x2={enemy.x - Math.cos(angle) * snapshot.cell * (1.38 + pulse * 0.25) - Math.sin(angle) * snapshot.cell * 0.52} y2={enemy.y - Math.sin(angle) * snapshot.cell * (1.38 + pulse * 0.25) + Math.cos(angle) * snapshot.cell * 0.52} stroke="#ff8bd4" strokeWidth={1.2} />
+               </React.Fragment>
+             );
+           }
+           if (enemy.kind === 'DRAGON') {
+             const body = Array.from({ length: 6 }).map((_, segment) => {
+               const wave = Math.sin(enemy.phase * 2.1 + segment * 0.9) * snapshot.cell * 0.52;
+               return `${enemy.x + (segment - 2.5) * snapshot.cell * 0.52},${enemy.y + wave}`;
+             }).join(' ');
+             const headY = enemy.y + Math.sin(enemy.phase * 2.1 + 5.2) * snapshot.cell * 0.52;
+             return (
+               <React.Fragment key={enemyKey}>
+                 <Polyline points={body} fill="none" stroke="#ff0077" strokeWidth={snapshot.cell * 0.42} strokeLinecap="round" />
+                 <Polyline points={body} fill="none" stroke="#ff9bd6" strokeWidth={snapshot.cell * 0.12} />
+                 <Circle cx={enemy.x + snapshot.cell * 1.55} cy={headY} r={snapshot.cell * 0.64} fill="#ff168f" />
+                 <Circle cx={enemy.x + snapshot.cell * 1.78} cy={headY - snapshot.cell * 0.22} r={snapshot.cell * 0.11} fill="#ffb7e5" />
+                 <Circle cx={enemy.x + snapshot.cell * 1.78} cy={headY + snapshot.cell * 0.22} r={snapshot.cell * 0.11} fill="#ffb7e5" />
+                 <Polyline points={`${enemy.x + snapshot.cell * 1.75},${headY + snapshot.cell * 0.2} ${enemy.x + snapshot.cell * 2.15},${headY + snapshot.cell * 0.5} ${enemy.x + snapshot.cell * 1.8},${headY + snapshot.cell * 0.58}`} fill="none" stroke="#ffb7e5" strokeWidth={snapshot.cell * 0.11} />
+               </React.Fragment>
+             );
+           }
+           if (enemy.kind === 'SEVEN') {
+             return (
+               <React.Fragment key={enemyKey}>
+                 {Array.from({ length: 7 }).map((_, branch) => {
+                   const angle = enemy.spin + branch * (Math.PI * 2 / 7) + Math.sin(enemy.phase * 1.4 + branch) * 0.18;
+                   const length = snapshot.cell * (1.15 + (branch % 4) * 0.3);
+                   return (
+                     <React.Fragment key={`${enemyKey}b${branch}`}>
+                       <Line x1={enemy.x + Math.cos(angle) * snapshot.cell * 0.2} y1={enemy.y + Math.sin(angle) * snapshot.cell * 0.2} x2={enemy.x + Math.cos(angle) * length} y2={enemy.y + Math.sin(angle) * length} stroke="#b778ff" strokeWidth={snapshot.cell * 0.18} />
+                       <Circle cx={enemy.x + Math.cos(angle) * length} cy={enemy.y + Math.sin(angle) * length} r={snapshot.cell * 0.16} fill={branch % 2 === 0 ? '#ff44bd' : '#00f3ff'} />
+                     </React.Fragment>
+                   );
+                 })}
+                 <Circle cx={enemy.x} cy={enemy.y} r={snapshot.cell * (0.45 + pulse * 0.13)} fill="#fff1ff" />
+                 <Circle cx={enemy.x} cy={enemy.y} r={snapshot.cell * 0.2} fill="#ff0077" />
+               </React.Fragment>
+             );
+           }
+           return (
+             <React.Fragment key={enemyKey}>
+               {Array.from({ length: 8 }).map((_, leg) => {
+                 const angle = leg * (Math.PI * 2 / 8) + Math.sin(enemy.phase * 2 + leg) * 0.12;
+                 const step = Math.sin(enemy.phase * 3.2 + leg * Math.PI) * snapshot.cell * 0.28;
+                 const kneeDistance = snapshot.cell * 0.82 + step;
+                 const footDistance = snapshot.cell * 1.65 + step * 1.2;
+                 return <Polyline key={`${enemyKey}l${leg}`} points={`${enemy.x + Math.cos(angle) * snapshot.cell * 0.32},${enemy.y + Math.sin(angle) * snapshot.cell * 0.32} ${enemy.x + Math.cos(angle) * kneeDistance},${enemy.y + Math.sin(angle) * kneeDistance} ${enemy.x + Math.cos(angle) * footDistance},${enemy.y + Math.sin(angle) * footDistance}`} fill="none" stroke="#00f3ff" strokeWidth={snapshot.cell * 0.12} />;
+               })}
+               <Circle cx={enemy.x} cy={enemy.y} r={snapshot.cell * 0.58} fill="#ff44bd" />
+               <Circle cx={enemy.x - snapshot.cell * 0.2} cy={enemy.y - snapshot.cell * 0.1} r={snapshot.cell * 0.1} fill="#e4ffff" />
+               <Circle cx={enemy.x + snapshot.cell * 0.2} cy={enemy.y - snapshot.cell * 0.1} r={snapshot.cell * 0.1} fill="#e4ffff" />
+             </React.Fragment>
+           );
+         })}
         {Array.from({ length: 10 }).map((_, arm) => <Polyline key={`qix${arm}`} points={pointsToString([{ x: snapshot.qix.x, y: snapshot.qix.y }, ...qixPoints(snapshot.qix, snapshot.cell * (2.3 + (arm % 3) * 0.35), arm)])} fill="none" stroke={arm % 2 === 0 ? '#7b00ff' : '#ff0077'} strokeWidth={2} />)}
         {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
         <Polygon points={playerPoints} fill="#ffffff" stroke="#00f3ff" strokeWidth={2} />
