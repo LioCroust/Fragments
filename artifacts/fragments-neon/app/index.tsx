@@ -20,7 +20,11 @@ const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
-const ZONE_FILL_OPACITY = 0.5;
+const INITIAL_MAP_OPACITY = 0.2;
+const CAPTURED_ZONE_OPACITY = 0.4;
+const CAPTURED_ZONE_LAYER_OPACITY = (
+  CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
+) / (1 - INITIAL_MAP_OPACITY);
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 
@@ -295,7 +299,6 @@ const buildContinuousCapturePolygon = (
   bounds: ReturnType<typeof perimeterBounds>,
   cell: number,
   claimedPolygons: Point[][],
-  occupantPoints: Point[],
 ) => {
   if (trail.length < 3) return null;
   const perimeterSamples = 128;
@@ -488,17 +491,11 @@ const buildContinuousCapturePolygon = (
   }
   if (candidates.length === 0) return null;
 
-  const containsOccupant = (polygon: Point[]) => occupantPoints.some((point) => (
-    pointInPolygon(point, polygon)
-    || polygonBoundaryDistance(point, polygon) <= cell * 0.12
-  ));
-  const enemyFreeCandidates = candidates.filter((polygon) => !containsOccupant(polygon));
-  if (enemyFreeCandidates.length === 0) return null;
-  const outsideExistingClaim = enemyFreeCandidates.filter((polygon) => {
+  const outsideExistingClaim = candidates.filter((polygon) => {
     const center = polygonCentroid(polygon);
     return claimedPolygons.every((claimedPolygon) => !pointInPolygon(center, claimedPolygon));
   });
-  const selectable = outsideExistingClaim.length > 0 ? outsideExistingClaim : enemyFreeCandidates;
+  const selectable = outsideExistingClaim.length > 0 ? outsideExistingClaim : candidates;
   return selectable.reduce((smallest, polygon) => (
     polygonArea(polygon) < polygonArea(smallest) ? polygon : smallest
   ));
@@ -850,11 +847,19 @@ const NativeArenaStatic = React.memo(({
       />,
     );
   }
-  const bounds = perimeterBounds(width, height, cell);
+    const bounds = perimeterBounds(width, height, cell);
   return (
     <>
       <Rect width={width} height={height} fill="#000000" />
-      <G opacity={ZONE_FILL_OPACITY}>
+      <Rect
+        x={bounds.left}
+        y={bounds.top}
+        width={bounds.right - bounds.left}
+        height={bounds.bottom - bounds.top}
+        fill={ZONE_COLOR}
+        opacity={INITIAL_MAP_OPACITY}
+      />
+      <G opacity={CAPTURED_ZONE_LAYER_OPACITY}>
         {claimedPolygons.slice(0, claimedCount).map((polygon, index) => (
           <Polygon
             key={`claimed-polygon-${index}`}
@@ -1231,28 +1236,11 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
-      const occupantPoints = g.enemies.flatMap((enemy) => {
-        const corners = enemySpriteCorners(enemy, g.cell, enemy.x, enemy.y);
-        const motion = enemyAnimationTransform(enemy, g.cell);
-        const edgeMidpoints = corners.map((corner, index) => {
-          const next = corners[(index + 1) % corners.length];
-          return {
-            x: (corner.x + next.x) * 0.5,
-            y: (corner.y + next.y) * 0.5,
-          };
-        });
-        return [
-          { x: enemy.x, y: enemy.y + motion.offsetY },
-          ...corners,
-          ...edgeMidpoints,
-        ];
-      });
       const continuousPolygon = buildContinuousCapturePolygon(
         g.trail,
         perimeterBounds(g.width, g.height, g.cell),
         g.cell,
         g.claimedPolygons,
-        occupantPoints,
       );
       if (!continuousPolygon) {
         g.trail = [];
@@ -1295,7 +1283,7 @@ export default function GameScreen() {
 
     const burstEnemy = (g: Game, enemy: Enemy, now: number) => {
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
-      for (let i = 0; i < 1000; i += 1) {
+      for (let i = 0; i < 200; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 45 + Math.random() * 260;
         const life = 0.55 + Math.random() * 0.85;
