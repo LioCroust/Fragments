@@ -760,14 +760,18 @@ const NativeArenaStatic = React.memo(({
   return (
     <>
       <Rect width={width} height={height} fill="#000000" />
-      {claimedPolygons.slice(0, claimedCount).map((polygon, index) => (
-        <Polygon
-          key={`claimed-polygon-${index}`}
-          points={pointsToString(polygon)}
-          fill={ZONE_COLOR}
-          opacity={ZONE_FILL_OPACITY}
-        />
-      ))}
+      <G opacity={ZONE_FILL_OPACITY}>
+        {claimedPolygons.slice(0, claimedCount).map((polygon, index) => (
+          <Polygon
+            key={`claimed-polygon-${index}`}
+            points={pointsToString(polygon)}
+            fill={ZONE_COLOR}
+            stroke={ZONE_COLOR}
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        ))}
+      </G>
       {gridLines}
       <Rect
         x={bounds.left}
@@ -1810,17 +1814,21 @@ export default function GameScreen() {
       context.fillStyle = '#000000';
       context.fillRect(0, 0, g.width, g.height);
 
-      context.globalCompositeOperation = 'source-over';
+       context.globalCompositeOperation = 'source-over';
        context.globalAlpha = ZONE_FILL_OPACITY;
        context.fillStyle = ZONE_COLOR;
+       context.strokeStyle = ZONE_COLOR;
+       context.lineWidth = 2;
+       context.lineJoin = 'round';
+       context.beginPath();
        g.claimedPolygons.forEach((polygon) => {
          if (polygon.length < 3) return;
-         context.beginPath();
          context.moveTo(polygon[0].x, polygon[0].y);
          polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
          context.closePath();
-         context.fill();
        });
+       context.fill();
+       context.stroke();
        context.globalAlpha = 1;
       context.strokeStyle = 'rgba(0,243,255,0.11)';
       context.lineWidth = 0.65;
