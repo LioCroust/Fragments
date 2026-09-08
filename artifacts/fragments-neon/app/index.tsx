@@ -172,6 +172,17 @@ const perimeterContact = (
   direction: Direction,
   bounds: ReturnType<typeof perimeterBounds>,
 ) => ({
+  x: direction.x < 0 ? bounds.left : direction.x > 0 ? bounds.right : point.x,
+  y: direction.y < 0 ? bounds.top : direction.y > 0 ? bounds.bottom : point.y,
+});
+
+// When a cut starts outside the arena, the first trail point is on the
+// perimeter behind the drone, opposite to its travel direction.
+const perimeterEntryContact = (
+  point: Point,
+  direction: Direction,
+  bounds: ReturnType<typeof perimeterBounds>,
+) => ({
   x: direction.x < 0 ? bounds.right : direction.x > 0 ? bounds.left : point.x,
   y: direction.y < 0 ? bounds.bottom : direction.y > 0 ? bounds.top : point.y,
 });
@@ -1002,7 +1013,7 @@ export default function GameScreen() {
             if (g.trail.length === 0) {
               g.cutDir = direction;
               g.cutCoordinate = direction.x !== 0 ? g.player.y : g.player.x;
-              g.trail.push(perimeterContact(previous, direction, bounds));
+              g.trail.push(perimeterEntryContact(previous, direction, bounds));
             }
             g.grid[y][x] = TRAIL;
             g.trail.push({ ...g.player });
