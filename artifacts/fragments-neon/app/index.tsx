@@ -86,7 +86,7 @@ type Game = {
   cutDir: Direction;
   cutCoordinate: number;
   trail: Point[];
-  completedTrail: Point[];
+  protectedTrails: Point[][];
   enemies: Enemy[];
   diamond: Diamond;
   particles: Particle[];
@@ -125,7 +125,7 @@ type Snapshot = {
   cell: number;
   rows: number;
   trail: Point[];
-  completedTrail: Point[];
+  protectedTrails: Point[][];
   player: Point;
   direction: Direction;
   enemies: Enemy[];
@@ -587,6 +587,23 @@ const polygonsIntersect = (first: Point[], second: Point[]) => {
   return false;
 };
 
+const pathTouchesPolygon = (path: Point[], polygon: Point[], strokeRadius: number) => {
+  if (path.length < 2 || polygon.length < 3) return false;
+  const edges = polygon.map((corner, index) => ({
+    start: corner,
+    end: polygon[(index + 1) % polygon.length],
+  }));
+  return path.slice(1).some((pathEnd, index) => {
+    const pathStart = path[index];
+    if (pointInPolygon(pathStart, polygon) || pointInPolygon(pathEnd, polygon)) return true;
+    return edges.some((edge) => (
+      segmentsIntersect(edge.start, edge.end, pathStart, pathEnd)
+      || distanceToSegment(edge.start, pathStart, pathEnd) <= strokeRadius
+      || distanceToSegment(edge.end, pathStart, pathEnd) <= strokeRadius
+    ));
+  });
+};
+
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
@@ -617,7 +634,7 @@ export default function GameScreen() {
     cutDir: ZERO,
     cutCoordinate: 0,
     trail: [],
-    completedTrail: [],
+    protectedTrails: [],
     enemies: [],
     diamond: { x: 0, y: 0, phase: 0, collected: false },
     particles: [],
@@ -713,6 +730,13 @@ export default function GameScreen() {
     const previousScore = preserveStats ? g.score : 0;
     const previousShields = preserveStats ? g.shields : 3;
     const previousLevel = preserveStats ? g.level : 1;
+    const previousClaimedPolygons = preserveStats
+      ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
+      : [];
+    const previousProtectedTrails = preserveStats
+      ? g.protectedTrails.map((trail) => trail.map((point) => ({ ...point })))
+      : [];
+    const previousCapturedArea = preserveStats ? g.capturedArea : 0;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
@@ -731,13 +755,13 @@ export default function GameScreen() {
       cutDir: ZERO,
       cutCoordinate: 0,
       trail: [],
-      completedTrail: [],
+      protectedTrails: previousProtectedTrails,
       enemies: createEnemies(width, height, cell, previousLevel),
       diamond: createDiamond(width, height, cell),
       particles: [],
       smokePuffs: [],
       smokeAccumulator: 0,
-      claimedPolygons: [],
+      claimedPolygons: previousClaimedPolygons,
       pendingCapturePolygon: null,
       fillQueue: [],
       fillCursor: 0,
@@ -745,7 +769,7 @@ export default function GameScreen() {
       mode: 'SLOW',
       score: previousScore,
       shields: previousShields,
-      capturedArea: 0,
+      capturedArea: previousCapturedArea,
       totalPlayableArea,
       pendingCaptureArea: 0,
       level: previousLevel,
@@ -840,7 +864,6 @@ export default function GameScreen() {
         });
       }
       g.trail = [];
-      g.completedTrail = [];
       g.inputDir = ZERO;
       g.cutDir = ZERO;
       g.shields -= 1;
@@ -858,11 +881,11 @@ export default function GameScreen() {
       );
       if (!continuousPolygon) {
         g.trail = [];
-        g.completedTrail = [];
         return;
       }
 
       const area = polygonArea(continuousPolygon);
+      g.protectedTrails.push(g.trail.map((point) => ({ ...point })));
       g.pendingCapturePolygon = continuousPolygon;
       g.pendingCaptureArea = area;
       // These are only timing units for the scan animation. They are not
@@ -870,7 +893,6 @@ export default function GameScreen() {
       g.fillQueue = Array.from({
         length: Math.max(18, Math.min(240, Math.ceil(area / Math.max(1, g.cell * g.cell * 0.65)))),
       }, (_, index) => index);
-      g.completedTrail = [...g.trail];
       g.trail = [];
       g.fillCursor = 0;
       g.scanY = 0;
@@ -958,15 +980,23 @@ export default function GameScreen() {
         const minY = bounds.top;
         const maxY = bounds.bottom;
         const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
+        const enemyTouchesProtectedBoundary = (x: number, y: number) => {
+          const corners = enemySpriteCorners(enemy, g.cell, x, y);
+          return g.protectedTrails.some((protectedTrail) => (
+            pathTouchesPolygon(protectedTrail, corners, PERIMETER_STROKE_WIDTH * 0.5)
+          ));
+        };
         const enemyFitsAt = (x: number, y: number) => {
           if (x < minX || x > maxX || y < minY || y > maxY) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
+            && !enemyTouchesProtectedBoundary(x, y);
         };
         const enemyCanMoveAt = (x: number, y: number) => {
           if (x < minX || x > maxX || y < minY || y > maxY) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
+            && !enemyTouchesProtectedBoundary(x, y);
         };
         const enemyTouchesTrail = (x: number, y: number) => {
           if (g.trail.length < 2) return false;
@@ -1361,7 +1391,6 @@ export default function GameScreen() {
           g.fillQueue = [];
           g.fillCursor = 0;
           g.scanY = 0;
-          g.completedTrail = [];
           g.pendingCapturePolygon = null;
           g.pendingCaptureArea = 0;
           void pickupChimePlayer.seekTo(0)
