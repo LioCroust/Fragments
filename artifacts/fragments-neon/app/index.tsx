@@ -133,13 +133,19 @@ const distanceToSegment = (point: Point, a: Point, b: Point) => {
 };
 
 const pointTouchesOldTrail = (point: Point, trail: Point[], cell: number) => {
-  // Ignore the last few segments: they are the laser immediately behind
-  // the drone and are expected to be within its own collision envelope.
-  const safeSegmentCount = trail.length - 6;
-  if (safeSegmentCount <= 0) return false;
-  const collisionDistance = cell * 0.38;
-  for (let index = 0; index < safeSegmentCount; index += 1) {
-    if (distanceToSegment(point, trail[index], trail[index + 1]) <= collisionDistance) return true;
+  // Ignore the continuous laser immediately behind the drone. The player
+  // must be at least one cell away along the trail before a crossing can be
+  // considered a real self-collision.
+  const trailingClearance = cell * 1.15;
+  const collisionDistance = cell * 0.24;
+  let distanceBehindDrone = 0;
+
+  for (let index = trail.length - 2; index >= 0; index -= 1) {
+    const start = trail[index];
+    const end = trail[index + 1];
+    distanceBehindDrone += Math.hypot(end.x - start.x, end.y - start.y);
+    if (distanceBehindDrone < trailingClearance) continue;
+    if (distanceToSegment(point, start, end) <= collisionDistance) return true;
   }
   return false;
 };
