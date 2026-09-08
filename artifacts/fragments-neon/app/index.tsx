@@ -375,6 +375,8 @@ export default function GameScreen() {
     g.player.startY = g.player.y;
     g.target.x = g.player.x;
     g.target.y = g.player.y;
+    g.control = { x: 0, y: 0 };
+    g.cutDirection = { x: 0, y: 0 };
     g.trailGrid = [];
     g.trailPts = [];
     
@@ -466,6 +468,8 @@ export default function GameScreen() {
     g.player.y = g.player.startY;
     g.target.x = g.player.startX;
     g.target.y = g.player.startY;
+    g.control = { x: 0, y: 0 };
+    g.cutDirection = { x: 0, y: 0 };
     
     g.shields -= 1;
     if (g.shields < 0) {
@@ -535,7 +539,7 @@ export default function GameScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]} {...panResponder.panHandlers}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {gameState === 'PLAYING' && (
         <View style={[styles.arena, { top: Math.max(insets.top, 20) + 80, bottom: insets.bottom + 40 }]} testID="game-arena">
           <Svg style={StyleSheet.absoluteFill}>
@@ -683,6 +687,38 @@ export default function GameScreen() {
                <Image source={enemySprite} style={styles.enemySprite} />
              </View>
           ))}
+
+          <View
+            style={[
+              styles.joystick,
+              {
+                left: 18,
+                bottom: insets.bottom + 16,
+                borderColor: colors.primary,
+                backgroundColor: `${colors.primary}18`,
+              },
+            ]}
+            {...joystickPanResponder.panHandlers}
+            testID="virtual-joystick"
+          >
+            <View style={[styles.joystickCross, { borderColor: colors.secondary }]} pointerEvents="none">
+              <View style={[styles.joystickCrossVertical, { backgroundColor: colors.secondary }]} />
+              <View style={[styles.joystickCrossHorizontal, { backgroundColor: colors.secondary }]} />
+            </View>
+            <View
+              style={[
+                styles.joystickThumb,
+                {
+                  borderColor: colors.primary,
+                  backgroundColor: colors.background,
+                  transform: [{ translateX: joystickOffset.x }, { translateY: joystickOffset.y }],
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <View style={[styles.joystickCore, { backgroundColor: colors.primary }]} />
+            </View>
+          </View>
         </View>
       )}
 
@@ -709,8 +745,8 @@ export default function GameScreen() {
             <Text style={[styles.buttonText, { color: colors.primary }]}>DÉMARRER</Text>
           </Pressable>
 
-           <Text style={[styles.tutorial, { color: colors.mutedForeground }]}>
-             Glissez depuis le bord sécurisé pour capturer le territoire. Les fragments orange valent +500 et renforcent votre faisceau.
+             <Text style={[styles.tutorial, { color: colors.mutedForeground }]}>
+              Utilisez le joystick pour tracer des découpes droites. Enfermez les ennemis dans la plus grande zone possible. Les fragments orange valent +500.
           </Text>
 
           <Pressable style={styles.soundToggle} onPress={() => setSoundEnabled(s => !s)}>
@@ -783,6 +819,51 @@ const styles = StyleSheet.create({
     height: 28,
     resizeMode: 'contain',
     opacity: 0.94,
+  },
+  joystick: {
+    position: 'absolute',
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  joystickCross: {
+    position: 'absolute',
+    width: 68,
+    height: 68,
+    borderWidth: 1,
+    borderRadius: 34,
+    opacity: 0.34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  joystickCrossVertical: {
+    position: 'absolute',
+    width: 1,
+    height: 54,
+    opacity: 0.7,
+  },
+  joystickCrossHorizontal: {
+    position: 'absolute',
+    width: 54,
+    height: 1,
+    opacity: 0.7,
+  },
+  joystickThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  joystickCore: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   captureStatus: {
     position: 'absolute',
