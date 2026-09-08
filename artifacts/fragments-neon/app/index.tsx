@@ -50,6 +50,8 @@ type Enemy = Point & {
   edgeTurnTimer: number;
   edgeDirectionX: number;
   edgeDirectionY: number;
+  lastSafeX?: number;
+  lastSafeY?: number;
 };
 
 type Game = {
@@ -728,18 +730,70 @@ export default function GameScreen() {
           return enemySpriteFootprint(enemy, g.cell, x, y)
             .every((point) => cellAt(point.x, point.y) === EMPTY);
         };
+        const fullyEnclosedAt = (x: number, y: number) => (
+          cellAt(x, y) === CLAIMED
+          && enemySpriteFootprint(enemy, g.cell, x, y)
+            .every((point) => cellAt(point.x, point.y) === CLAIMED)
+        );
+        const recoverShipFromSoftContact = () => {
+          if (enemyFitsAt(enemy.x, enemy.y) || fullyEnclosedAt(enemy.x, enemy.y)) return;
+          const candidates: { x: number; y: number; distance: number }[] = [];
+          if (
+            enemy.lastSafeX !== undefined
+            && enemy.lastSafeY !== undefined
+            && enemyFitsAt(enemy.lastSafeX, enemy.lastSafeY)
+          ) {
+            candidates.push({
+              x: enemy.lastSafeX,
+              y: enemy.lastSafeY,
+              distance: Math.hypot(enemy.lastSafeX - enemy.x, enemy.lastSafeY - enemy.y),
+            });
+          }
+          const angleOffset = Math.random() * Math.PI * 2;
+          const radii = [0.08, 0.16, 0.28, 0.44, 0.68, 0.95].map((ratio) => g.cell * ratio);
+          radii.forEach((radius) => {
+            for (let index = 0; index < 20; index += 1) {
+              const angle = angleOffset + (Math.PI * 2 * index) / 20;
+              const x = enemy.x + Math.cos(angle) * radius;
+              const y = enemy.y + Math.sin(angle) * radius;
+              if (enemyFitsAt(x, y)) {
+                candidates.push({ x, y, distance: radius });
+              }
+            }
+          });
+          const nearest = candidates.sort((first, second) => first.distance - second.distance)[0];
+          if (nearest) {
+            enemy.x = nearest.x;
+            enemy.y = nearest.y;
+            enemy.lastSafeX = nearest.x;
+            enemy.lastSafeY = nearest.y;
+          }
+        };
         const bounceShipRandomly = () => {
+          if (fullyEnclosedAt(enemy.x, enemy.y)) return;
+          recoverShipFromSoftContact();
           const currentAngle = Math.atan2(enemy.vy, enemy.vx);
-          const step = Math.max(g.cell * 0.42, enemy.speed * dt * 2.2);
-          const candidateAngles = Array.from({ length: 12 }, (_, index) => (
-            currentAngle + Math.PI * 2 * (index / 12) + (Math.random() - 0.5) * 0.22
-          ));
-          const validAngles = candidateAngles.filter((angle) => (
-            enemyFitsAt(
-              enemy.x + Math.cos(angle) * step,
-              enemy.y + Math.sin(angle) * step,
-            )
-          ));
+          const candidateDistances = [0.12, 0.24, 0.42, 0.68].map((ratio) => g.cell * ratio);
+          const candidates = candidateDistances.flatMap((distance) => (
+            Array.from({ length: 16 }, (_, index) => {
+              const angle = currentAngle + Math.PI * 2 * (index / 16) + (Math.random() - 0.5) * 0.18;
+              return {
+                angle,
+                distance,
+                valid: enemyFitsAt(
+                  enemy.x + Math.cos(angle) * distance,
+                  enemy.y + Math.sin(angle) * distance,
+                ),
+              };
+            })
+          )).filter((candidate) => candidate.valid);
+          const nearestDistance = candidates.reduce(
+            (nearest, candidate) => Math.min(nearest, candidate.distance),
+            Number.POSITIVE_INFINITY,
+          );
+          const validAngles = candidates
+            .filter((candidate) => candidate.distance <= nearestDistance + g.cell * 0.14)
+            .map((candidate) => candidate.angle);
           const angle = validAngles.length > 0
             ? validAngles[Math.floor(Math.random() * validAngles.length)]
             : currentAngle + Math.PI;
@@ -748,6 +802,10 @@ export default function GameScreen() {
           enemy.edgeTurnTimer = 0;
           enemy.routePhase += Math.PI * (0.55 + Math.random() * 0.7);
         };
+        if (enemyFitsAt(enemy.x, enemy.y)) {
+          enemy.lastSafeX = enemy.x;
+          enemy.lastSafeY = enemy.y;
+        }
 
         const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
         const maxDistance = Math.hypot(g.width, g.height) * 0.56;
@@ -851,12 +909,18 @@ export default function GameScreen() {
         } else if (canMoveFull) {
           enemy.x = nextX;
           enemy.y = nextY;
+          enemy.lastSafeX = enemy.x;
+          enemy.lastSafeY = enemy.y;
         } else if (canMoveX) {
           enemy.x = nextX;
+          enemy.lastSafeX = enemy.x;
+          enemy.lastSafeY = enemy.y;
           if (blockedY) turnAwayFromBlueEdge(false, true);
           else enemy.vy *= -1;
         } else if (canMoveY) {
           enemy.y = nextY;
+          enemy.lastSafeX = enemy.x;
+          enemy.lastSafeY = enemy.y;
           if (blockedX) turnAwayFromBlueEdge(true, false);
           else enemy.vx *= -1;
         } else {

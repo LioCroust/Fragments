@@ -7,4 +7,4 @@ Enemy boundary contact must trigger an inward steering window, not a simple velo
 
 **Why:** Independent axis bounces let an enemy repeatedly traverse between two perimeter edges and visually flip direction at each contact.
 
-**How to apply:** Preserve an edge-turn timer and inward heading after blue-boundary contact; use body-footprint obstacle checks and keep enclosure detection ahead of any rescue movement. The ship is the exception: when its full sprite footprint touches blue or cyan, choose a random valid bounce direction; do not change the shared footprint detection.
+**How to apply:** Preserve an edge-turn timer and inward heading after blue-boundary contact; use body-footprint obstacle checks and keep enclosure detection ahead of any rescue movement. The ship is the exception: when its full sprite footprint touches blue or cyan, choose a random valid bounce direction; do not change the shared footprint detection. If a frame leaves the ship in a soft partial overlap, recover to a nearby valid point or its last safe point before bouncing; never recover a fully enclosed enemy.
