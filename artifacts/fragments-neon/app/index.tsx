@@ -93,6 +93,7 @@ type Game = {
   particles: Particle[];
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
+  claimedPolygons: Point[][];
   fillQueue: Cell[];
   fillCursor: number;
   scanY: number;
@@ -132,6 +133,7 @@ type Snapshot = {
   diamond: Diamond;
   particles: Particle[];
   smokePuffs: SmokePuff[];
+  claimedPolygons: Point[][];
   scanY: number;
 };
 
@@ -207,6 +209,78 @@ const perimeterBounds = (width: number, height: number, cell: number) => ({
   right: width - cell * PERIMETER_INSET_CELLS,
   bottom: height - cell * PERIMETER_INSET_CELLS,
 });
+
+const perimeterPointAt = (bounds: ReturnType<typeof perimeterBounds>, progress: number): Point => {
+  const width = bounds.right - bounds.left;
+  const height = bounds.bottom - bounds.top;
+  const perimeter = width * 2 + height * 2;
+  let distance = ((progress % 1) + 1) % 1 * perimeter;
+  if (distance <= width) return { x: bounds.left + distance, y: bounds.top };
+  distance -= width;
+  if (distance <= height) return { x: bounds.right, y: bounds.top + distance };
+  distance -= height;
+  if (distance <= width) return { x: bounds.right - distance, y: bounds.bottom };
+  distance -= width;
+  return { x: bounds.left, y: bounds.bottom - distance };
+};
+
+const distanceToPerimeter = (point: Point, bounds: ReturnType<typeof perimeterBounds>) => Math.min(
+  Math.abs(point.x - bounds.left),
+  Math.abs(point.x - bounds.right),
+  Math.abs(point.y - bounds.top),
+  Math.abs(point.y - bounds.bottom),
+);
+
+const polygonArea = (polygon: Point[]) => Math.abs(polygon.reduce((area, point, index) => {
+  const next = polygon[(index + 1) % polygon.length];
+  return area + point.x * next.y - next.x * point.y;
+}, 0) * 0.5);
+
+const buildContinuousCapturePolygon = (trail: Point[], bounds: ReturnType<typeof perimeterBounds>, cell: number) => {
+  if (trail.length < 3) return null;
+  const start = trail[0];
+  const end = trail[trail.length - 1];
+  if (distanceToPerimeter(start, bounds) > cell * 1.5 || distanceToPerimeter(end, bounds) > cell * 1.5) return null;
+
+  const perimeterSamples = 128;
+  const nearestPerimeterIndex = (point: Point) => {
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < perimeterSamples; index += 1) {
+      const perimeterPoint = perimeterPointAt(bounds, index / perimeterSamples);
+      const distance = Math.hypot(point.x - perimeterPoint.x, point.y - perimeterPoint.y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    }
+    return nearestIndex;
+  };
+  const startIndex = nearestPerimeterIndex(start);
+  const endIndex = nearestPerimeterIndex(end);
+  const boundaryArc = (from: number, to: number) => {
+    const points: Point[] = [];
+    let index = from;
+    for (let count = 0; count <= perimeterSamples; count += 1) {
+      points.push(perimeterPointAt(bounds, index / perimeterSamples));
+      if (index === to) break;
+      index = (index + 1) % perimeterSamples;
+    }
+    return points;
+  };
+  const firstCandidate = [
+    ...trail,
+    ...boundaryArc(endIndex, startIndex).slice(1),
+  ];
+  const reverseTrail = [...trail].reverse();
+  const secondCandidate = [
+    ...reverseTrail,
+    ...boundaryArc(startIndex, endIndex).slice(1),
+  ];
+  return polygonArea(firstCandidate) <= polygonArea(secondCandidate)
+    ? firstCandidate
+    : secondCandidate;
+};
 
 const pointInsidePerimeter = (point: Point, bounds: ReturnType<typeof perimeterBounds>) => (
   point.x > bounds.left && point.x < bounds.right
@@ -491,6 +565,7 @@ export default function GameScreen() {
     particles: [],
     smokePuffs: [],
     smokeAccumulator: 0,
+    claimedPolygons: [],
     fillQueue: [],
     fillCursor: 0,
     scanY: 0,
@@ -603,6 +678,7 @@ export default function GameScreen() {
       particles: [],
       smokePuffs: [],
       smokeAccumulator: 0,
+      claimedPolygons: [],
       fillQueue: [],
       fillCursor: 0,
       scanY: 0,
