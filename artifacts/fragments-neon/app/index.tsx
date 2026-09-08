@@ -378,12 +378,6 @@ const createDiamond = (grid: number[][], width: number, cell: number): Diamond =
   };
 };
 
-const diamondAnimationTransform = (diamond: Diamond) => ({
-  // Simulate a full horizontal spin around the vertical axis: the crystal
-  // narrows to its profile, then reveals its opposite face as it returns.
-  scaleX: Math.cos(diamond.phase),
-});
-
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
 
 const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
@@ -1347,7 +1341,6 @@ export default function GameScreen() {
           life: particle.life - dt,
         }))
         .filter((particle) => particle.life > 0);
-      if (!g.diamond.collected) g.diamond.phase += dt * 2.6;
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
@@ -1539,23 +1532,18 @@ export default function GameScreen() {
       context.strokeStyle = 'rgba(0,243,255,0.11)';
       context.lineWidth = 0.65;
       const bounds = perimeterBounds(g.width, g.height, g.cell);
-      context.save();
-      context.beginPath();
-      context.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
-      context.clip();
-      for (let x = SAFE_BAND_CELLS; x <= COLS - SAFE_BAND_CELLS; x += 1) {
+       for (let x = 0; x <= COLS; x += 1) {
         context.beginPath();
-        context.moveTo(x * g.cell, bounds.top);
-        context.lineTo(x * g.cell, bounds.bottom);
+         context.moveTo(x * g.cell, 0);
+         context.lineTo(x * g.cell, g.height);
         context.stroke();
       }
-      for (let y = SAFE_BAND_CELLS; y <= g.rows - SAFE_BAND_CELLS; y += 1) {
+       for (let y = 0; y <= g.rows; y += 1) {
         context.beginPath();
-        context.moveTo(bounds.left, y * g.cell);
-        context.lineTo(bounds.right, y * g.cell);
+         context.moveTo(0, y * g.cell);
+         context.lineTo(g.width, y * g.cell);
         context.stroke();
       }
-      context.restore();
 
        context.fillStyle = 'rgba(0,243,255,0.14)';
       for (let y = 0; y < g.rows; y += 1) {
@@ -1627,17 +1615,15 @@ export default function GameScreen() {
       const diamondImage = diamondImageRef.current;
       if (!g.diamond.collected && diamondImage) {
         const diamondSize = g.cell * 1.5;
-        const diamondMotion = diamondAnimationTransform(g.diamond);
-        context.save();
-        context.translate(g.diamond.x, g.diamond.y);
-        context.scale(diamondMotion.scaleX, 1);
-        drawEnemySpriteWithGlow(
-          context,
-          diamondImage,
-          { width: diamondSize, height: diamondSize },
-          '#ffffff',
-        );
-        context.restore();
+         context.save();
+         context.translate(g.diamond.x, g.diamond.y);
+         drawEnemySpriteWithGlow(
+           context,
+           diamondImage,
+           { width: diamondSize, height: diamondSize },
+           '#ffffff',
+         );
+         context.restore();
       }
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
@@ -1749,11 +1735,11 @@ export default function GameScreen() {
     const snapshot = nativeSnapshot;
     const gridLines = [];
     const bounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
-    for (let x = SAFE_BAND_CELLS; x <= COLS - SAFE_BAND_CELLS; x += 1) {
-      gridLines.push(<Line key={`v${x}`} x1={x * snapshot.cell} y1={bounds.top} x2={x * snapshot.cell} y2={bounds.bottom} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
+     for (let x = 0; x <= COLS; x += 1) {
+       gridLines.push(<Line key={`v${x}`} x1={x * snapshot.cell} y1={0} x2={x * snapshot.cell} y2={snapshot.height} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
     }
-    for (let y = SAFE_BAND_CELLS; y <= snapshot.rows - SAFE_BAND_CELLS; y += 1) {
-      gridLines.push(<Line key={`h${y}`} x1={bounds.left} y1={y * snapshot.cell} x2={bounds.right} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
+     for (let y = 0; y <= snapshot.rows; y += 1) {
+       gridLines.push(<Line key={`h${y}`} x1={0} y1={y * snapshot.cell} x2={snapshot.width} y2={y * snapshot.cell} stroke="#00f3ff" opacity={0.11} strokeWidth={0.6} />);
     }
     const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
     const playerRotationDegrees = angle * (180 / Math.PI) + 90;
@@ -1777,16 +1763,14 @@ export default function GameScreen() {
           {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
          {!snapshot.diamond.collected && (
-           <G transform={`translate(${snapshot.diamond.x} ${snapshot.diamond.y}) scale(${diamondAnimationTransform(snapshot.diamond).scaleX} 1) translate(${-snapshot.diamond.x} ${-snapshot.diamond.y})`}>
-             <SvgImage
-               href={diamondSource}
-               x={snapshot.diamond.x - snapshot.cell * 0.75}
-               y={snapshot.diamond.y - snapshot.cell * 0.75}
-               width={snapshot.cell * 1.5}
-               height={snapshot.cell * 1.5}
-               opacity={0.98}
-             />
-           </G>
+           <SvgImage
+             href={diamondSource}
+             x={snapshot.diamond.x - snapshot.cell * 0.75}
+             y={snapshot.diamond.y - snapshot.cell * 0.75}
+             width={snapshot.cell * 1.5}
+             height={snapshot.cell * 1.5}
+             opacity={0.98}
+           />
          )}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
           {snapshot.enemies.map((enemy, enemyIndex) => {
