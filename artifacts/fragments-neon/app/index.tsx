@@ -290,6 +290,12 @@ const createDiamond = (grid: number[][], width: number, cell: number): Diamond =
   };
 };
 
+const diamondAnimationTransform = (diamond: Diamond) => ({
+  // A horizontal axis turn is represented by a restrained X compression.
+  // The vertical tips stay locked upright instead of rotating in the plane.
+  scaleX: 0.88 + Math.abs(Math.cos(diamond.phase)) * 0.12,
+});
+
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
 
 const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
@@ -1083,7 +1089,7 @@ export default function GameScreen() {
           life: particle.life - dt,
         }))
         .filter((particle) => particle.life > 0);
-      if (!g.diamond.collected) g.diamond.phase += dt * 2.6;
+      if (!g.diamond.collected) g.diamond.phase += dt * 1.8;
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
@@ -1339,10 +1345,11 @@ export default function GameScreen() {
       context.globalCompositeOperation = 'lighter';
       const diamondImage = diamondImageRef.current;
       if (!g.diamond.collected && diamondImage) {
-        const diamondSize = g.cell * 1.75;
+        const diamondSize = g.cell * 1.5;
+        const diamondMotion = diamondAnimationTransform(g.diamond);
         context.save();
         context.translate(g.diamond.x, g.diamond.y);
-        context.rotate(g.diamond.phase);
+        context.scale(diamondMotion.scaleX, 1);
         drawEnemySpriteWithGlow(
           context,
           diamondImage,
@@ -1471,15 +1478,13 @@ export default function GameScreen() {
           {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
          {!snapshot.diamond.collected && (
-           <G
-             transform={`translate(${snapshot.diamond.x} ${snapshot.diamond.y}) rotate(${snapshot.diamond.phase * (180 / Math.PI)}) translate(${-snapshot.diamond.x} ${-snapshot.diamond.y})`}
-           >
+           <G transform={`translate(${snapshot.diamond.x} ${snapshot.diamond.y}) scale(${diamondAnimationTransform(snapshot.diamond).scaleX} 1) translate(${-snapshot.diamond.x} ${-snapshot.diamond.y})`}>
              <SvgImage
                href={diamondSource}
-               x={snapshot.diamond.x - snapshot.cell * 0.875}
-               y={snapshot.diamond.y - snapshot.cell * 0.875}
-               width={snapshot.cell * 1.75}
-               height={snapshot.cell * 1.75}
+               x={snapshot.diamond.x - snapshot.cell * 0.75}
+               y={snapshot.diamond.y - snapshot.cell * 0.75}
+               width={snapshot.cell * 1.5}
+               height={snapshot.cell * 1.5}
                opacity={0.98}
              />
            </G>
