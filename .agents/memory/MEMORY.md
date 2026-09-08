@@ -1,3 +1,4 @@
 - [Approved enemy art](approved-enemy-art.md) — The Canva concept board is the visual source of truth; animate its pixels instead of regenerating enemy designs.
 - [Expo static build port](expo-static-build-port.md) — The bundle script requires localhost:8081 to be free during Metro startup.
 - [Collision geometry](collision-geometry.md) — Use segment and body geometry for collisions, never trail-cell membership alone.
+- [Safe band controls](safe-band-controls.md) — Preserve swipe direction through the outer safe band so the drone can reach the empty playfield.
