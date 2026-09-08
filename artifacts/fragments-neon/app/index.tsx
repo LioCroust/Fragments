@@ -1510,36 +1510,6 @@ export default function GameScreen() {
       context.translate(g.player.x, g.player.y);
        context.rotate((Number.isNaN(angle) ? 0 : angle) + Math.PI / 2);
 
-       // Decorative Tron-like wake. It is rendered behind the drone only and
-       // never enters the game state or collision system.
-       context.save();
-       context.globalCompositeOperation = 'lighter';
-       const wakeGradient = context.createLinearGradient(-g.cell * 1.08, 0, -g.cell * 0.08, 0);
-       wakeGradient.addColorStop(0, 'rgba(0,243,255,0)');
-       wakeGradient.addColorStop(0.42, 'rgba(0,243,255,0.12)');
-       wakeGradient.addColorStop(0.82, 'rgba(255,43,181,0.24)');
-       wakeGradient.addColorStop(1, 'rgba(255,255,255,0.34)');
-       context.fillStyle = wakeGradient;
-       context.shadowColor = '#00f3ff';
-       context.shadowBlur = 9;
-       context.beginPath();
-       context.moveTo(-g.cell * 0.14, -g.cell * 0.12);
-       context.lineTo(-g.cell * 1.08, -g.cell * 0.035);
-       context.lineTo(-g.cell * 1.08, g.cell * 0.035);
-       context.lineTo(-g.cell * 0.14, g.cell * 0.12);
-       context.closePath();
-       context.fill();
-       context.globalAlpha = 0.32;
-       context.strokeStyle = '#ff2bb5';
-       context.lineWidth = Math.max(1, g.cell * 0.035);
-       context.beginPath();
-       context.moveTo(-g.cell * 0.2, -g.cell * 0.075);
-       context.lineTo(-g.cell * 0.68, -g.cell * 0.025);
-       context.moveTo(-g.cell * 0.2, g.cell * 0.075);
-       context.lineTo(-g.cell * 0.68, g.cell * 0.025);
-       context.stroke();
-       context.restore();
-
        const playerImage = playerImageRef.current;
        if (playerImage) {
          drawEnemySpriteWithGlow(
@@ -1674,24 +1644,15 @@ export default function GameScreen() {
            );
          })}
         {snapshot.scanY > 0 && <Line x1={0} y1={snapshot.scanY} x2={snapshot.width} y2={snapshot.scanY} stroke="#ffffff" strokeWidth={2} />}
-         <G transform={wakeTransform} opacity={0.3}>
-           <Polygon
-             points={`${-snapshot.cell * 0.14},${-snapshot.cell * 0.12} ${-snapshot.cell * 1.08},${-snapshot.cell * 0.035} ${-snapshot.cell * 1.08},${snapshot.cell * 0.035} ${-snapshot.cell * 0.14},${snapshot.cell * 0.12}`}
-             fill="#00f3ff"
-           />
-           <Polyline
-             points={`${-snapshot.cell * 0.2},${-snapshot.cell * 0.075} ${-snapshot.cell * 0.68},${-snapshot.cell * 0.025}`}
-             fill="none"
-             stroke="#ff2bb5"
-             strokeWidth={Math.max(1, snapshot.cell * 0.035)}
-           />
-           <Polyline
-             points={`${-snapshot.cell * 0.2},${snapshot.cell * 0.075} ${-snapshot.cell * 0.68},${snapshot.cell * 0.025}`}
-             fill="none"
-             stroke="#ff2bb5"
-             strokeWidth={Math.max(1, snapshot.cell * 0.035)}
-           />
-         </G>
+          {snapshot.smokePuffs.map((puff, index) => {
+            const opacity = clamp(puff.life / puff.maxLife, 0, 1);
+            return (
+              <G key={`smoke-${index}`} opacity={opacity * 0.22}>
+                <Circle cx={puff.x} cy={puff.y} r={puff.size} fill="#00f3ff" />
+                <Circle cx={puff.x} cy={puff.y} r={puff.size * 0.42} fill="#ffffff" opacity={0.55} />
+              </G>
+            );
+          })}
          <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
            <SvgImage
              href={playerSource}
