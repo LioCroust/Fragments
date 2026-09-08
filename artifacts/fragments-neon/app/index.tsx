@@ -27,14 +27,22 @@ type Cell = { x: number; y: number };
 type Mode = 'SLOW';
 type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
 type EnemyKind = 'SHIP' | 'DRAGON' | 'SEVEN' | 'SPIDER';
+type EnemyBehavior = 'PLANNED' | 'PRESET';
+type EnemyPattern = 'SWEEP' | 'ZIGZAG';
 type Enemy = Point & {
   kind: EnemyKind;
+  behavior: EnemyBehavior;
+  pattern: EnemyPattern;
   vx: number;
   vy: number;
   speed: number;
   agility: number;
   phase: number;
   spin: number;
+  routePhase: number;
+  thinkTimer: number;
+  targetX: number;
+  targetY: number;
   blockedTime: number;
   respawnAt: number;
 };
@@ -249,10 +257,10 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
   const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
   return [
-    { kind: 'SHIP', x: safeX(0.28), y: safeY(0.28), vx: 38 * levelSpeed, vy: 25 * levelSpeed, speed: 46 * levelSpeed, agility: 0.65, phase: 0.4, spin: 0.2, blockedTime: 0, respawnAt: 0 },
-    { kind: 'DRAGON', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 48 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, blockedTime: 0, respawnAt: 0 },
-    { kind: 'SEVEN', x: safeX(0.30), y: safeY(0.64), vx: 27 * levelSpeed, vy: -31 * levelSpeed, speed: 35 * levelSpeed, agility: 0.42, phase: 4.3, spin: 0.35, blockedTime: 0, respawnAt: 0 },
-    { kind: 'SPIDER', x: safeX(0.72), y: safeY(0.68), vx: -34 * levelSpeed, vy: -22 * levelSpeed, speed: 41 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, blockedTime: 0, respawnAt: 0 },
+    { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 62 * levelSpeed, vy: 42 * levelSpeed, speed: 72 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
+    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 42 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
+    { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
+    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0 },
   ];
 };
 
