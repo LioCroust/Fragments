@@ -882,11 +882,28 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
+      const occupantPoints = g.enemies.flatMap((enemy) => {
+        const corners = enemySpriteCorners(enemy, g.cell, enemy.x, enemy.y);
+        const motion = enemyAnimationTransform(enemy, g.cell);
+        const edgeMidpoints = corners.map((corner, index) => {
+          const next = corners[(index + 1) % corners.length];
+          return {
+            x: (corner.x + next.x) * 0.5,
+            y: (corner.y + next.y) * 0.5,
+          };
+        });
+        return [
+          { x: enemy.x, y: enemy.y + motion.offsetY },
+          ...corners,
+          ...edgeMidpoints,
+        ];
+      });
       const continuousPolygon = buildContinuousCapturePolygon(
         g.trail,
         perimeterBounds(g.width, g.height, g.cell),
         g.cell,
         g.claimedPolygons,
+        occupantPoints,
       );
       if (!continuousPolygon) {
         g.trail = [];
