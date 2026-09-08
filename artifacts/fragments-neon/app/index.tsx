@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Polygon, Polyline, Rect } from 'react-native-svg';
+import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -22,6 +23,7 @@ const EMPTY = 0;
 const CLAIMED = 1;
 const TRAIL = 2;
 const ZERO = { x: 0 as const, y: 0 as const };
+const pickupChimeSource = require('../assets/audio/pickup.mp3');
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -377,9 +379,9 @@ const createDiamond = (grid: number[][], width: number, cell: number): Diamond =
 };
 
 const diamondAnimationTransform = (diamond: Diamond) => ({
-  // A horizontal axis turn is represented by a restrained X compression.
-  // The vertical tips stay locked upright instead of rotating in the plane.
-  scaleX: 0.88 + Math.abs(Math.cos(diamond.phase)) * 0.12,
+  // Simulate a full horizontal spin around the vertical axis: the crystal
+  // narrows to its profile, then reveals its opposite face as it returns.
+  scaleX: Math.cos(diamond.phase),
 });
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
@@ -594,6 +596,18 @@ export default function GameScreen() {
   const spriteImagesRef = useRef<Record<string, any>>({});
   const diamondImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
+  const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
+
+  useEffect(() => {
+    pickupChimePlayer.volume = 0.78;
+    void setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
+    }).catch(() => undefined);
+  }, [pickupChimePlayer]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
@@ -795,6 +809,13 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
+      const continuousPolygon = buildContinuousCapturePolygon(
+        g.trail,
+        perimeterBounds(g.width, g.height, g.cell),
+        g.cell,
+      );
+      if (continuousPolygon) g.claimedPolygons.push(continuousPolygon);
+
       const rasterizedTrail = new Set<string>();
       const markTrailCell = (x: number, y: number) => {
         const cellX = Math.floor(x / g.cell);
@@ -1326,7 +1347,7 @@ export default function GameScreen() {
           life: particle.life - dt,
         }))
         .filter((particle) => particle.life > 0);
-      if (!g.diamond.collected) g.diamond.phase += dt * 1.8;
+      if (!g.diamond.collected) g.diamond.phase += dt * 2.6;
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
@@ -1374,6 +1395,9 @@ export default function GameScreen() {
           g.scanY = 0;
           g.completedTrail = [];
           g.score += Math.max(100, g.pendingCaptureCells * 20);
+          void pickupChimePlayer.seekTo(0)
+            .catch(() => undefined)
+            .then(() => pickupChimePlayer.play());
           g.pendingCaptureCells = 0;
         }
       }
@@ -1539,6 +1563,15 @@ export default function GameScreen() {
           if (g.grid[y][x] === CLAIMED) context.fillRect(x * g.cell, y * g.cell, g.cell + 0.5, g.cell + 0.5);
         }
       }
+       context.fillStyle = 'rgba(0,243,255,0.14)';
+       g.claimedPolygons.forEach((polygon) => {
+         if (polygon.length < 3) return;
+         context.beginPath();
+         context.moveTo(polygon[0].x, polygon[0].y);
+         polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+         context.closePath();
+         context.fill();
+       });
 
       context.globalCompositeOperation = 'lighter';
       context.strokeStyle = '#00f3ff';
@@ -1690,6 +1723,7 @@ export default function GameScreen() {
              diamond: { ...g.diamond },
              particles: g.particles.slice(-1000),
              smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
+             claimedPolygons: g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point }))),
             scanY: g.scanY,
           });
         }
@@ -1708,7 +1742,7 @@ export default function GameScreen() {
 
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
-  }, [resetGame, colors]);
+  }, [resetGame, colors, pickupChimePlayer]);
 
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
@@ -1731,6 +1765,14 @@ export default function GameScreen() {
         {snapshot.claimed.map((run, index) => (
           <Rect key={`claimed${index}`} x={run.x * snapshot.cell} y={run.y * snapshot.cell} width={run.w * snapshot.cell} height={snapshot.cell} fill="#00f3ff" opacity={0.1} />
         ))}
+         {snapshot.claimedPolygons.map((polygon, index) => (
+           <Polygon
+             key={`claimed-polygon-${index}`}
+             points={pointsToString(polygon)}
+             fill="#00f3ff"
+             opacity={0.14}
+           />
+         ))}
         <Rect x={snapshot.cell * PERIMETER_INSET_CELLS} y={snapshot.cell * PERIMETER_INSET_CELLS} width={snapshot.width - snapshot.cell * PERIMETER_INSET_CELLS * 2} height={snapshot.height - snapshot.cell * PERIMETER_INSET_CELLS * 2} fill="none" stroke="#00f3ff" strokeWidth={PERIMETER_STROKE_WIDTH} opacity={0.95} />
           {snapshot.completedTrail.length > 1 && <Polyline points={pointsToString(snapshot.completedTrail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
           {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
