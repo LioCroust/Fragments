@@ -672,13 +672,14 @@ export default function GameScreen() {
         }
 
         const probe = Math.max(g.cell * 0.6, visualRadius * 0.44);
-        const enclosed = (
+        const centerIsSafe = cellAt(enemy.x, enemy.y) === CLAIMED;
+        const enclosed = centerIsSafe && (
           cellAt(enemy.x - probe, enemy.y) === CLAIMED
           && cellAt(enemy.x + probe, enemy.y) === CLAIMED
           && cellAt(enemy.x, enemy.y - probe) === CLAIMED
           && cellAt(enemy.x, enemy.y + probe) === CLAIMED
         );
-        if (enclosed || (blockedX && blockedY)) {
+        if (enclosed) {
           enemy.blockedTime += dt;
           if (enemy.blockedTime > 0.38 && enemy.respawnAt <= now) burstEnemy(g, enemy, now);
         } else {
@@ -694,6 +695,38 @@ export default function GameScreen() {
           }
         }
       });
+
+      for (let firstIndex = 0; firstIndex < g.enemies.length; firstIndex += 1) {
+        const first = g.enemies[firstIndex];
+        if (first.respawnAt > now) continue;
+        for (let secondIndex = firstIndex + 1; secondIndex < g.enemies.length; secondIndex += 1) {
+          const second = g.enemies[secondIndex];
+          if (second.respawnAt > now) continue;
+          const dx = second.x - first.x;
+          const dy = second.y - first.y;
+          const distance = Math.hypot(dx, dy) || 0.001;
+          const firstRadius = enemyVisualRadius(first, g.cell) * 0.68;
+          const secondRadius = enemyVisualRadius(second, g.cell) * 0.68;
+          const minimumDistance = firstRadius + secondRadius;
+          if (distance >= minimumDistance) continue;
+
+          const normalX = dx / distance;
+          const normalY = dy / distance;
+          const correction = (minimumDistance - distance) * 0.52;
+          first.x = clamp(first.x - normalX * correction, bounds.left + firstRadius, bounds.right - firstRadius);
+          first.y = clamp(first.y - normalY * correction, bounds.top + firstRadius, bounds.bottom - firstRadius);
+          second.x = clamp(second.x + normalX * correction, bounds.left + secondRadius, bounds.right - secondRadius);
+          second.y = clamp(second.y + normalY * correction, bounds.top + secondRadius, bounds.bottom - secondRadius);
+
+          const relativeVelocity = (second.vx - first.vx) * normalX + (second.vy - first.vy) * normalY;
+          if (relativeVelocity < 0) {
+            first.vx += relativeVelocity * normalX * 0.7;
+            first.vy += relativeVelocity * normalY * 0.7;
+            second.vx -= relativeVelocity * normalX * 0.7;
+            second.vy -= relativeVelocity * normalY * 0.7;
+          }
+        }
+      }
     };
 
     const update = (g: Game, dt: number, now: number) => {
