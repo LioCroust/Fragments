@@ -28,6 +28,13 @@ type Point = { x: number; y: number };
 type Cell = { x: number; y: number };
 type Mode = 'SLOW';
 type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
+type SmokePuff = Point & {
+  life: number;
+  maxLife: number;
+  size: number;
+  driftX: number;
+  driftY: number;
+};
 type EnemyKind = 'SHIP' | 'DRAGON' | 'SEVEN' | 'SPIDER';
 type EnemyBehavior = 'PLANNED' | 'PRESET';
 type EnemyPattern = 'SWEEP' | 'ZIGZAG';
@@ -84,6 +91,8 @@ type Game = {
   enemies: Enemy[];
   diamond: Diamond;
   particles: Particle[];
+  smokePuffs: SmokePuff[];
+  smokeAccumulator: number;
   fillQueue: Cell[];
   fillCursor: number;
   scanY: number;
@@ -122,6 +131,7 @@ type Snapshot = {
   enemies: Enemy[];
   diamond: Diamond;
   particles: Particle[];
+  smokePuffs: SmokePuff[];
   scanY: number;
 };
 
@@ -544,6 +554,8 @@ export default function GameScreen() {
       enemies: createEnemies(width, height, cell, previousLevel),
       diamond: createDiamond(grid, width, cell),
       particles: [],
+      smokePuffs: [],
+      smokeAccumulator: 0,
       fillQueue: [],
       fillCursor: 0,
       scanY: 0,
