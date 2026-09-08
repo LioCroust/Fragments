@@ -349,33 +349,11 @@ const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) 
     for (let localX = -halfWidth; localX <= halfWidth + step * 0.5; localX += step) {
       points.push({
         x: x + localX * cos - localY * sin,
-        y: y + localX * sin + localY * cos,
+        y: y + motion.offsetY + localX * sin + localY * cos,
       });
     }
   }
   return points;
-};
-
-const enemyBoundaryMargins = (enemy: Enemy, cell: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell);
-  const motion = enemyAnimationTransform(enemy, cell);
-  const rotation = motion.rotation;
-  const halfWidth = sprite.width * 0.5;
-  const halfHeight = sprite.height * 0.5;
-  const rotatedHalfWidth = (
-    Math.abs(Math.cos(rotation)) * halfWidth
-    + Math.abs(Math.sin(rotation)) * halfHeight
-  ) * motion.scale + PERIMETER_STROKE_WIDTH * 0.5;
-  const rotatedHalfHeight = (
-    Math.abs(Math.sin(rotation)) * halfWidth
-    + Math.abs(Math.cos(rotation)) * halfHeight
-  ) * motion.scale + PERIMETER_STROKE_WIDTH * 0.5;
-
-  return {
-    x: rotatedHalfWidth,
-    y: rotatedHalfHeight,
-    offsetY: motion.offsetY,
-  };
 };
 
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
