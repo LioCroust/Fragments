@@ -711,12 +711,12 @@ export default function GameScreen() {
         enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
         enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
 
-        const visualRadius = enemyVisualRadius(enemy, g.cell) * (1 + Math.abs(Math.sin(enemy.phase * 1.25)) * 0.035);
-        const boundaryMargins = enemyBoundaryMargins(enemy, g.cell);
-        const minX = bounds.left + boundaryMargins.x;
-        const maxX = bounds.right - boundaryMargins.x;
-        const minY = bounds.top + boundaryMargins.y - boundaryMargins.offsetY;
-        const maxY = bounds.bottom - boundaryMargins.y - boundaryMargins.offsetY;
+        // Do not add a safety rectangle around the sprite here. The exact
+        // transformed footprint below is the collision boundary.
+        const minX = bounds.left;
+        const maxX = bounds.right;
+        const minY = bounds.top;
+        const maxY = bounds.bottom;
         const cellAt = (x: number, y: number) => {
           const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
           const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
@@ -727,6 +727,26 @@ export default function GameScreen() {
           if (x < minX || x > maxX || y < minY || y > maxY) return false;
           return enemySpriteFootprint(enemy, g.cell, x, y)
             .every((point) => cellAt(point.x, point.y) === EMPTY);
+        };
+        const bounceShipRandomly = () => {
+          const currentAngle = Math.atan2(enemy.vy, enemy.vx);
+          const step = Math.max(g.cell * 0.42, enemy.speed * dt * 2.2);
+          const candidateAngles = Array.from({ length: 12 }, (_, index) => (
+            currentAngle + Math.PI * 2 * (index / 12) + (Math.random() - 0.5) * 0.22
+          ));
+          const validAngles = candidateAngles.filter((angle) => (
+            enemyFitsAt(
+              enemy.x + Math.cos(angle) * step,
+              enemy.y + Math.sin(angle) * step,
+            )
+          ));
+          const angle = validAngles.length > 0
+            ? validAngles[Math.floor(Math.random() * validAngles.length)]
+            : currentAngle + Math.PI;
+          enemy.vx = Math.cos(angle) * enemy.speed * 0.82;
+          enemy.vy = Math.sin(angle) * enemy.speed * 0.82;
+          enemy.edgeTurnTimer = 0;
+          enemy.routePhase += Math.PI * (0.55 + Math.random() * 0.7);
         };
 
         const distanceToPlayer = Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y);
@@ -752,10 +772,9 @@ export default function GameScreen() {
                 x: clamp(g.player.x + Math.cos(candidateAngle) * candidateRadius, minX, maxX),
                 y: clamp(g.player.y + Math.sin(candidateAngle) * candidateRadius, minY, maxY),
               };
-              const candidateCell = cellAt(candidate.x, candidate.y);
               const playerDistance = Math.hypot(candidate.x - g.player.x, candidate.y - g.player.y);
               const headingDistance = Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y);
-              const blockedPenalty = candidateCell === CLAIMED ? 10000 : 0;
+              const blockedPenalty = enemyFitsAt(candidate.x, candidate.y) ? 0 : 10000;
               const score = blockedPenalty + Math.abs(playerDistance - idealDistance) * 2 + headingDistance * 0.08;
               if (score < bestScore) {
                 bestScore = score;
@@ -802,17 +821,22 @@ export default function GameScreen() {
 
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
-        const hitsBoundaryX = nextX < minX || nextX > maxX;
-        const hitsBoundaryY = nextY < minY || nextY > maxY;
+        const canMoveFull = enemyFitsAt(nextX, nextY);
+        const canMoveX = enemyFitsAt(nextX, enemy.y);
+        const canMoveY = enemyFitsAt(enemy.x, nextY);
+        const blockedX = nextX < minX || nextX > maxX || !canMoveX;
+        const blockedY = nextY < minY || nextY > maxY || !canMoveY;
         const turnAwayFromBlueEdge = (hitX: boolean, hitY: boolean) => {
           if (!hitX && !hitY) return;
           const centerDirectionX = Math.sign(g.width * 0.5 - enemy.x) || (Math.sin(enemy.routePhase) >= 0 ? 1 : -1);
           const centerDirectionY = Math.sign(g.height * 0.5 - enemy.y) || (Math.cos(enemy.routePhase) >= 0 ? 1 : -1);
+          const travelDirectionX = Math.sign(enemy.vx) || centerDirectionX;
+          const travelDirectionY = Math.sign(enemy.vy) || centerDirectionY;
           enemy.edgeDirectionX = hitX
-            ? (nextX < minX ? 1 : -1)
+            ? -travelDirectionX
             : centerDirectionX * 0.72;
           enemy.edgeDirectionY = hitY
-            ? (nextY < minY ? 1 : -1)
+            ? -travelDirectionY
             : centerDirectionY * 0.72;
           const edgeDirectionLength = Math.hypot(enemy.edgeDirectionX, enemy.edgeDirectionY) || 1;
           enemy.edgeDirectionX /= edgeDirectionLength;
@@ -822,25 +846,24 @@ export default function GameScreen() {
           enemy.vx = enemy.edgeDirectionX * enemy.speed * 0.78;
           enemy.vy = enemy.edgeDirectionY * enemy.speed * 0.78;
         };
-        const canMoveFull = enemyFitsAt(nextX, nextY);
-        const canMoveX = enemyFitsAt(nextX, enemy.y);
-        const canMoveY = enemyFitsAt(enemy.x, nextY);
-        if (canMoveFull) {
+        if (enemy.kind === 'SHIP' && !canMoveFull) {
+          bounceShipRandomly();
+        } else if (canMoveFull) {
           enemy.x = nextX;
           enemy.y = nextY;
         } else if (canMoveX) {
           enemy.x = nextX;
-          if (hitsBoundaryY) turnAwayFromBlueEdge(false, true);
+          if (blockedY) turnAwayFromBlueEdge(false, true);
           else enemy.vy *= -1;
         } else if (canMoveY) {
           enemy.y = nextY;
-          if (hitsBoundaryX) turnAwayFromBlueEdge(true, false);
+          if (blockedX) turnAwayFromBlueEdge(true, false);
           else enemy.vx *= -1;
         } else {
-          if (hitsBoundaryX || hitsBoundaryY) {
+          if (blockedX || blockedY) {
             enemy.x = clamp(enemy.x, minX, maxX);
             enemy.y = clamp(enemy.y, minY, maxY);
-            turnAwayFromBlueEdge(hitsBoundaryX, hitsBoundaryY);
+            turnAwayFromBlueEdge(blockedX, blockedY);
           } else {
             const escapeDistance = Math.max(g.cell * 0.72, bodyRadius * 1.18);
             const escapeDirections = [
