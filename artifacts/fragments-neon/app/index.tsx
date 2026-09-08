@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Image as RNImage,
   LayoutChangeEvent,
   PanResponder,
   Platform,
@@ -7,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Line, Polygon, Polyline, Rect } from 'react-native-svg';
+import Svg, { Circle, Image as SvgImage, Line, Polygon, Polyline, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -131,6 +132,50 @@ const qixPoints = (qix: Point & { phase: number }, radius: number, arm: number) 
 
 const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
 
+const spriteFrames: Record<EnemyKind, any[]> = {
+  SHIP: [
+    require('../assets/images/enemy-ship-frame-0.png'),
+    require('../assets/images/enemy-ship-frame-1.png'),
+    require('../assets/images/enemy-ship-frame-2.png'),
+    require('../assets/images/enemy-ship-frame-3.png'),
+    require('../assets/images/enemy-ship-frame-4.png'),
+    require('../assets/images/enemy-ship-frame-5.png'),
+  ],
+  DRAGON: [
+    require('../assets/images/enemy-dragon-frame-0.png'),
+    require('../assets/images/enemy-dragon-frame-1.png'),
+    require('../assets/images/enemy-dragon-frame-2.png'),
+    require('../assets/images/enemy-dragon-frame-3.png'),
+    require('../assets/images/enemy-dragon-frame-4.png'),
+    require('../assets/images/enemy-dragon-frame-5.png'),
+  ],
+  SEVEN: [
+    require('../assets/images/enemy-seven-branch-frame-0.png'),
+    require('../assets/images/enemy-seven-branch-frame-1.png'),
+    require('../assets/images/enemy-seven-branch-frame-2.png'),
+    require('../assets/images/enemy-seven-branch-frame-3.png'),
+    require('../assets/images/enemy-seven-branch-frame-4.png'),
+    require('../assets/images/enemy-seven-branch-frame-5.png'),
+  ],
+  SPIDER: [
+    require('../assets/images/enemy-spider-frame-0.png'),
+    require('../assets/images/enemy-spider-frame-1.png'),
+    require('../assets/images/enemy-spider-frame-2.png'),
+    require('../assets/images/enemy-spider-frame-3.png'),
+    require('../assets/images/enemy-spider-frame-4.png'),
+    require('../assets/images/enemy-spider-frame-5.png'),
+  ],
+};
+
+const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
+
+const enemySpriteSize = (kind: EnemyKind, cell: number) => {
+  if (kind === 'DRAGON') return { width: cell * 3.65, height: cell * 4.4 };
+  if (kind === 'SEVEN') return { width: cell * 4.4, height: cell * 4.4 };
+  if (kind === 'SPIDER') return { width: cell * 4.3, height: cell * 4.05 };
+  return { width: cell * 3.15, height: cell * 4.4 };
+};
+
 const enemyRadius = (enemy: Enemy, cell: number) => {
   if (enemy.kind === 'DRAGON') return cell * 1.35;
   if (enemy.kind === 'SPIDER') return cell * 1.15;
@@ -191,6 +236,30 @@ export default function GameScreen() {
     feedback: '',
   });
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
+  const spriteImagesRef = useRef<Record<string, any>>({});
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+
+    let cancelled = false;
+    Object.entries(spriteFrames).forEach(([kind, frames]) => {
+      frames.forEach((source, frame) => {
+        const resolved = (RNImage as any).resolveAssetSource?.(source);
+        const uri = resolved?.uri ?? source?.uri ?? source;
+        const image = new (globalThis as any).Image();
+        image.decoding = 'async';
+        image.onload = () => {
+          if (!cancelled) spriteImagesRef.current[`${kind}:${frame}`] = image;
+        };
+        image.src = uri;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      spriteImagesRef.current = {};
+    };
+  }, []);
 
   const resetGame = useCallback((preserveStats = false) => {
     const g = gameRef.current;
@@ -589,137 +658,23 @@ export default function GameScreen() {
       context.globalAlpha = 1;
 
       g.enemies.forEach((enemy) => {
-        const pulse = 0.82 + Math.sin(enemy.phase * 2.4) * 0.18;
+        const frame = enemyFrameIndex(enemy);
+        const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
+        if (!image) return;
+        const size = enemySpriteSize(enemy.kind, g.cell);
+        const rotation = enemy.kind === 'SHIP'
+          ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2
+          : enemy.kind === 'SEVEN'
+            ? enemy.spin
+            : 0;
         context.save();
         context.translate(enemy.x, enemy.y);
+        context.rotate(rotation);
         context.globalCompositeOperation = 'lighter';
-        context.shadowBlur = 14;
-
-        if (enemy.kind === 'SHIP') {
-          const heading = Math.atan2(enemy.vy, enemy.vx) + Math.sin(enemy.phase * 1.7) * 0.09;
-          context.rotate(heading);
-          context.shadowColor = '#00f3ff';
-          context.fillStyle = '#b9ffff';
-          context.beginPath();
-          context.moveTo(g.cell * 1.45, 0);
-          context.lineTo(-g.cell * 0.8, -g.cell * 0.72);
-          context.lineTo(-g.cell * 0.48, 0);
-          context.lineTo(-g.cell * 0.8, g.cell * 0.72);
-          context.closePath();
-          context.fill();
-          context.strokeStyle = '#00f3ff';
-          context.lineWidth = 1.4;
-          context.stroke();
-          context.fillStyle = '#ff2aa8';
-          context.shadowColor = '#ff2aa8';
-          context.beginPath();
-          context.arc(-g.cell * 0.42, 0, g.cell * 0.27 * pulse, 0, Math.PI * 2);
-          context.fill();
-          context.strokeStyle = '#ff8bd4';
-          context.beginPath();
-          context.moveTo(-g.cell * 0.95, -g.cell * 0.24);
-          context.lineTo(-g.cell * (1.38 + pulse * 0.25), -g.cell * 0.52);
-          context.moveTo(-g.cell * 0.95, g.cell * 0.24);
-          context.lineTo(-g.cell * (1.38 + pulse * 0.25), g.cell * 0.52);
-          context.stroke();
-        } else if (enemy.kind === 'DRAGON') {
-          context.shadowColor = '#ff0077';
-          context.strokeStyle = '#ff0077';
-          context.lineCap = 'round';
-          context.lineWidth = g.cell * 0.42;
-          context.beginPath();
-          for (let i = 0; i < 6; i += 1) {
-            const wave = Math.sin(enemy.phase * 2.1 + i * 0.9) * g.cell * 0.52;
-            const x = (i - 2.5) * g.cell * 0.52;
-            const y = wave;
-            if (i === 0) context.moveTo(x, y);
-            else context.lineTo(x, y);
-          }
-          context.stroke();
-          context.lineWidth = g.cell * 0.12;
-          context.strokeStyle = '#ff9bd6';
-          context.beginPath();
-          for (let i = 0; i < 6; i += 1) {
-            const wave = Math.sin(enemy.phase * 2.1 + i * 0.9) * g.cell * 0.52;
-            const x = (i - 2.5) * g.cell * 0.52;
-            if (i === 0) context.moveTo(x, wave);
-            else context.lineTo(x, wave);
-          }
-          context.stroke();
-          context.fillStyle = '#ff168f';
-          context.shadowColor = '#ff168f';
-          context.beginPath();
-          context.arc(g.cell * 1.55, Math.sin(enemy.phase * 2.1 + 5.2) * g.cell * 0.52, g.cell * 0.64, 0, Math.PI * 2);
-          context.fill();
-          context.fillStyle = '#ffb7e5';
-          context.beginPath();
-          context.arc(g.cell * 1.78, -g.cell * 0.22, g.cell * 0.11, 0, Math.PI * 2);
-          context.arc(g.cell * 1.78, g.cell * 0.22, g.cell * 0.11, 0, Math.PI * 2);
-          context.fill();
-          context.strokeStyle = '#ffb7e5';
-          context.lineWidth = g.cell * 0.11;
-          context.beginPath();
-          context.moveTo(g.cell * 1.75, g.cell * 0.2);
-          context.quadraticCurveTo(g.cell * 2.15, g.cell * 0.5, g.cell * 1.8, g.cell * 0.58);
-          context.stroke();
-        } else if (enemy.kind === 'SEVEN') {
-          context.rotate(enemy.spin + Math.sin(enemy.phase) * 0.08);
-          context.shadowColor = '#7b00ff';
-          context.strokeStyle = '#b778ff';
-          context.lineWidth = g.cell * 0.18;
-          for (let branch = 0; branch < 7; branch += 1) {
-            const angle = branch * (Math.PI * 2 / 7) + Math.sin(enemy.phase * 1.4 + branch) * 0.18;
-            const length = g.cell * (1.15 + (branch % 4) * 0.3);
-            context.beginPath();
-            context.moveTo(Math.cos(angle) * g.cell * 0.2, Math.sin(angle) * g.cell * 0.2);
-            context.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
-            context.stroke();
-            context.fillStyle = branch % 2 === 0 ? '#ff44bd' : '#00f3ff';
-            context.beginPath();
-            context.arc(Math.cos(angle) * length, Math.sin(angle) * length, g.cell * 0.16, 0, Math.PI * 2);
-            context.fill();
-          }
-          context.fillStyle = '#fff1ff';
-          context.shadowColor = '#ff0077';
-          context.beginPath();
-          context.arc(0, 0, g.cell * (0.45 + pulse * 0.13), 0, Math.PI * 2);
-          context.fill();
-          context.fillStyle = '#ff0077';
-          context.beginPath();
-          context.arc(0, 0, g.cell * 0.2, 0, Math.PI * 2);
-          context.fill();
-        } else {
-          context.shadowColor = '#00f3ff';
-          context.strokeStyle = '#00f3ff';
-          context.lineWidth = g.cell * 0.12;
-          for (let leg = 0; leg < 8; leg += 1) {
-            const angle = leg * (Math.PI * 2 / 8) + Math.sin(enemy.phase * 2 + leg) * 0.12;
-            const step = Math.sin(enemy.phase * 3.2 + leg * Math.PI) * g.cell * 0.28;
-            const knee = {
-              x: Math.cos(angle) * (g.cell * 0.82 + step),
-              y: Math.sin(angle) * (g.cell * 0.82 + step),
-            };
-            const foot = {
-              x: Math.cos(angle) * (g.cell * 1.65 + step * 1.2),
-              y: Math.sin(angle) * (g.cell * 1.65 + step * 1.2),
-            };
-            context.beginPath();
-            context.moveTo(Math.cos(angle) * g.cell * 0.32, Math.sin(angle) * g.cell * 0.32);
-            context.lineTo(knee.x, knee.y);
-            context.lineTo(foot.x, foot.y);
-            context.stroke();
-          }
-          context.fillStyle = '#ff44bd';
-          context.shadowColor = '#ff0077';
-          context.beginPath();
-          context.ellipse(0, 0, g.cell * 0.62, g.cell * 0.48, 0, 0, Math.PI * 2);
-          context.fill();
-          context.fillStyle = '#e4ffff';
-          context.beginPath();
-          context.arc(-g.cell * 0.2, -g.cell * 0.1, g.cell * 0.1, 0, Math.PI * 2);
-          context.arc(g.cell * 0.2, -g.cell * 0.1, g.cell * 0.1, 0, Math.PI * 2);
-          context.fill();
-        }
+        context.globalAlpha = 0.98;
+        context.shadowColor = enemy.kind === 'SHIP' || enemy.kind === 'SPIDER' ? '#00f3ff' : '#ff0077';
+        context.shadowBlur = 18;
+        context.drawImage(image, -size.width / 2, -size.height / 2, size.width, size.height);
         context.restore();
       });
 
@@ -838,68 +793,18 @@ export default function GameScreen() {
         {snapshot.trail.length > 1 && <Polyline points={pointsToString(snapshot.trail)} fill="none" stroke="#ff5500" strokeWidth={5} />}
         {snapshot.particles.map((particle, index) => <Circle key={`spark${index}`} cx={particle.x} cy={particle.y} r={particle.size} fill={particle.color} opacity={clamp(particle.life / 0.4, 0, 1)} />)}
          {snapshot.enemies.map((enemy, enemyIndex) => {
-           const pulse = 0.82 + Math.sin(enemy.phase * 2.4) * 0.18;
-           const enemyKey = `enemy${enemyIndex}`;
-           if (enemy.kind === 'SHIP') {
-             const angle = Math.atan2(enemy.vy, enemy.vx) + Math.sin(enemy.phase * 1.7) * 0.09;
-             const point = (distance: number, offset: number) => `${enemy.x + Math.cos(angle + offset) * distance},${enemy.y + Math.sin(angle + offset) * distance}`;
-             return (
-               <React.Fragment key={enemyKey}>
-                 <Polygon points={[point(snapshot.cell * 1.45, 0), point(snapshot.cell * 0.8, 2.45), point(snapshot.cell * 0.48, Math.PI), point(snapshot.cell * 0.8, -2.45)].join(' ')} fill="#b9ffff" stroke="#00f3ff" strokeWidth={1.4} />
-                 <Circle cx={enemy.x - Math.cos(angle) * snapshot.cell * 0.42} cy={enemy.y - Math.sin(angle) * snapshot.cell * 0.42} r={snapshot.cell * 0.27 * pulse} fill="#ff2aa8" />
-                 <Line x1={enemy.x - Math.cos(angle) * snapshot.cell * 0.95 + Math.sin(angle) * snapshot.cell * 0.24} y1={enemy.y - Math.sin(angle) * snapshot.cell * 0.95 - Math.cos(angle) * snapshot.cell * 0.24} x2={enemy.x - Math.cos(angle) * snapshot.cell * (1.38 + pulse * 0.25) + Math.sin(angle) * snapshot.cell * 0.52} y2={enemy.y - Math.sin(angle) * snapshot.cell * (1.38 + pulse * 0.25) - Math.cos(angle) * snapshot.cell * 0.52} stroke="#ff8bd4" strokeWidth={1.2} />
-                 <Line x1={enemy.x - Math.cos(angle) * snapshot.cell * 0.95 - Math.sin(angle) * snapshot.cell * 0.24} y1={enemy.y - Math.sin(angle) * snapshot.cell * 0.95 + Math.cos(angle) * snapshot.cell * 0.24} x2={enemy.x - Math.cos(angle) * snapshot.cell * (1.38 + pulse * 0.25) - Math.sin(angle) * snapshot.cell * 0.52} y2={enemy.y - Math.sin(angle) * snapshot.cell * (1.38 + pulse * 0.25) + Math.cos(angle) * snapshot.cell * 0.52} stroke="#ff8bd4" strokeWidth={1.2} />
-               </React.Fragment>
-             );
-           }
-           if (enemy.kind === 'DRAGON') {
-             const body = Array.from({ length: 6 }).map((_, segment) => {
-               const wave = Math.sin(enemy.phase * 2.1 + segment * 0.9) * snapshot.cell * 0.52;
-               return `${enemy.x + (segment - 2.5) * snapshot.cell * 0.52},${enemy.y + wave}`;
-             }).join(' ');
-             const headY = enemy.y + Math.sin(enemy.phase * 2.1 + 5.2) * snapshot.cell * 0.52;
-             return (
-               <React.Fragment key={enemyKey}>
-                 <Polyline points={body} fill="none" stroke="#ff0077" strokeWidth={snapshot.cell * 0.42} strokeLinecap="round" />
-                 <Polyline points={body} fill="none" stroke="#ff9bd6" strokeWidth={snapshot.cell * 0.12} />
-                 <Circle cx={enemy.x + snapshot.cell * 1.55} cy={headY} r={snapshot.cell * 0.64} fill="#ff168f" />
-                 <Circle cx={enemy.x + snapshot.cell * 1.78} cy={headY - snapshot.cell * 0.22} r={snapshot.cell * 0.11} fill="#ffb7e5" />
-                 <Circle cx={enemy.x + snapshot.cell * 1.78} cy={headY + snapshot.cell * 0.22} r={snapshot.cell * 0.11} fill="#ffb7e5" />
-                 <Polyline points={`${enemy.x + snapshot.cell * 1.75},${headY + snapshot.cell * 0.2} ${enemy.x + snapshot.cell * 2.15},${headY + snapshot.cell * 0.5} ${enemy.x + snapshot.cell * 1.8},${headY + snapshot.cell * 0.58}`} fill="none" stroke="#ffb7e5" strokeWidth={snapshot.cell * 0.11} />
-               </React.Fragment>
-             );
-           }
-           if (enemy.kind === 'SEVEN') {
-             return (
-               <React.Fragment key={enemyKey}>
-                 {Array.from({ length: 7 }).map((_, branch) => {
-                   const angle = enemy.spin + branch * (Math.PI * 2 / 7) + Math.sin(enemy.phase * 1.4 + branch) * 0.18;
-                   const length = snapshot.cell * (1.15 + (branch % 4) * 0.3);
-                   return (
-                     <React.Fragment key={`${enemyKey}b${branch}`}>
-                       <Line x1={enemy.x + Math.cos(angle) * snapshot.cell * 0.2} y1={enemy.y + Math.sin(angle) * snapshot.cell * 0.2} x2={enemy.x + Math.cos(angle) * length} y2={enemy.y + Math.sin(angle) * length} stroke="#b778ff" strokeWidth={snapshot.cell * 0.18} />
-                       <Circle cx={enemy.x + Math.cos(angle) * length} cy={enemy.y + Math.sin(angle) * length} r={snapshot.cell * 0.16} fill={branch % 2 === 0 ? '#ff44bd' : '#00f3ff'} />
-                     </React.Fragment>
-                   );
-                 })}
-                 <Circle cx={enemy.x} cy={enemy.y} r={snapshot.cell * (0.45 + pulse * 0.13)} fill="#fff1ff" />
-                 <Circle cx={enemy.x} cy={enemy.y} r={snapshot.cell * 0.2} fill="#ff0077" />
-               </React.Fragment>
-             );
-           }
+           const frame = enemyFrameIndex(enemy);
+           const size = enemySpriteSize(enemy.kind, snapshot.cell);
            return (
-             <React.Fragment key={enemyKey}>
-               {Array.from({ length: 8 }).map((_, leg) => {
-                 const angle = leg * (Math.PI * 2 / 8) + Math.sin(enemy.phase * 2 + leg) * 0.12;
-                 const step = Math.sin(enemy.phase * 3.2 + leg * Math.PI) * snapshot.cell * 0.28;
-                 const kneeDistance = snapshot.cell * 0.82 + step;
-                 const footDistance = snapshot.cell * 1.65 + step * 1.2;
-                 return <Polyline key={`${enemyKey}l${leg}`} points={`${enemy.x + Math.cos(angle) * snapshot.cell * 0.32},${enemy.y + Math.sin(angle) * snapshot.cell * 0.32} ${enemy.x + Math.cos(angle) * kneeDistance},${enemy.y + Math.sin(angle) * kneeDistance} ${enemy.x + Math.cos(angle) * footDistance},${enemy.y + Math.sin(angle) * footDistance}`} fill="none" stroke="#00f3ff" strokeWidth={snapshot.cell * 0.12} />;
-               })}
-               <Circle cx={enemy.x} cy={enemy.y} r={snapshot.cell * 0.58} fill="#ff44bd" />
-               <Circle cx={enemy.x - snapshot.cell * 0.2} cy={enemy.y - snapshot.cell * 0.1} r={snapshot.cell * 0.1} fill="#e4ffff" />
-               <Circle cx={enemy.x + snapshot.cell * 0.2} cy={enemy.y - snapshot.cell * 0.1} r={snapshot.cell * 0.1} fill="#e4ffff" />
-             </React.Fragment>
+             <SvgImage
+               key={`enemy-sprite-${enemyIndex}`}
+               href={spriteFrames[enemy.kind][frame]}
+               x={enemy.x - size.width / 2}
+               y={enemy.y - size.height / 2}
+               width={size.width}
+               height={size.height}
+               opacity={0.98}
+             />
            );
          })}
         {Array.from({ length: 10 }).map((_, arm) => <Polyline key={`qix${arm}`} points={pointsToString([{ x: snapshot.qix.x, y: snapshot.qix.y }, ...qixPoints(snapshot.qix, snapshot.cell * (2.3 + (arm % 3) * 0.35), arm)])} fill="none" stroke={arm % 2 === 0 ? '#7b00ff' : '#ff0077'} strokeWidth={2} />)}
