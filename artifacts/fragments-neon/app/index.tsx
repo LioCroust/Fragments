@@ -1050,15 +1050,19 @@ export default function GameScreen() {
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
-      g.smokePuffs = g.smokePuffs
-        .map((puff) => ({
-          ...puff,
-          x: puff.x + puff.driftX * dt,
-          y: puff.y + puff.driftY * dt,
-          life: puff.life - dt,
-          size: puff.size + g.cell * dt * 0.08,
-        }))
-        .filter((puff) => puff.life > 0);
+      let activeSmokeCount = 0;
+      for (let index = 0; index < g.smokePuffs.length; index += 1) {
+        const puff = g.smokePuffs[index];
+        puff.x += puff.driftX * dt;
+        puff.y += puff.driftY * dt;
+        puff.life -= dt;
+        puff.size += g.cell * dt * 0.08;
+        if (puff.life > 0) {
+          g.smokePuffs[activeSmokeCount] = puff;
+          activeSmokeCount += 1;
+        }
+      }
+      g.smokePuffs.length = activeSmokeCount;
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         if (enemy.respawnAt > 0) {
@@ -1444,16 +1448,20 @@ export default function GameScreen() {
 
     const update = (g: Game, dt: number, now: number) => {
       g.frame += 1;
-      g.particles = g.particles
-        .map((particle) => ({
-          ...particle,
-          x: particle.x + particle.vx * dt,
-          y: particle.y + particle.vy * dt,
-          vx: particle.vx * 0.95,
-          vy: particle.vy * 0.95,
-          life: particle.life - dt,
-        }))
-        .filter((particle) => particle.life > 0);
+      let activeParticleCount = 0;
+      for (let index = 0; index < g.particles.length; index += 1) {
+        const particle = g.particles[index];
+        particle.x += particle.vx * dt;
+        particle.y += particle.vy * dt;
+        particle.vx *= 0.95;
+        particle.vy *= 0.95;
+        particle.life -= dt;
+        if (particle.life > 0) {
+          g.particles[activeParticleCount] = particle;
+          activeParticleCount += 1;
+        }
+      }
+      g.particles.length = activeParticleCount;
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
@@ -1791,21 +1799,21 @@ export default function GameScreen() {
       if (g.initialized) {
         update(g, dt, now);
         drawCanvas(g, now);
-        if (Platform.OS !== 'web' && g.frame % 2 === 0) {
+        if (Platform.OS !== 'web') {
           setNativeSnapshot({
             width: g.width,
             height: g.height,
             cell: g.cell,
             rows: g.rows,
-            trail: [...g.trail],
-             protectedTrails: g.protectedTrails.map((trail) => trail.map((point) => ({ ...point }))),
+            trail: g.trail,
+             protectedTrails: g.protectedTrails,
             player: { ...g.player },
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
              diamond: { ...g.diamond },
              particles: g.particles.slice(-120),
-             smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
-             claimedPolygons: g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point }))),
+             smokePuffs: g.smokePuffs,
+             claimedPolygons: g.claimedPolygons,
             scanY: g.scanY,
           });
         }
