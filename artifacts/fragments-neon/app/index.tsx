@@ -19,15 +19,11 @@ const PERIMETER_INSET_CELLS = 2;
 const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
-const EMPTY = 0;
-const CLAIMED = 1;
-const TRAIL = 2;
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
-type Cell = { x: number; y: number };
 type Mode = 'SLOW';
 type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
 type SmokePuff = Point & {
@@ -81,7 +77,6 @@ type Game = {
   height: number;
   cell: number;
   rows: number;
-  grid: number[][];
   player: Point;
   inputDir: Direction;
   facingDir: Direction;
@@ -96,18 +91,19 @@ type Game = {
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
   claimedPolygons: Point[][];
-  fillQueue: Cell[];
+  pendingCapturePolygon: Point[] | null;
+  fillQueue: number[];
   fillCursor: number;
   scanY: number;
   mode: Mode;
   score: number;
   shields: number;
-  captured: number;
-  totalEmpty: number;
+  capturedArea: number;
+  totalPlayableArea: number;
+  pendingCaptureArea: number;
   level: number;
   frame: number;
   trailScoreAccumulator: number;
-  pendingCaptureCells: number;
   initialized: boolean;
   status: 'PLAYING' | 'RESPAWN';
   respawnAt: number;
@@ -221,50 +217,80 @@ const polygonArea = (polygon: Point[]) => Math.abs(polygon.reduce((area, point, 
   return area + point.x * next.y - next.x * point.y;
 }, 0) * 0.5);
 
-const buildContinuousCapturePolygon = (trail: Point[], bounds: ReturnType<typeof perimeterBounds>, cell: number) => {
+const polygonBoundaryDistance = (point: Point, polygon: Point[]) => {
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygon.length; index += 1) {
+    nearest = Math.min(
+      nearest,
+      distanceToSegment(point, polygon[index], polygon[(index + 1) % polygon.length]),
+    );
+  }
+  return nearest;
+};
+
+const polygonCentroid = (polygon: Point[]) => polygon.reduce(
+  (center, point) => ({ x: center.x + point.x / polygon.length, y: center.y + point.y / polygon.length }),
+  { x: 0, y: 0 },
+);
+
+const buildContinuousCapturePolygon = (
+  trail: Point[],
+  bounds: ReturnType<typeof perimeterBounds>,
+  cell: number,
+  claimedPolygons: Point[][],
+) => {
   if (trail.length < 3) return null;
+  const perimeterSamples = 128;
+  const perimeterLoop = Array.from(
+    { length: perimeterSamples },
+    (_, index) => perimeterPointAt(bounds, index / perimeterSamples),
+  );
   const start = trail[0];
   const end = trail[trail.length - 1];
-  if (distanceToPerimeter(start, bounds) > cell * 1.5 || distanceToPerimeter(end, bounds) > cell * 1.5) return null;
+  const boundaryLoops = [perimeterLoop, ...claimedPolygons];
+  const startLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(start, loop) <= cell * 1.5);
+  const endLoopIndex = boundaryLoops.findIndex((loop) => polygonBoundaryDistance(end, loop) <= cell * 1.5);
+  if (startLoopIndex < 0 || startLoopIndex !== endLoopIndex) return null;
 
-  const perimeterSamples = 128;
-  const nearestPerimeterIndex = (point: Point) => {
+  const boundaryLoop = boundaryLoops[startLoopIndex];
+  const nearestBoundaryIndex = (point: Point) => {
     let nearestIndex = 0;
     let nearestDistance = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < perimeterSamples; index += 1) {
-      const perimeterPoint = perimeterPointAt(bounds, index / perimeterSamples);
-      const distance = Math.hypot(point.x - perimeterPoint.x, point.y - perimeterPoint.y);
+    boundaryLoop.forEach((boundaryPoint, index) => {
+      const distance = Math.hypot(point.x - boundaryPoint.x, point.y - boundaryPoint.y);
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearestIndex = index;
       }
-    }
+    });
     return nearestIndex;
   };
-  const startIndex = nearestPerimeterIndex(start);
-  const endIndex = nearestPerimeterIndex(end);
+  const startIndex = nearestBoundaryIndex(start);
+  const endIndex = nearestBoundaryIndex(end);
   const boundaryArc = (from: number, to: number) => {
     const points: Point[] = [];
     let index = from;
-    for (let count = 0; count <= perimeterSamples; count += 1) {
-      points.push(perimeterPointAt(bounds, index / perimeterSamples));
+    for (let count = 0; count <= boundaryLoop.length; count += 1) {
+      points.push(boundaryLoop[index]);
       if (index === to) break;
-      index = (index + 1) % perimeterSamples;
+      index = (index + 1) % boundaryLoop.length;
     }
     return points;
   };
-  const firstCandidate = [
-    ...trail,
-    ...boundaryArc(endIndex, startIndex).slice(1),
-  ];
-  const reverseTrail = [...trail].reverse();
-  const secondCandidate = [
-    ...reverseTrail,
-    ...boundaryArc(startIndex, endIndex).slice(1),
-  ];
-  return polygonArea(firstCandidate) <= polygonArea(secondCandidate)
-    ? firstCandidate
-    : secondCandidate;
+  const candidates = [
+    [...trail, ...boundaryArc(endIndex, startIndex).slice(1)],
+    [...trail.slice().reverse(), ...boundaryArc(startIndex, endIndex).slice(1)],
+  ].filter((polygon) => polygonArea(polygon) > cell * cell * 0.25);
+  if (candidates.length === 0) return null;
+
+  const outsideExistingClaim = candidates.filter((polygon) => {
+    const center = polygonCentroid(polygon);
+    return claimedPolygons.every((claimedPolygon) => !pointInPolygon(center, claimedPolygon));
+  });
+  const selectable = outsideExistingClaim.length > 0 ? outsideExistingClaim : candidates;
+  return selectable.reduce((smallest, polygon) => (
+    polygonArea(polygon) < polygonArea(smallest) ? polygon : smallest
+  ));
 };
 
 const pointInsidePerimeter = (point: Point, bounds: ReturnType<typeof perimeterBounds>) => (
@@ -346,16 +372,11 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 const diamondSource = require('../assets/images/neon-diamond-fragment.png');
 const playerSource = require('../assets/images/player-drone-prism-arrow.png');
 
-const createDiamond = (grid: number[][], width: number, cell: number): Diamond => {
-  const emptyCells: Cell[] = [];
-  grid.forEach((row, y) => row.forEach((state, x) => {
-    if (state === EMPTY) emptyCells.push({ x, y });
-  }));
-  const cellPosition = emptyCells[Math.floor(Math.random() * Math.max(1, emptyCells.length))]
-    ?? { x: SAFE_BAND_CELLS + 1, y: SAFE_BAND_CELLS + 1 };
+const createDiamond = (width: number, height: number, cell: number): Diamond => {
+  const bounds = perimeterBounds(width, height, cell);
   return {
-    x: (cellPosition.x + 0.5) * cell,
-    y: (cellPosition.y + 0.5) * cell,
+    x: bounds.left + cell * (1.5 + Math.random() * Math.max(1, (bounds.right - bounds.left) / cell - 3)),
+    y: bounds.top + cell * (1.5 + Math.random() * Math.max(1, (bounds.bottom - bounds.top) / cell - 3)),
     phase: Math.random() * Math.PI * 2,
     collected: false,
   };
@@ -495,6 +516,14 @@ const pointInPolygon = (point: Point, polygon: Point[]) => {
   return inside;
 };
 
+const pointInsideClaimedSurface = (point: Point, claimedPolygons: Point[][], tolerance = 0) => (
+  claimedPolygons.some((polygon) => (
+    pointInPolygon(point, polygon) || (
+      tolerance > 0 && polygonBoundaryDistance(point, polygon) <= tolerance
+    )
+  ))
+);
+
 const segmentsIntersect = (firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point) => {
   const orientation = (a: Point, b: Point, c: Point) => (
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
@@ -505,6 +534,29 @@ const segmentsIntersect = (firstStart: Point, firstEnd: Point, secondStart: Poin
   const fourth = orientation(secondStart, secondEnd, firstEnd);
   return ((first > 0 && second < 0) || (first < 0 && second > 0))
     && ((third > 0 && fourth < 0) || (third < 0 && fourth > 0));
+};
+
+const polygonsIntersect = (first: Point[], second: Point[]) => {
+  if (first.some((point) => pointInPolygon(point, second))
+    || second.some((point) => pointInPolygon(point, first))) {
+    return true;
+  }
+  for (let firstIndex = 0; firstIndex < first.length; firstIndex += 1) {
+    const firstStart = first[firstIndex];
+    const firstEnd = first[(firstIndex + 1) % first.length];
+    for (let secondIndex = 0; secondIndex < second.length; secondIndex += 1) {
+      const secondStart = second[secondIndex];
+      const secondEnd = second[(secondIndex + 1) % second.length];
+      if (
+        segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)
+        || distanceToSegment(firstStart, secondStart, secondEnd) <= 0.001
+        || distanceToSegment(secondStart, firstStart, firstEnd) <= 0.001
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 };
 
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
@@ -530,7 +582,6 @@ export default function GameScreen() {
     height: 0,
     cell: 0,
     rows: 0,
-    grid: [],
     player: { x: 0, y: 0 },
     inputDir: ZERO,
     facingDir: { x: 0, y: 1 },
@@ -545,18 +596,19 @@ export default function GameScreen() {
     smokePuffs: [],
     smokeAccumulator: 0,
     claimedPolygons: [],
+    pendingCapturePolygon: null,
     fillQueue: [],
     fillCursor: 0,
     scanY: 0,
     mode: 'SLOW',
     score: 0,
     shields: 3,
-    captured: 0,
-    totalEmpty: 1,
+    capturedArea: 0,
+    totalPlayableArea: 1,
+    pendingCaptureArea: 0,
     level: 1,
     frame: 0,
     trailScoreAccumulator: 0,
-    pendingCaptureCells: 0,
     initialized: false,
     status: 'PLAYING',
     respawnAt: 0,
@@ -636,18 +688,7 @@ export default function GameScreen() {
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
-    const grid: number[][] = [];
-    let totalEmpty = 0;
-
-    for (let y = 0; y < rows; y += 1) {
-      const row: number[] = [];
-      for (let x = 0; x < COLS; x += 1) {
-        const safe = x < SAFE_BAND_CELLS || x >= COLS - SAFE_BAND_CELLS || y < SAFE_BAND_CELLS || y >= rows - SAFE_BAND_CELLS;
-        row.push(safe ? CLAIMED : EMPTY);
-        if (!safe) totalEmpty += 1;
-      }
-      grid.push(row);
-    }
+    const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
 
     gameRef.current = {
       ...g,
@@ -655,7 +696,6 @@ export default function GameScreen() {
       height,
       cell,
       rows,
-      grid,
       player: { x: (SAFE_BAND_CELLS + 1) * cell, y: bounds.bottom + cell * PLAYER_RADIUS_CELLS },
       inputDir: ZERO,
       facingDir: { x: 0, y: -1 },
@@ -665,23 +705,24 @@ export default function GameScreen() {
       trail: [],
       completedTrail: [],
       enemies: createEnemies(width, height, cell, previousLevel),
-      diamond: createDiamond(grid, width, cell),
+      diamond: createDiamond(width, height, cell),
       particles: [],
       smokePuffs: [],
       smokeAccumulator: 0,
       claimedPolygons: [],
+      pendingCapturePolygon: null,
       fillQueue: [],
       fillCursor: 0,
       scanY: 0,
       mode: 'SLOW',
       score: previousScore,
       shields: previousShields,
-      captured: 0,
-      totalEmpty,
+      capturedArea: 0,
+      totalPlayableArea,
+      pendingCaptureArea: 0,
       level: previousLevel,
       frame: 0,
       trailScoreAccumulator: 0,
-      pendingCaptureCells: 0,
       initialized: true,
       status: 'PLAYING',
       respawnAt: 0,
@@ -770,11 +811,6 @@ export default function GameScreen() {
           color: i % 3 === 0 ? '#ffffff' : '#ff6a00',
         });
       }
-      g.trail.forEach((point) => {
-        const x = Math.floor(point.x / g.cell);
-        const y = Math.floor(point.y / g.cell);
-        if (g.grid[y]?.[x] === TRAIL) g.grid[y][x] = EMPTY;
-      });
       g.trail = [];
       g.completedTrail = [];
       g.inputDir = ZERO;
@@ -790,85 +826,22 @@ export default function GameScreen() {
         g.trail,
         perimeterBounds(g.width, g.height, g.cell),
         g.cell,
+        g.claimedPolygons,
       );
-      if (continuousPolygon) g.claimedPolygons.push(continuousPolygon);
-
-      const rasterizedTrail = new Set<string>();
-      const markTrailCell = (x: number, y: number) => {
-        const cellX = Math.floor(x / g.cell);
-        const cellY = Math.floor(y / g.cell);
-        if (cellX < 0 || cellX >= COLS || cellY < 0 || cellY >= g.rows) return;
-        if (g.grid[cellY][cellX] === EMPTY || g.grid[cellY][cellX] === TRAIL) {
-          g.grid[cellY][cellX] = TRAIL;
-          rasterizedTrail.add(`${cellX}:${cellY}`);
-        }
-      };
-      for (let index = 1; index < g.trail.length; index += 1) {
-        const start = g.trail[index - 1];
-        const end = g.trail[index];
-        const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
-        const samples = Math.max(1, Math.ceil(segmentLength / Math.max(2, g.cell * 0.2)));
-        for (let sample = 0; sample <= samples; sample += 1) {
-          const progress = sample / samples;
-          markTrailCell(
-            start.x + (end.x - start.x) * progress,
-            start.y + (end.y - start.y) * progress,
-          );
-        }
+      if (!continuousPolygon) {
+        g.trail = [];
+        g.completedTrail = [];
+        return;
       }
 
-      const visited = Array.from({ length: g.rows }, () => Array(COLS).fill(false));
-      const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      const components: Cell[][] = [];
-
-      for (let startY = 0; startY < g.rows; startY += 1) {
-        for (let startX = 0; startX < COLS; startX += 1) {
-          if (visited[startY][startX] || g.grid[startY][startX] !== EMPTY) continue;
-          const component: Cell[] = [];
-          const queue: Cell[] = [{ x: startX, y: startY }];
-          visited[startY][startX] = true;
-
-          while (queue.length > 0) {
-            const current = queue.shift()!;
-            component.push(current);
-            directions.forEach(([dx, dy]) => {
-              const x = current.x + dx;
-              const y = current.y + dy;
-              if (x >= 0 && x < COLS && y >= 0 && y < g.rows && !visited[y][x] && g.grid[y][x] === EMPTY) {
-                visited[y][x] = true;
-                queue.push({ x, y });
-              }
-            });
-          }
-          components.push(component);
-        }
-      }
-
-      // The largest empty component is the remaining playable field. Any
-      // smaller component is a genuinely enclosed pocket and must be filled.
-      components.sort((first, second) => second.length - first.length);
-
-      g.fillQueue = [];
-      components.slice(1).forEach((component) => {
-        g.fillQueue.push(...component);
-      });
-      const queuedCells = new Set(g.fillQueue.map((cell) => `${cell.x}:${cell.y}`));
-      rasterizedTrail.forEach((key) => {
-        const [x, y] = key.split(':').map(Number);
-        if (!queuedCells.has(key)) {
-          queuedCells.add(key);
-          g.fillQueue.push({ x, y });
-        }
-      });
-      g.trail.forEach((point) => {
-        const cell = { x: Math.floor(point.x / g.cell), y: Math.floor(point.y / g.cell) };
-        const key = `${cell.x}:${cell.y}`;
-        if (!queuedCells.has(key)) {
-          queuedCells.add(key);
-          g.fillQueue.push(cell);
-        }
-      });
-      g.pendingCaptureCells = g.fillQueue.length;
+      const area = polygonArea(continuousPolygon);
+      g.pendingCapturePolygon = continuousPolygon;
+      g.pendingCaptureArea = area;
+      // These are only timing units for the scan animation. They are not
+      // cells and never participate in collision, capture, or scoring.
+      g.fillQueue = Array.from({
+        length: Math.max(18, Math.min(240, Math.ceil(area / Math.max(1, g.cell * g.cell * 0.65)))),
+      }, (_, index) => index);
       g.completedTrail = [...g.trail];
       g.trail = [];
       g.fillCursor = 0;
@@ -888,11 +861,8 @@ export default function GameScreen() {
       const candidate = candidates.find((point) => {
         const x = clamp(point.x, bounds.left + visualRadius, bounds.right - visualRadius);
         const y = clamp(point.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
-        return enemySpriteFootprint(enemy, g.cell, x, y).every((sample) => {
-          const cx = clamp(Math.floor(sample.x / g.cell), 0, COLS - 1);
-          const cy = clamp(Math.floor(sample.y / g.cell), 0, g.rows - 1);
-          return g.grid[cy]?.[cx] === EMPTY;
-        });
+        const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
+        return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
       }) ?? candidates[0];
       enemy.x = clamp(candidate.x, bounds.left + visualRadius, bounds.right - visualRadius);
       enemy.y = clamp(candidate.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
@@ -959,24 +929,16 @@ export default function GameScreen() {
         const maxX = bounds.right;
         const minY = bounds.top;
         const maxY = bounds.bottom;
-        const cellAt = (x: number, y: number) => {
-          const cx = clamp(Math.floor(x / g.cell), 0, COLS - 1);
-          const cy = clamp(Math.floor(y / g.cell), 0, g.rows - 1);
-          return g.grid[cy]?.[cx] ?? CLAIMED;
-        };
         const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
         const enemyFitsAt = (x: number, y: number) => {
           if (x < minX || x > maxX || y < minY || y > maxY) return false;
-          return enemySpriteFootprint(enemy, g.cell, x, y)
-            .every((point) => cellAt(point.x, point.y) === EMPTY);
+          const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
         };
         const enemyCanMoveAt = (x: number, y: number) => {
           if (x < minX || x > maxX || y < minY || y > maxY) return false;
-          return enemySpriteFootprint(enemy, g.cell, x, y)
-            .every((point) => {
-              const state = cellAt(point.x, point.y);
-              return state === EMPTY || state === TRAIL;
-            });
+          const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
         };
         const enemyTouchesTrail = (x: number, y: number) => {
           if (g.trail.length < 2) return false;
@@ -1002,9 +964,9 @@ export default function GameScreen() {
           return;
         }
         const fullyEnclosedAt = (x: number, y: number) => (
-          cellAt(x, y) === CLAIMED
+          pointInsideClaimedSurface({ x, y }, g.claimedPolygons, g.cell * 0.08)
           && enemySpriteFootprint(enemy, g.cell, x, y)
-            .every((point) => cellAt(point.x, point.y) === CLAIMED)
+            .every((point) => pointInsideClaimedSurface(point, g.claimedPolygons, g.cell * 0.08))
         );
         const recoverShipFromSoftContact = () => {
           if (enemyFitsAt(enemy.x, enemy.y) || fullyEnclosedAt(enemy.x, enemy.y)) return;
@@ -1235,10 +1197,14 @@ export default function GameScreen() {
           }
         }
 
-        const centerIsSafe = cellAt(enemy.x, enemy.y) === CLAIMED;
+        const centerIsSafe = pointInsideClaimedSurface(
+          { x: enemy.x, y: enemy.y },
+          g.claimedPolygons,
+          g.cell * 0.08,
+        );
         const enclosed = centerIsSafe
           && enemySpriteFootprint(enemy, g.cell, enemy.x, enemy.y)
-            .every((point) => cellAt(point.x, point.y) === CLAIMED);
+            .every((point) => pointInsideClaimedSurface(point, g.claimedPolygons, g.cell * 0.08));
         if (enclosed) {
           enemy.blockedTime += dt;
           if (enemy.blockedTime > 0.38 && enemy.respawnAt <= now) burstEnemy(g, enemy, now);
@@ -1334,17 +1300,18 @@ export default function GameScreen() {
       }
 
       if (g.fillQueue.length > 0) {
-        const cellsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
-        for (let i = 0; i < cellsPerFrame && g.fillCursor < g.fillQueue.length; i += 1) {
-          const cell = g.fillQueue[g.fillCursor];
-          if (g.grid[cell.y]?.[cell.x] !== CLAIMED) {
-            g.grid[cell.y][cell.x] = CLAIMED;
-            g.captured += 1;
-            const diamondCell = {
-              x: Math.floor(g.diamond.x / g.cell),
-              y: Math.floor(g.diamond.y / g.cell),
-            };
-            if (!g.diamond.collected && diamondCell.x === cell.x && diamondCell.y === cell.y) {
+        const unitsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
+        g.fillCursor = Math.min(g.fillQueue.length, g.fillCursor + unitsPerFrame);
+        g.scanY = (g.fillCursor / Math.max(1, g.fillQueue.length)) * g.height;
+        if (g.fillCursor >= g.fillQueue.length) {
+          const completedPolygon = g.pendingCapturePolygon;
+          if (completedPolygon) {
+            g.claimedPolygons.push(completedPolygon);
+            g.capturedArea = Math.min(
+              g.totalPlayableArea,
+              g.capturedArea + g.pendingCaptureArea,
+            );
+            if (!g.diamond.collected && pointInPolygon(g.diamond, completedPolygon)) {
               g.diamond.collected = true;
               g.score += DIAMOND_SCORE;
               for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
@@ -1361,20 +1328,17 @@ export default function GameScreen() {
                 });
               }
             }
+            g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
           }
-          g.fillCursor += 1;
-        }
-        g.scanY = (g.fillCursor / Math.max(1, g.fillQueue.length)) * g.height;
-        if (g.fillCursor >= g.fillQueue.length) {
           g.fillQueue = [];
           g.fillCursor = 0;
           g.scanY = 0;
           g.completedTrail = [];
-          g.score += Math.max(100, g.pendingCaptureCells * 20);
+          g.pendingCapturePolygon = null;
+          g.pendingCaptureArea = 0;
           void pickupChimePlayer.seekTo(0)
             .catch(() => undefined)
             .then(() => pickupChimePlayer.play());
-          g.pendingCaptureCells = 0;
         }
       }
 
@@ -1451,40 +1415,32 @@ export default function GameScreen() {
           const inside = pointInsidePerimeter(g.player, bounds);
           if (!inside) continue;
 
-          const x = clamp(Math.floor(g.player.x / g.cell), 0, COLS - 1);
-          const y = clamp(Math.floor(g.player.y / g.cell), 0, g.rows - 1);
-          const state = g.grid[y][x];
-
-          if (state === EMPTY) {
+          const onClaimedSurface = pointInsideClaimedSurface(
+            g.player,
+            g.claimedPolygons,
+            g.cell * 0.18,
+          );
+          if (!onClaimedSurface) {
             if (g.trail.length === 0) {
               g.cutDir = direction;
               g.cutCoordinate = direction.x !== 0 ? g.player.y : g.player.x;
-                g.score += 1;
-              // A cut can start by leaving an already claimed zone. In that
-              // case the trail begins at the actual transition point, not at
-              // the outer perimeter. Only an outside-to-arena entry uses the
-              // perimeter anchor.
+              g.score += 1;
+              // A cut can start by leaving an already claimed region. The
+              // anchor is the exact transition point, never a cell boundary.
               const trailStart = pointInsidePerimeter(previous, bounds)
                 ? previous
                 : perimeterEntryContact(previous, direction, bounds);
               g.trail.push(trailStart);
             }
-            g.grid[y][x] = TRAIL;
             g.trail.push({ ...g.player });
             for (let spark = 0; spark < 18; spark += 1) addParticle(g, g.cutDir);
-          } else if (state === TRAIL) {
-            g.trail.push({ ...g.player });
-          } else if (state === CLAIMED && g.trail.length === 0) {
-            // Claimed cells are safe, walkable ground for the drone. They
-            // only block enemies; never stop the player's exit toward empty
-            // space or traversal along the captured area.
-            g.inputDir = direction;
-          } else if (state === CLAIMED && g.trail.length > 2) {
-            // Cyan remains a gameplay surface for enemies, but it must not
-            // snap the player's freeform cut to a cell boundary.
+          } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
             break;
+          } else {
+            // Captured surfaces are freely walkable by the drone.
+            g.inputDir = direction;
           }
         }
       }
@@ -1693,7 +1649,7 @@ export default function GameScreen() {
           setHud({
             score: g.score,
             shields: Math.max(0, g.shields),
-            capture: Math.floor((g.captured / g.totalEmpty) * 100),
+            capture: Math.floor((g.capturedArea / g.totalPlayableArea) * 100),
             mode: g.mode,
             feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : g.fillQueue.length > 0 ? 'SECTEUR EN SYNCHRONISATION' : '',
           });
