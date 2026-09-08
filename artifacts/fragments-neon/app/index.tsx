@@ -317,10 +317,10 @@ const drawEnemySpriteWithGlow = (
 };
 
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
-  if (kind === 'DRAGON') return { width: cell * 4.0, height: cell * 4.0 };
-  if (kind === 'SEVEN') return { width: cell * 4.15, height: cell * 4.15 };
-  if (kind === 'SPIDER') return { width: cell * 4.15, height: cell * 4.15 };
-  return { width: cell * 3.0, height: cell * 3.0 };
+  if (kind === 'DRAGON') return { width: cell * 3.4, height: cell * 3.4 };
+  if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
+  if (kind === 'SPIDER') return { width: cell * 3.5, height: cell * 3.5 };
+  return { width: cell * 2.5, height: cell * 2.5 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
