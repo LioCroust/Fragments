@@ -137,7 +137,7 @@ type Game = {
   trail: Point[];
   protectedTrails: Point[][];
   enemies: Enemy[];
-  diamond: Diamond;
+  diamonds: Diamond[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
@@ -187,7 +187,7 @@ type Snapshot = {
   player: Point;
   direction: Direction;
   enemies: Enemy[];
-  diamond: Diamond;
+  diamonds: Diamond[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
@@ -723,6 +723,28 @@ const createDiamond = (width: number, height: number, cell: number): Diamond => 
   };
 };
 
+const createDiamonds = (width: number, height: number, cell: number, count: number) => {
+  const diamonds: Diamond[] = [];
+  const minimumDistance = cell * 3.2;
+  for (let index = 0; index < count; index += 1) {
+    let candidate = createDiamond(width, height, cell);
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      if (diamonds.every((diamond) => Math.hypot(diamond.x - candidate.x, diamond.y - candidate.y) >= minimumDistance)) {
+        break;
+      }
+      candidate = createDiamond(width, height, cell);
+    }
+    diamonds.push(candidate);
+  }
+  return diamonds;
+};
+
+const diamondCountForLevel = (level: number) => {
+  if (level === 2) return 2;
+  if (level >= 3) return 3;
+  return 1;
+};
+
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
 
 const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
@@ -1170,10 +1192,13 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const enemies: Enemy[] = [
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 56 * levelSpeed, vy: 38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -31 * levelSpeed, vy: 37 * levelSpeed, speed: 48 * levelSpeed, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'SHIP', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.3), vx: -49 * levelSpeed, vy: 32 * levelSpeed, speed: 62 * levelSpeed, agility: 0.9, phase: 1.6, spin: -0.22, routePhase: 1.1, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
   ];
-  return enemies.slice(0, clamp(Math.floor(level), 1, enemies.length));
+  if (level === 2) return [enemies[0], enemies[2]];
+  if (level >= 3) return [enemies[0], enemies[1]];
+  return [enemies[0]];
 };
 
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
@@ -1315,16 +1340,19 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   ));
   return (
     <>
-      {!snapshot.diamond.collected && (
-        <SvgImage
-          href={diamondSource}
-          x={snapshot.diamond.x - snapshot.cell * 0.75}
-          y={snapshot.diamond.y - snapshot.cell * 0.75}
-          width={snapshot.cell * 1.5}
-          height={snapshot.cell * 1.5}
-          opacity={0.98}
-        />
-      )}
+      {snapshot.diamonds.map((diamond, index) => (
+        !diamond.collected && (
+          <SvgImage
+            key={`diamond-${index}`}
+            href={diamondSource}
+            x={diamond.x - snapshot.cell * 0.75}
+            y={diamond.y - snapshot.cell * 0.75}
+            width={snapshot.cell * 1.5}
+            height={snapshot.cell * 1.5}
+            opacity={0.98}
+          />
+        )
+      ))}
       {CUTTING_SPRITE_ENABLED && activeCut && (
         <>
           <Defs>
@@ -1488,7 +1516,7 @@ export default function GameScreen() {
     trail: [],
     protectedTrails: [],
     enemies: [],
-    diamond: { x: 0, y: 0, phase: 0, collected: false },
+    diamonds: [],
     particles: [],
     smokePuffs: [],
     smokeAccumulator: 0,
@@ -1741,9 +1769,9 @@ export default function GameScreen() {
       ? g.protectedTrails.map((trail) => trail.map((point) => ({ ...point })))
       : [];
     const previousCapturedArea = preserveStats && !resetBoard ? g.capturedArea : 0;
-    const previousDiamond = preserveStats && !resetBoard
-      ? { ...g.diamond }
-      : createDiamond(width, height, width / COLS);
+    const previousDiamonds = preserveStats && !resetBoard
+      ? g.diamonds.map((diamond) => ({ ...diamond }))
+      : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
     if (!preserveStats) recordBannerShownRef.current = false;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
@@ -1766,7 +1794,7 @@ export default function GameScreen() {
       trail: [],
       protectedTrails: previousProtectedTrails,
       enemies,
-      diamond: previousDiamond,
+      diamonds: previousDiamonds,
       particles: [],
       smokePuffs: enemies
         .filter((enemy) => enemy.kind === 'SHIP')
@@ -2523,11 +2551,14 @@ export default function GameScreen() {
               g.totalPlayableArea,
               g.claimedPolygons.reduce((area, polygon) => area + polygonArea(polygon), 0),
             );
-            if (
-              !g.diamond.collected
-              && captureRegionsOverlapCircle(g.diamond, g.cell * 0.55, completedPolygons)
-            ) {
-              g.diamond.collected = true;
+            g.diamonds.forEach((diamond) => {
+              if (
+                diamond.collected
+                || !captureRegionsOverlapCircle(diamond, g.cell * 0.55, completedPolygons)
+              ) {
+                return;
+              }
+              diamond.collected = true;
               g.score += DIAMOND_SCORE;
               diamondCaptured = true;
               playDiamondCapture();
@@ -2536,8 +2567,8 @@ export default function GameScreen() {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 35 + Math.random() * 180;
                 g.particles.push({
-                  x: g.diamond.x,
-                  y: g.diamond.y,
+                  x: diamond.x,
+                  y: diamond.y,
                   vx: Math.cos(angle) * speed,
                   vy: Math.sin(angle) * speed,
                   life: 0.45 + Math.random() * 0.55,
@@ -2545,7 +2576,7 @@ export default function GameScreen() {
                   color: ['#ffffff', '#00f3ff', '#ff2bb5', '#b8ff4a'][particleIndex % 4],
                 });
               }
-            }
+            });
             g.enemies.forEach((enemy) => {
               if (enemy.respawnAt > now) return;
               const motion = enemyAnimationTransform(enemy, g.cell);
@@ -2562,7 +2593,7 @@ export default function GameScreen() {
               if (enemyInside) burstEnemy(g, enemy, now);
             });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
-            if (g.level === 1 && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
+            if (g.level < 3 && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
               enqueueBanner({ kind: 'SECTOR', level: g.level + 1 });
               g.level = 2;
               resetGame(true, true);
@@ -2841,18 +2872,21 @@ export default function GameScreen() {
 
        context.globalCompositeOperation = 'lighter';
       const diamondImage = diamondImageRef.current;
-      if (!g.diamond.collected && diamondImage) {
-        const diamondSize = g.cell * 1.5;
-         context.save();
-         context.translate(g.diamond.x, g.diamond.y);
-         drawEnemySpriteWithGlow(
-           context,
-           diamondImage,
-           { width: diamondSize, height: diamondSize },
-           '#ffffff',
-         );
-         context.restore();
-      }
+       if (diamondImage) {
+         const diamondSize = g.cell * 1.5;
+         g.diamonds.forEach((diamond) => {
+           if (diamond.collected) return;
+           context.save();
+           context.translate(diamond.x, diamond.y);
+           drawEnemySpriteWithGlow(
+             context,
+             diamondImage,
+             { width: diamondSize, height: diamondSize },
+             '#ffffff',
+           );
+           context.restore();
+         });
+       }
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
@@ -2940,7 +2974,7 @@ export default function GameScreen() {
             player: { ...g.player },
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
-             diamond: { ...g.diamond },
+              diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
               particles: g.particles.slice(-200),
              // Keep native SVG state immutable between frames. The game loop
              // mutates live puff objects in place, which can otherwise leave
