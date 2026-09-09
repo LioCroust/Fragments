@@ -1352,7 +1352,15 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     10: [0, 1, 2, 3, 4],
   };
   return (rosterByLevel[Math.min(MAX_LEVEL, Math.max(1, level))] ?? rosterByLevel[1])
-    .map((enemyIndex) => enemies[enemyIndex]);
+    .map((enemyIndex) => {
+      const enemy = enemies[enemyIndex];
+      return enemy.kind === 'SHIP'
+        ? {
+            ...enemy,
+            visualRotation: Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2,
+          }
+        : enemy;
+    });
 };
 
 const createBombs = (width: number, height: number, cell: number, level: number): Bomb[] => {
@@ -3209,6 +3217,20 @@ export default function GameScreen() {
               enemy.vx *= -1;
               enemy.vy *= -1;
             }
+          }
+        }
+
+        if (enemy.kind === 'SHIP') {
+          const velocityLength = Math.hypot(enemy.vx, enemy.vy);
+          if (velocityLength > 0.01) {
+            const targetRotation = Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2;
+            enemy.visualRotation = enemy.visualRotation === undefined
+              ? targetRotation
+              : rotateAngleTowards(
+                enemy.visualRotation,
+                targetRotation,
+                SHIP_ROTATION_SPEED * dt,
+              );
           }
         }
 
