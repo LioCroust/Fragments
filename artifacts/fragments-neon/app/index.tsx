@@ -2454,12 +2454,11 @@ export default function GameScreen() {
               <Text style={[styles.zoneValue, { color: HUD_COLORS.amber }]}>{hud.capture}</Text>
               <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
             </View>
-            <Text style={[styles.cardMeta, { color: HUD_COLORS.amber }]}>CUT DEPTH / NEXT SECTOR</Text>
-          </View>
-          <View style={styles.zoneProgressRail}>
-            <View style={[styles.zoneProgressFill, { width: `${zoneProgress * 100}%` }]} />
-            <View style={styles.zoneProgressTicks}>
-              {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
+            <View style={styles.zoneProgressRail}>
+              <View style={[styles.zoneProgressFill, { width: `${zoneProgress * 100}%` }]} />
+              <View style={styles.zoneProgressTicks}>
+                {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
+              </View>
             </View>
           </View>
         </View>
@@ -2673,9 +2672,9 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   zoneProgressRail: {
-    width: '62%',
+    width: '100%',
     height: 7,
-    marginTop: -1,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#667085',
     borderRadius: 2,
