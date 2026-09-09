@@ -32,15 +32,15 @@ const envelope = (time, start, length, attack = 0.01, decay = 3.2) => {
 };
 
 const notes = [
-  { time: 0.04, frequency: 261.63, length: 0.32, pan: -0.5 },
-  { time: 0.18, frequency: 329.63, length: 0.34, pan: -0.2 },
-  { time: 0.32, frequency: 392.0, length: 0.38, pan: 0.14 },
-  { time: 0.47, frequency: 523.25, length: 0.52, pan: 0.42 },
-  { time: 0.65, frequency: 659.25, length: 0.72, pan: -0.15 },
-  { time: 0.84, frequency: 783.99, length: 0.68, pan: 0.22 },
-  { time: 1.03, frequency: 1046.5, length: 0.78, pan: -0.3 },
-  { time: 1.25, frequency: 1174.66, length: 0.9, pan: 0.36 },
-  { time: 1.5, frequency: 1318.51, length: 1.05, pan: 0.05 },
+  { time: 0.04, frequency: 523.25, length: 0.26, pan: -0.56 },
+  { time: 0.22, frequency: 659.25, length: 0.28, pan: -0.22 },
+  { time: 0.4, frequency: 783.99, length: 0.3, pan: 0.18 },
+  { time: 0.58, frequency: 1046.5, length: 0.42, pan: 0.48 },
+  { time: 0.8, frequency: 1318.51, length: 0.48, pan: -0.3 },
+  { time: 1.02, frequency: 1567.98, length: 0.52, pan: 0.28 },
+  { time: 1.24, frequency: 1318.51, length: 0.5, pan: -0.4 },
+  { time: 1.46, frequency: 1567.98, length: 0.62, pan: 0.34 },
+  { time: 1.68, frequency: 2093.0, length: 0.78, pan: -0.08 },
 ];
 
 for (let index = 0; index < frameCount; index += 1) {
@@ -57,7 +57,7 @@ for (let index = 0; index < frameCount; index += 1) {
   }
 
   notes.forEach(({ time: start, frequency, length, pan }) => {
-    const active = envelope(time, start, length, 0.008, 2.9);
+    const active = envelope(time, start, length, 0.006, 4.5);
     if (!active) return;
     const localTime = time - start;
     const vibrato = 1 + Math.sin(localTime * 7.4) * 0.002;
@@ -68,22 +68,41 @@ for (let index = 0; index < frameCount; index += 1) {
   });
 
   // The final major chord is held long enough to read as a completed level.
-  if (time >= 1.72 && time < 3.78) {
-    const localTime = time - 1.72;
-    const chordEnvelope = Math.exp(-localTime * 0.92) * Math.min(1, localTime * 28);
+  if (time >= 1.9 && time < 3.82) {
+    const localTime = time - 1.9;
+    const chordEnvelope = Math.exp(-localTime * 0.76) * Math.min(1, localTime * 30);
     const chord = (
-      Math.sin(2 * Math.PI * 523.25 * localTime)
-      + Math.sin(2 * Math.PI * 659.25 * localTime) * 0.76
-      + Math.sin(2 * Math.PI * 783.99 * localTime) * 0.62
-      + Math.sin(2 * Math.PI * 1046.5 * localTime) * 0.34
+      Math.sin(2 * Math.PI * 1046.5 * localTime)
+      + Math.sin(2 * Math.PI * 1318.51 * localTime) * 0.8
+      + Math.sin(2 * Math.PI * 1567.98 * localTime) * 0.7
+      + Math.sin(2 * Math.PI * 2093.0 * localTime) * 0.42
     );
     add(index, chord * chordEnvelope, -0.16, 0.18);
     add(index, chord * chordEnvelope, 0.22, 0.17);
   }
 
+  // Quick bell-like sparkles make this version feel celebratory rather than solemn.
+  const bellNotes = [
+    { time: 0.14, frequency: 1046.5, pan: -0.7 },
+    { time: 0.37, frequency: 1318.51, pan: 0.7 },
+    { time: 0.61, frequency: 1567.98, pan: -0.55 },
+    { time: 0.88, frequency: 2093.0, pan: 0.62 },
+    { time: 1.12, frequency: 2349.32, pan: -0.4 },
+    { time: 1.38, frequency: 2637.02, pan: 0.46 },
+  ];
+  bellNotes.forEach(({ time: start, frequency, pan }) => {
+    const bellEnvelope = envelope(time, start, 0.34, 0.003, 8.2);
+    if (!bellEnvelope) return;
+    const localTime = time - start;
+    const bell = Math.sin(2 * Math.PI * frequency * localTime)
+      + Math.sin(2 * Math.PI * frequency * 2.01 * localTime) * 0.3
+      + Math.sin(2 * Math.PI * frequency * 3.98 * localTime) * 0.12;
+    add(index, bell * bellEnvelope, pan, 0.065);
+  });
+
   // Bright stereo glints sell the futuristic sector-complete moment.
-  const glintStart = 0.9;
-  const glintLength = 1.8;
+  const glintStart = 0.72;
+  const glintLength = 1.95;
   if (time >= glintStart && time < glintStart + glintLength) {
     const localTime = time - glintStart;
     const progress = localTime / glintLength;
@@ -97,8 +116,8 @@ for (let index = 0; index < frameCount; index += 1) {
 
   // Very quiet filtered air gives the tail a little scale without masking the tones.
   filteredNoise = filteredNoise * 0.95 + (random() * 2 - 1) * 0.05;
-  if (time >= 1.72) {
-    const tailEnvelope = Math.exp(-(time - 1.72) * 1.65);
+  if (time >= 1.9) {
+    const tailEnvelope = Math.exp(-(time - 1.9) * 1.45);
     add(index, filteredNoise * tailEnvelope, -0.35, 0.025);
     add(index, filteredNoise * tailEnvelope, 0.35, 0.024);
   }
@@ -134,7 +153,7 @@ for (let index = 0; index < frameCount; index += 1) {
 }
 
 const outputPath = path.resolve(
-  new URL('../assets/audio/sector-transition-victory-grand.wav', import.meta.url).pathname,
+  new URL('../assets/audio/sector-transition-victory-joyful.wav', import.meta.url).pathname,
 );
 fs.writeFileSync(outputPath, output);
 console.log(`Created ${outputPath} (${duration.toFixed(2)}s, ${sampleRate}Hz stereo)`);
