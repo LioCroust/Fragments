@@ -21,6 +21,7 @@ import Svg, {
 } from 'react-native-svg';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   buildOrthogonalCaptureRegions,
@@ -52,6 +53,7 @@ const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
+const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
 const CUTTING_SPRITE_FRAME_WIDTH = 160;
@@ -154,6 +156,7 @@ type Game = {
 
 type Hud = {
   score: number;
+  bestScore: number;
   shields: number;
   capture: number;
   level: number;
@@ -1045,7 +1048,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
   const enemies: Enemy[] = [
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 56 * levelSpeed, vy: 38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
-    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -29 * levelSpeed, vy: 34 * levelSpeed, speed: 42 * levelSpeed, agility: 0.55, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -31 * levelSpeed, vy: 37 * levelSpeed, speed: 48 * levelSpeed, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
   ];
@@ -1389,6 +1392,7 @@ export default function GameScreen() {
 
   const [hud, setHud] = useState<Hud>({
     score: 0,
+    bestScore: 0,
     shields: 3,
     capture: 0,
     level: 1,
@@ -1400,11 +1404,33 @@ export default function GameScreen() {
   const diamondImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
+  const bestScoreRef = useRef(0);
+  const bestScoreHydratedRef = useRef(false);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
   const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(BEST_SCORE_STORAGE_KEY)
+      .then((storedScore) => {
+        if (cancelled) return;
+        const parsedScore = Number.parseInt(storedScore ?? '0', 10);
+        const bestScore = Number.isFinite(parsedScore) ? Math.max(0, parsedScore) : 0;
+        bestScoreRef.current = bestScore;
+        bestScoreHydratedRef.current = true;
+        setHud((current) => ({ ...current, bestScore }));
+      })
+      .catch((error: unknown) => {
+        bestScoreHydratedRef.current = true;
+        if (__DEV__) console.warn('Unable to load best score', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     pickupChimePlayer.muted = false;
@@ -2618,6 +2644,12 @@ export default function GameScreen() {
       if (!g.initialized && sizeRef.current.width > 0) resetGame(false);
       if (g.initialized) {
         update(g, dt, now);
+        if (bestScoreHydratedRef.current && g.score > bestScoreRef.current) {
+          bestScoreRef.current = g.score;
+          void AsyncStorage.setItem(BEST_SCORE_STORAGE_KEY, String(g.score)).catch((error: unknown) => {
+            if (__DEV__) console.warn('Unable to save best score', error);
+          });
+        }
         drawCanvas(g, now);
         if (Platform.OS !== 'web') {
           setNativeSnapshot({
@@ -2644,6 +2676,7 @@ export default function GameScreen() {
         if (g.frame % 6 === 0) {
           setHud({
             score: g.score,
+            bestScore: bestScoreRef.current,
             shields: Math.max(0, g.shields),
             capture: Math.min(
               LEVEL_CAPTURE_TARGET,
