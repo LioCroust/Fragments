@@ -38,7 +38,7 @@ const svg = `
       <stop offset="0" stop-color="#c1c9cb" stop-opacity="0.42"/>
       <stop offset="0.45" stop-color="#7d898e" stop-opacity="0.29"/>
       <stop offset="1" stop-color="#26343a" stop-opacity="0"/>
-    </radialGradient>
+    </linearGradient>
     <filter id="softBlur" x="-60%" y="-60%" width="220%" height="220%">
       <feGaussianBlur stdDeviation="8"/>
     </filter>
