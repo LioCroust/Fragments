@@ -16,16 +16,16 @@ const frameMarkup = Array.from({ length: frameCount }, (_, frame) => {
   const curl = Math.cos((frame / frameCount) * Math.PI * 2) * 4;
   return `
     <g transform="translate(${x} 0)">
-      <ellipse cx="${64 + drift}" cy="${73 + pulse * 2}" rx="${26 + pulse * 2}" ry="${18 - pulse}" fill="url(#cloudCyan)" opacity="0.34" filter="url(#softBlur)"/>
-      <ellipse cx="${60 + curl}" cy="${79 - pulse * 2}" rx="${22 - pulse}" ry="${14 + pulse * 2}" fill="url(#cloudMagenta)" opacity="0.27" filter="url(#softBlur)"/>
-      <ellipse cx="${64 + drift}" cy="${70 + pulse}" rx="11" ry="9" fill="url(#core)" opacity="0.72" filter="url(#coreBlur)"/>
-      <path d="M ${66 + drift} 88 C ${42 + curl} 101, ${42 - curl} 66, ${25 + drift} 58 C ${41 + curl} 67, ${48 - curl} 91, ${29 + drift} 105" fill="none" stroke="#00f3ff" stroke-width="3.2" stroke-linecap="round" opacity="0.72" filter="url(#lineGlow)"/>
-      <path d="M ${61 - drift} 86 C ${83 - curl} 96, ${85 + curl} 65, ${105 - drift} 55 C ${88 - curl} 68, ${80 + curl} 88, ${100 - drift} 103" fill="none" stroke="#ff2bb5" stroke-width="2.8" stroke-linecap="round" opacity="0.61" filter="url(#lineGlow)"/>
-      <path d="M ${64 + pulse} 88 C ${55 + curl} 105, ${72 - curl} 108, ${64 + drift} 119" fill="none" stroke="#b8ff4a" stroke-width="2" stroke-linecap="round" opacity="0.52" filter="url(#lineGlow)"/>
-      <path d="M ${57 + drift} 78 C ${46 - curl} 72, ${43 + pulse} 56, ${52 + drift} 44" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.56"/>
-      <circle cx="${52 + drift}" cy="${55 + pulse}" r="2.5" fill="#ffffff" opacity="0.72"/>
-      <circle cx="${82 - curl}" cy="${67 - pulse}" r="1.8" fill="#00f3ff" opacity="0.78"/>
-      <circle cx="${40 + drift}" cy="${91 + pulse}" r="1.6" fill="#ff2bb5" opacity="0.68"/>
+      <ellipse cx="${64 + drift}" cy="${74 + pulse * 2}" rx="${27 + pulse * 2}" ry="${17 - pulse}" fill="url(#smokeGrey)" opacity="0.26" filter="url(#softBlur)"/>
+      <ellipse cx="${57 + curl}" cy="${84 - pulse * 2}" rx="${20 - pulse}" ry="${12 + pulse * 2}" fill="#111a20" opacity="0.34" filter="url(#softBlur)"/>
+      <ellipse cx="${76 - curl}" cy="${63 + pulse}" rx="17" ry="11" fill="#29343b" opacity="0.23" filter="url(#softBlur)"/>
+      <path d="M ${67 + drift} 90 C ${48 + curl} 101, ${43 - curl} 78, ${29 + drift} 71 C ${43 + curl} 78, ${49 - curl} 94, ${36 + drift} 108" fill="none" stroke="#65727a" stroke-width="3.8" stroke-linecap="round" opacity="0.18" filter="url(#lineGlow)"/>
+      <path d="M ${59 - drift} 87 C ${78 - curl} 98, ${88 + curl} 77, ${103 - drift} 68 C ${88 - curl} 80, ${80 + curl} 96, ${94 - drift} 108" fill="none" stroke="#879198" stroke-width="3.1" stroke-linecap="round" opacity="0.13" filter="url(#lineGlow)"/>
+      <path d="M ${66 + pulse} 88 C ${58 + curl} 102, ${70 - curl} 110, ${64 + drift} 120" fill="none" stroke="#46535b" stroke-width="4.5" stroke-linecap="round" opacity="0.17" filter="url(#lineGlow)"/>
+      <path d="M ${54 + drift} 78 C ${47 - curl} 69, ${49 + pulse} 57, ${59 + drift} 49" fill="none" stroke="#a0a8ad" stroke-width="2.4" stroke-linecap="round" opacity="0.12" filter="url(#lineGlow)"/>
+      <circle cx="${47 + drift}" cy="${61 + pulse}" r="3.2" fill="#737e84" opacity="0.13" filter="url(#coreBlur)"/>
+      <circle cx="${84 - curl}" cy="${71 - pulse}" r="2.8" fill="#9aa2a6" opacity="0.1" filter="url(#coreBlur)"/>
+      <circle cx="${38 + drift}" cy="${94 + pulse}" r="2.2" fill="#556168" opacity="0.12" filter="url(#coreBlur)"/>
     </g>
   `;
 }).join('');
@@ -33,21 +33,10 @@ const frameMarkup = Array.from({ length: frameCount }, (_, frame) => {
 const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${frameSize * frameCount}" height="${frameSize}" viewBox="0 0 ${frameSize * frameCount} ${frameSize}">
   <defs>
-    <radialGradient id="cloudCyan">
-      <stop offset="0" stop-color="#eaffff" stop-opacity="0.92"/>
-      <stop offset="0.24" stop-color="#00f3ff" stop-opacity="0.7"/>
-      <stop offset="1" stop-color="#00f3ff" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="cloudMagenta">
-      <stop offset="0" stop-color="#fff0fb" stop-opacity="0.8"/>
-      <stop offset="0.3" stop-color="#ff2bb5" stop-opacity="0.52"/>
-      <stop offset="1" stop-color="#ff2bb5" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="core">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="0.28" stop-color="#b8ff4a" stop-opacity="0.62"/>
-      <stop offset="0.7" stop-color="#00f3ff" stop-opacity="0.2"/>
-      <stop offset="1" stop-color="#00f3ff" stop-opacity="0"/>
+    <radialGradient id="smokeGrey">
+      <stop offset="0" stop-color="#a7b0b5" stop-opacity="0.38"/>
+      <stop offset="0.42" stop-color="#657179" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#1b252b" stop-opacity="0"/>
     </radialGradient>
     <filter id="softBlur" x="-60%" y="-60%" width="220%" height="220%">
       <feGaussianBlur stdDeviation="8"/>

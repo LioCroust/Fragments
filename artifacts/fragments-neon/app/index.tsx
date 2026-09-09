@@ -1511,7 +1511,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
                 <G
                   key={`ship-smoke-sprite-${index}`}
                   transform={`translate(${smokePosition.x} ${smokePosition.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
-                  opacity={0.82}
+                  opacity={0.48}
                 >
                   <G clipPath="url(#ship-smoke-sprite-frame-clip)">
                     <SvgImage
@@ -3088,7 +3088,7 @@ export default function GameScreen() {
              const motion = enemyAnimationTransform(enemy, g.cell);
              const smokeSize = g.cell * 1.8;
              context.save();
-             context.globalAlpha = 0.82;
+             context.globalAlpha = 0.48;
              context.translate(smokePosition.x, smokePosition.y + motion.offsetY);
              context.rotate(motion.rotation);
              context.drawImage(
