@@ -8,7 +8,17 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, G, Image as SvgImage, Line, Polygon, Polyline, Rect } from 'react-native-svg';
+import Svg, {
+  Circle,
+  ClipPath,
+  Defs,
+  G,
+  Image as SvgImage,
+  Line,
+  Polygon,
+  Polyline,
+  Rect,
+} from 'react-native-svg';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +51,12 @@ const HUD_COLORS = {
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
+const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
+const CUTTING_SPRITE_ENABLED = true;
+const CUTTING_SPRITE_FRAME_COUNT = 8;
+const CUTTING_SPRITE_FRAME_WIDTH = 160;
+const CUTTING_SPRITE_FRAME_HEIGHT = 96;
+const CUTTING_SPRITE_FRAME_DURATION = 3;
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -790,6 +806,39 @@ const drawCuttingEffectCanvas = (
   context.restore();
 };
 
+const drawCuttingSpriteCanvas = (
+  context: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  player: Point,
+  direction: Direction,
+  cell: number,
+  frame: number,
+) => {
+  if (direction.x === 0 && direction.y === 0) return;
+  const point = cuttingPoint(player, direction, cell);
+  const angle = Math.atan2(direction.y, direction.x);
+  const width = cell * 1.62;
+  const height = width * CUTTING_SPRITE_FRAME_HEIGHT / CUTTING_SPRITE_FRAME_WIDTH;
+
+  context.save();
+  context.translate(point.x, point.y);
+  context.rotate(angle);
+  context.globalCompositeOperation = 'lighter';
+  context.globalAlpha = 0.94;
+  context.drawImage(
+    image,
+    frame * CUTTING_SPRITE_FRAME_WIDTH,
+    0,
+    CUTTING_SPRITE_FRAME_WIDTH,
+    CUTTING_SPRITE_FRAME_HEIGHT,
+    -width / 2,
+    -height / 2,
+    width,
+    height,
+  );
+  context.restore();
+};
+
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 1.7, height: cell * 1.7 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
@@ -1134,6 +1183,9 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
     && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
   const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
   const cutPulse = 0.72 + Math.sin(Date.now() * 0.012) * 0.2;
+  const cutFrame = Math.floor(Date.now() / 55) % CUTTING_SPRITE_FRAME_COUNT;
+  const cutSpriteWidth = snapshot.cell * 1.62;
+  const cutSpriteHeight = cutSpriteWidth * CUTTING_SPRITE_FRAME_HEIGHT / CUTTING_SPRITE_FRAME_WIDTH;
   const scanIntervals = snapshot.pendingCapturePolygons.flatMap((polygon) => (
     polygonHorizontalIntervals(polygon, snapshot.scanY)
   ));
@@ -1149,7 +1201,33 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           opacity={0.98}
         />
       )}
-      {activeCut && (
+      {CUTTING_SPRITE_ENABLED && activeCut && (
+        <>
+          <Defs>
+            <ClipPath id="cutting-sprite-frame-clip">
+              <Rect
+                x={-cutSpriteWidth / 2}
+                y={-cutSpriteHeight / 2}
+                width={cutSpriteWidth}
+                height={cutSpriteHeight}
+              />
+            </ClipPath>
+          </Defs>
+          <G transform={`translate(${cutPoint.x} ${cutPoint.y}) rotate(${angle * (180 / Math.PI)})`}>
+            <G clipPath="url(#cutting-sprite-frame-clip)">
+              <SvgImage
+                href={cuttingSpriteSource}
+                x={-cutSpriteWidth / 2 - cutFrame * cutSpriteWidth}
+                y={-cutSpriteHeight / 2}
+                width={cutSpriteWidth * CUTTING_SPRITE_FRAME_COUNT}
+                height={cutSpriteHeight}
+                opacity={0.94}
+              />
+            </G>
+          </G>
+        </>
+      )}
+      {!CUTTING_SPRITE_ENABLED && activeCut && (
         <G transform={`translate(${cutPoint.x} ${cutPoint.y}) rotate(${angle * (180 / Math.PI)})`}>
           <Line
             x1={-snapshot.cell * 0.5}
@@ -1321,6 +1399,7 @@ export default function GameScreen() {
   const spriteImagesRef = useRef<Record<string, any>>({});
   const diamondImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
+  const cuttingSpriteImageRef = useRef<any>(null);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
@@ -1388,12 +1467,20 @@ export default function GameScreen() {
       if (!cancelled) playerImageRef.current = playerImage;
     };
     playerImage.src = resolvedPlayer?.uri ?? playerSource;
+    const resolvedCuttingSprite = (RNImage as any).resolveAssetSource?.(cuttingSpriteSource);
+    const cuttingSpriteImage = new (globalThis as any).Image();
+    cuttingSpriteImage.decoding = 'async';
+    cuttingSpriteImage.onload = () => {
+      if (!cancelled) cuttingSpriteImageRef.current = cuttingSpriteImage;
+    };
+    cuttingSpriteImage.src = resolvedCuttingSprite?.uri ?? cuttingSpriteSource;
 
     return () => {
       cancelled = true;
       spriteImagesRef.current = {};
       diamondImageRef.current = null;
       playerImageRef.current = null;
+      cuttingSpriteImageRef.current = null;
     };
   }, []);
 
@@ -1516,7 +1603,7 @@ export default function GameScreen() {
     let lastTime = Date.now();
 
     const addParticle = (g: Game, direction: Direction) => {
-      if (g.particles.length >= 96) return;
+      if (g.particles.length >= (CUTTING_SPRITE_ENABLED ? 56 : 96)) return;
       const backwards = Math.atan2(-direction.y, -direction.x);
       // Spread around the backward axis so sparks visibly fan above and below
       // the cut instead of forming a single narrow exhaust line.
@@ -2296,7 +2383,8 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            for (let spark = 0; spark < 4; spark += 1) addParticle(g, g.cutDir);
+            const sparkCount = CUTTING_SPRITE_ENABLED ? 2 : 4;
+            for (let spark = 0; spark < sparkCount; spark += 1) addParticle(g, g.cutDir);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
@@ -2400,7 +2488,21 @@ export default function GameScreen() {
       }
 
       if (g.trail.length > 0) {
-        drawCuttingEffectCanvas(context, g.player, g.cutDir, g.cell, g.frame);
+        const cuttingSpriteImage = cuttingSpriteImageRef.current;
+        if (CUTTING_SPRITE_ENABLED && cuttingSpriteImage) {
+          drawCuttingSpriteCanvas(
+            context,
+            cuttingSpriteImage,
+            g.player,
+            g.cutDir,
+            g.cell,
+            Math.floor(g.frame / CUTTING_SPRITE_FRAME_DURATION) % CUTTING_SPRITE_FRAME_COUNT,
+          );
+        } else {
+          // Reversible fallback: set CUTTING_SPRITE_ENABLED to false to use
+          // the original procedural point and full SVG spark treatment.
+          drawCuttingEffectCanvas(context, g.player, g.cutDir, g.cell, g.frame);
+        }
       }
 
       context.globalCompositeOperation = 'lighter';
