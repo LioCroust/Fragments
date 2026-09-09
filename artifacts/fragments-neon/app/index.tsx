@@ -14,7 +14,6 @@ import Svg, {
   Circle,
   ClipPath,
   Defs,
-  Ellipse,
   G,
   Image as SvgImage,
   Line,
@@ -64,6 +63,7 @@ const sectorTransitionVictorySource = require('../assets/audio/sector-transition
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
+const coreReactorSpriteSource = require('../assets/images/core-reactor-sprite-sheet.png');
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
@@ -103,6 +103,9 @@ const isParticleSmokeMode = (mode: SmokeRenderMode) => mode === 'PARTICLES';
 const SHIP_SMOKE_SPRITE_FRAME_COUNT = 8;
 const SHIP_SMOKE_SPRITE_FRAME_SIZE = 128;
 const SHIP_SMOKE_SPRITE_FRAME_DURATION = 4;
+const CORE_REACTOR_SPRITE_FRAME_COUNT = 8;
+const CORE_REACTOR_SPRITE_FRAME_SIZE = 256;
+const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -154,8 +157,6 @@ type Diamond = Point & {
 };
 
 type Bomb = Point & {
-  phase: number;
-  spin: number;
   destroyed: boolean;
 };
 
@@ -232,6 +233,7 @@ type Snapshot = {
   cell: number;
   rows: number;
   level: number;
+  frame: number;
   trail: Point[];
   protectedTrails: Point[][];
   player: Point;
@@ -863,103 +865,6 @@ const drawEnemySpriteWithGlow = (
   context.restore();
 };
 
-const drawCoreReactorCanvas = (
-  context: CanvasRenderingContext2D,
-  bomb: Bomb,
-  cell: number,
-  frame: number,
-) => {
-  const radius = cell * 1.08;
-  const pulse = 1 + Math.sin(bomb.phase) * 0.055;
-  const charge = (Math.sin(bomb.phase * 0.56) + 1) * 0.5;
-
-  context.save();
-  context.translate(bomb.x, bomb.y);
-  context.globalCompositeOperation = 'lighter';
-  context.globalAlpha = 0.1;
-  context.shadowColor = '#f03d36';
-  context.shadowBlur = radius * 0.8;
-  context.fillStyle = '#f03d36';
-  context.beginPath();
-  context.arc(0, 0, radius * (1.2 + charge * 0.12), 0, Math.PI * 2);
-  context.fill();
-
-  context.globalAlpha = 0.72;
-  context.shadowBlur = 7;
-  context.strokeStyle = '#4fd6d4';
-  context.lineWidth = Math.max(1, cell * 0.035);
-  context.beginPath();
-  context.ellipse(0, 0, radius * 1.48, radius * 0.72, bomb.spin + frame * 0.012, 0, Math.PI * 2);
-  context.stroke();
-  context.strokeStyle = '#e66b48';
-  context.beginPath();
-  context.ellipse(0, 0, radius * 0.72, radius * 1.48, -bomb.spin - frame * 0.017, 0, Math.PI * 2);
-  context.stroke();
-
-  context.globalCompositeOperation = 'source-over';
-  context.globalAlpha = 1;
-  context.shadowColor = 'transparent';
-  context.shadowBlur = 0;
-  context.fillStyle = '#080e18';
-  context.strokeStyle = '#5d7180';
-  context.lineWidth = Math.max(1.5, cell * 0.09);
-  context.beginPath();
-  context.arc(0, 0, radius, 0, Math.PI * 2);
-  context.fill();
-  context.stroke();
-
-  context.save();
-  context.rotate(bomb.spin + frame * 0.012);
-  context.strokeStyle = '#bd5140';
-  context.lineWidth = Math.max(1.5, cell * 0.065);
-  context.setLineDash([radius * 0.52, radius * 0.12, radius * 0.08, radius * 0.1]);
-  context.beginPath();
-  context.arc(0, 0, radius * 0.86, 0, Math.PI * 2);
-  context.stroke();
-  context.setLineDash([]);
-  context.strokeStyle = '#f07c4c';
-  context.lineWidth = Math.max(1.5, cell * 0.055);
-  for (let index = 0; index < 16; index += 1) {
-    const angle = (Math.PI * 2 * index) / 16;
-    const length = radius * (0.16 + charge * 0.04);
-    context.beginPath();
-    context.moveTo(Math.cos(angle) * (radius * 1.12), Math.sin(angle) * (radius * 1.12));
-    context.lineTo(Math.cos(angle) * (radius * 1.12 + length), Math.sin(angle) * (radius * 1.12 + length));
-    context.stroke();
-  }
-  context.restore();
-
-  const coreRadius = radius * 0.36 * pulse;
-  const gradient = context.createRadialGradient(
-    -coreRadius * 0.35,
-    -coreRadius * 0.4,
-    coreRadius * 0.1,
-    0,
-    0,
-    coreRadius,
-  );
-  gradient.addColorStop(0, '#ffe4a6');
-  gradient.addColorStop(0.24, '#ff994c');
-  gradient.addColorStop(0.62, '#f13a2f');
-  gradient.addColorStop(1, '#641322');
-  context.globalCompositeOperation = 'lighter';
-  context.globalAlpha = 0.92;
-  context.shadowColor = '#f03d36';
-  context.shadowBlur = radius * 0.32;
-  context.fillStyle = gradient;
-  context.beginPath();
-  context.arc(0, 0, coreRadius, 0, Math.PI * 2);
-  context.fill();
-  context.globalAlpha = 0.75;
-  context.shadowBlur = 4;
-  context.strokeStyle = '#ffd07b';
-  context.lineWidth = Math.max(1, cell * 0.035);
-  context.beginPath();
-  context.arc(0, 0, coreRadius * 0.68, 0, Math.PI * 2);
-  context.stroke();
-  context.restore();
-};
-
 const cuttingPoint = (player: Point, direction: Direction, cell: number) => ({
   x: player.x - direction.x * cell * 0.78,
   y: player.y - direction.y * cell * 0.78,
@@ -1387,8 +1292,6 @@ const createBombs = (width: number, height: number, cell: number, level: number)
   return [{
     x: clamp(width * 0.52, cell * 3, width - cell * 3),
     y: clamp(height * 0.46, cell * 4, height - cell * 4),
-    phase: 0.8,
-    spin: -0.12,
     destroyed: false,
   }];
 };
@@ -1933,94 +1836,31 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       ))}
       {snapshot.bombs.map((bomb, bombIndex) => {
         if (bomb.destroyed) return null;
-        const bombRadiusValue = snapshot.cell * 1.08;
-        const pulse = 1 + Math.sin(bomb.phase) * 0.055;
-        const charge = (Math.sin(bomb.phase * 0.56) + 1) * 0.5;
-        const ringRotation = bomb.spin + Date.now() * 0.000012;
+        const frame = Math.floor(snapshot.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
+          % CORE_REACTOR_SPRITE_FRAME_COUNT;
+        const spriteSize = snapshot.cell * 2.9;
         return (
           <G key={`bomb-${bombIndex}`} transform={`translate(${bomb.x} ${bomb.y})`}>
-            <Circle
-              cx={0}
-              cy={0}
-              r={bombRadiusValue * (1.2 + charge * 0.12)}
-              fill="#f03d36"
-              opacity={0.08}
-            />
-            <Ellipse
-              cx={0}
-              cy={0}
-              rx={bombRadiusValue * 1.48}
-              ry={bombRadiusValue * 0.72}
-              fill="none"
-              stroke="#4fd6d4"
-              strokeWidth={Math.max(1, snapshot.cell * 0.035)}
-              opacity={0.75}
-              transform={`rotate(${ringRotation * (180 / Math.PI)})`}
-            />
-            <Ellipse
-              cx={0}
-              cy={0}
-              rx={bombRadiusValue * 0.72}
-              ry={bombRadiusValue * 1.48}
-              fill="none"
-              stroke="#e66b48"
-              strokeWidth={Math.max(1, snapshot.cell * 0.035)}
-              opacity={0.75}
-              transform={`rotate(${-ringRotation * (180 / Math.PI)})`}
-            />
-            <Circle
-              cx={0}
-              cy={0}
-              r={bombRadiusValue}
-              fill="#080e18"
-              stroke="#5d7180"
-              strokeWidth={Math.max(1.5, snapshot.cell * 0.09)}
-            />
-            <Circle
-              cx={0}
-              cy={0}
-              r={bombRadiusValue * 0.86}
-              fill="none"
-              stroke="#bd5140"
-              strokeWidth={Math.max(1.5, snapshot.cell * 0.065)}
-              strokeDasharray={`${bombRadiusValue * 0.52} ${bombRadiusValue * 0.12} ${bombRadiusValue * 0.08} ${bombRadiusValue * 0.1}`}
-              transform={`rotate(${ringRotation * (180 / Math.PI)})`}
-            />
-            {Array.from({ length: 16 }, (_, index) => {
-              const angle = (Math.PI * 2 * index) / 16;
-              const innerRadius = bombRadiusValue * 1.12;
-              const outerRadius = innerRadius + bombRadiusValue * (0.16 + charge * 0.04);
-              return (
-                <Line
-                  key={`bomb-charge-${bombIndex}-${index}`}
-                  x1={Math.cos(angle) * innerRadius}
-                  y1={Math.sin(angle) * innerRadius}
-                  x2={Math.cos(angle) * outerRadius}
-                  y2={Math.sin(angle) * outerRadius}
-                  stroke="#f07c4c"
-                  strokeWidth={Math.max(1.5, snapshot.cell * 0.055)}
-                  strokeLinecap="round"
-                  opacity={0.56 + charge * 0.4}
-                  transform={`rotate(${ringRotation * (180 / Math.PI)} 0 0)`}
+            <Defs>
+              <ClipPath id={`core-reactor-sprite-clip-${bombIndex}`}>
+                <Rect
+                  x={-spriteSize / 2}
+                  y={-spriteSize / 2}
+                  width={spriteSize}
+                  height={spriteSize}
                 />
-              );
-            })}
-            <Circle
-              cx={0}
-              cy={0}
-              r={bombRadiusValue * 0.36 * pulse}
-              fill="#f13a2f"
-              stroke="#ff9a4c"
-              strokeWidth={Math.max(1.5, snapshot.cell * 0.06)}
-              opacity={0.95}
-            />
-            <Circle
-              cx={-bombRadiusValue * 0.1}
-              cy={-bombRadiusValue * 0.12}
-              r={bombRadiusValue * 0.1}
-              fill="#ffe4a6"
-              opacity={0.7}
-            />
+              </ClipPath>
+            </Defs>
+            <G clipPath={`url(#core-reactor-sprite-clip-${bombIndex})`}>
+              <SvgImage
+                href={coreReactorSpriteSource}
+                x={-spriteSize / 2 - frame * spriteSize}
+                y={-spriteSize / 2}
+                width={spriteSize * CORE_REACTOR_SPRITE_FRAME_COUNT}
+                height={spriteSize}
+                opacity={0.98}
+              />
+            </G>
           </G>
         );
       })}
@@ -2135,6 +1975,7 @@ export default function GameScreen() {
   const [banner, setBanner] = useState<Banner | null>(null);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
+  const coreReactorImageRef = useRef<any>(null);
   const diamondImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
@@ -2349,6 +2190,13 @@ export default function GameScreen() {
       if (!cancelled) diamondImageRef.current = diamondImage;
     };
     diamondImage.src = resolvedDiamond?.uri ?? diamondSource;
+    const resolvedCoreReactorSprite = (RNImage as any).resolveAssetSource?.(coreReactorSpriteSource);
+    const coreReactorImage = new (globalThis as any).Image();
+    coreReactorImage.decoding = 'async';
+    coreReactorImage.onload = () => {
+      if (!cancelled) coreReactorImageRef.current = coreReactorImage;
+    };
+    coreReactorImage.src = resolvedCoreReactorSprite?.uri ?? coreReactorSpriteSource;
     const resolvedPlayer = (RNImage as any).resolveAssetSource?.(playerSource);
     const playerImage = new (globalThis as any).Image();
     playerImage.decoding = 'async';
@@ -2383,6 +2231,7 @@ export default function GameScreen() {
     return () => {
       cancelled = true;
       spriteImagesRef.current = {};
+      coreReactorImageRef.current = null;
       diamondImageRef.current = null;
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
@@ -2425,8 +2274,6 @@ export default function GameScreen() {
       bombs.forEach((bomb, index) => {
         bomb.x = previousBombs[index].x;
         bomb.y = previousBombs[index].y;
-        bomb.phase = previousBombs[index].phase;
-        bomb.spin = previousBombs[index].spin;
         bomb.destroyed = previousBombs[index].destroyed;
       });
     }
@@ -3731,10 +3578,30 @@ export default function GameScreen() {
            context.restore();
          });
        }
-       g.bombs.forEach((bomb) => {
-         if (bomb.destroyed) return;
-         drawCoreReactorCanvas(context, bomb, g.cell, g.frame);
-       });
+       const coreReactorImage = coreReactorImageRef.current;
+       if (coreReactorImage) {
+         const bombFrame = Math.floor(g.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
+           % CORE_REACTOR_SPRITE_FRAME_COUNT;
+         const bombSize = g.cell * 2.9;
+         g.bombs.forEach((bomb) => {
+           if (bomb.destroyed) return;
+           context.save();
+           context.globalCompositeOperation = 'source-over';
+           context.globalAlpha = 0.98;
+           context.drawImage(
+             coreReactorImage,
+             bombFrame * CORE_REACTOR_SPRITE_FRAME_SIZE,
+             0,
+             CORE_REACTOR_SPRITE_FRAME_SIZE,
+             CORE_REACTOR_SPRITE_FRAME_SIZE,
+             bomb.x - bombSize / 2,
+             bomb.y - bombSize / 2,
+             bombSize,
+             bombSize,
+           );
+           context.restore();
+         });
+       }
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
@@ -3818,6 +3685,7 @@ export default function GameScreen() {
             cell: g.cell,
             rows: g.rows,
             level: g.level,
+            frame: g.frame,
             trail: g.trail,
              protectedTrails: g.protectedTrails,
             player: { ...g.player },
