@@ -2383,7 +2383,9 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            const sparkCount = CUTTING_SPRITE_ENABLED ? 2 : 4;
+            // The atlas already contains its sparks. Avoid allocating or
+            // rendering dynamic cut particles in the optimized mode.
+            const sparkCount = CUTTING_SPRITE_ENABLED ? 0 : 4;
             for (let spark = 0; spark < sparkCount; spark += 1) addParticle(g, g.cutDir);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
