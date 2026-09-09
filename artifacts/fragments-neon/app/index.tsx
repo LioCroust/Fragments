@@ -3988,7 +3988,7 @@ export default function GameScreen() {
   const shieldSegments = Array.from({ length: 3 });
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container}>
       <View style={styles.cockpitHeader} pointerEvents="none">
         <RNImage
           source={cockpitInteriorSource}
@@ -3999,7 +3999,12 @@ export default function GameScreen() {
         <View style={styles.cockpitShade} />
       </View>
 
-      <View style={styles.arena} onLayout={handleArenaLayout} testID="game-arena">
+      <View
+        style={styles.arena}
+        onLayout={handleArenaLayout}
+        testID="game-arena"
+        {...panResponder.panHandlers}
+      >
         {Platform.OS === 'web'
           ? React.createElement('canvas' as any, {
               ref: canvasRef,
@@ -4140,8 +4145,7 @@ export default function GameScreen() {
       <DebugSectorSelector
         currentSector={hud.level}
         onSelect={teleportToSector}
-        onLayout={handleDebugSectorSelectorLayout}
-        bottomInset={Math.max(insets.bottom, Platform.OS === 'web' ? 34 : 12)}
+        bottomInset={Math.max(insets.bottom, 6)}
       />
     </View>
   );
@@ -4167,9 +4171,8 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     zIndex: 5,
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    paddingBottom: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderWidth: 1,
     borderColor: 'rgba(0, 243, 255, 0.75)',
     borderRadius: 4,
@@ -4179,20 +4182,13 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  debugSectorLabel: {
-    color: '#7e879b',
-    fontFamily: 'Inter_700Bold',
-    fontSize: 7,
-    letterSpacing: 1.4,
-    marginBottom: 5,
-  },
   debugSectorContent: {
-    gap: 6,
+    gap: 5,
     paddingRight: 2,
   },
   debugSectorButton: {
-    width: 31,
-    height: 31,
+    width: 27,
+    height: 27,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -4211,7 +4207,7 @@ const styles = StyleSheet.create({
   debugSectorButtonText: {
     color: '#b8ff4a',
     fontFamily: 'Inter_700Bold',
-    fontSize: 13,
+    fontSize: 12,
   },
   debugSectorButtonTextSelected: {
     color: '#fff3d6',
