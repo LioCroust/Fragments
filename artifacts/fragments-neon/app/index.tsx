@@ -2426,7 +2426,8 @@ export default function GameScreen() {
       ? g.diamonds.map((diamond) => ({ ...diamond }))
       : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
     const previousEnemies = preserveStats && !resetBoard ? g.enemies : [];
-    const previousBombs = preserveStats && !resetBoard
+    const preserveBombLayout = preserveStats && !resetBoard;
+    const previousBombs = preserveBombLayout
       ? g.bombs.map((bomb) => ({ ...bomb }))
       : [];
     if (!preserveStats) recordBannerShownRef.current = false;
@@ -2436,14 +2437,11 @@ export default function GameScreen() {
     const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
     const enemies = createEnemies(width, height, cell, previousLevel);
     preserveDestroyedEnemies(enemies, previousEnemies);
-    const bombs = createBombs(width, height, cell, previousLevel);
-    if (previousBombs.length > 0 && bombs.length === previousBombs.length) {
-      bombs.forEach((bomb, index) => {
-        bomb.x = previousBombs[index].x;
-        bomb.y = previousBombs[index].y;
-        bomb.destroyed = previousBombs[index].destroyed;
-      });
-    }
+    // A respawn resumes the same sector state, including the exact bomb
+    // roster and destroyed flags. Only a new sector/game creates a new draw.
+    const bombs = preserveBombLayout
+      ? previousBombs
+      : createBombs(width, height, cell, previousLevel);
     const respawnPlayer = {
       x: bounds.left + cell,
       y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
@@ -2458,7 +2456,7 @@ export default function GameScreen() {
       [],
       respawnPlayer,
     );
-    if (!(preserveStats && !resetBoard && previousBombs.length > 0)) {
+    if (!preserveBombLayout) {
       placeBombsInOpenSurface(
         bombs,
         enemies,
