@@ -684,14 +684,14 @@ const drawEnemySpriteWithGlow = (
 };
 
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
-  if (kind === 'DRAGON') return { width: cell * 3.4, height: cell * 3.4 };
+  if (kind === 'DRAGON') return { width: cell * 1.7, height: cell * 1.7 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
   if (kind === 'SPIDER') return { width: cell * 3.5, height: cell * 3.5 };
   return { width: cell * 2.5, height: cell * 2.5 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
-  if (enemy.kind === 'DRAGON') return cell * 1.2;
+  if (enemy.kind === 'DRAGON') return cell * 0.6;
   if (enemy.kind === 'SPIDER') return cell * 1.0;
   if (enemy.kind === 'SEVEN') return cell * 1.32;
   return cell * 1.08;
@@ -1364,20 +1364,50 @@ export default function GameScreen() {
     const spawnPointAfterBurst = (g: Game, enemy: Enemy) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
       const visualRadius = enemyVisualRadius(enemy, g.cell);
-      const candidates = [
-        { x: g.width * 0.5, y: g.height * 0.34 },
-        { x: g.width * 0.32, y: g.height * 0.5 },
-        { x: g.width * 0.68, y: g.height * 0.5 },
-        { x: g.width * 0.5, y: g.height * 0.66 },
+      const candidateSeeds = [
+        { x: 0.5, y: 0.3 },
+        { x: 0.28, y: 0.3 },
+        { x: 0.72, y: 0.3 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.28, y: 0.5 },
+        { x: 0.72, y: 0.5 },
+        { x: 0.5, y: 0.7 },
+        { x: 0.28, y: 0.7 },
+        { x: 0.72, y: 0.7 },
       ];
-      const candidate = candidates.find((point) => {
+      const candidates = candidateSeeds.map((seed) => ({
+        x: bounds.left + (bounds.right - bounds.left) * seed.x,
+        y: bounds.top + (bounds.bottom - bounds.top) * seed.y,
+      }));
+      const candidateIsUsable = (point: Point, requireUnsecured: boolean) => {
         const x = clamp(point.x, bounds.left + visualRadius, bounds.right - visualRadius);
         const y = clamp(point.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
         const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-        return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
-      }) ?? candidates[0];
-      enemy.x = clamp(candidate.x, bounds.left + visualRadius, bounds.right - visualRadius);
-      enemy.y = clamp(candidate.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
+        const spriteFootprint = enemySpriteFootprint(enemy, g.cell, x, y);
+        const outsideClaimedSurface = spriteFootprint.every((spritePoint) => (
+          !pointInsideClaimedSurface(spritePoint, g.claimedPolygons, g.cell * 0.08)
+        ));
+        const noClaimedPolygonOverlap = g.claimedPolygons.every((polygon) => (
+          !polygonsIntersect(spriteCorners, polygon)
+        ));
+        if (requireUnsecured && (!outsideClaimedSurface || !noClaimedPolygonOverlap)) return null;
+        return { x, y };
+      };
+
+      // Respawns belong in the dark, unsecured field. Only fall back to a
+      // claimed location if the entire remaining field is secured.
+      const candidate = candidates
+        .map((point) => candidateIsUsable(point, true))
+        .find((point): point is Point => point !== null)
+        ?? candidates
+          .map((point) => candidateIsUsable(point, false))
+          .find((point): point is Point => point !== null)
+        ?? {
+          x: clamp(candidates[0].x, bounds.left + visualRadius, bounds.right - visualRadius),
+          y: clamp(candidates[0].y, bounds.top + visualRadius, bounds.bottom - visualRadius),
+        };
+      enemy.x = candidate.x;
+      enemy.y = candidate.y;
     };
 
     const burstEnemy = (g: Game, enemy: Enemy, now: number) => {
