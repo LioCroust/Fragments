@@ -8,9 +8,10 @@ type ReadoutProps = {
   suffix?: string;
   meta: string;
   ariaLabel: string;
+  shieldCount?: number;
 };
 
-function Readout({ className, label, value, suffix, meta, ariaLabel }: ReadoutProps) {
+function Readout({ className, label, value, suffix, meta, ariaLabel, shieldCount }: ReadoutProps) {
   return (
     <article className={`prism-warbird__readout ${className}`} aria-label={ariaLabel}>
       <div className="prism-warbird__readout-head">
@@ -22,21 +23,29 @@ function Readout({ className, label, value, suffix, meta, ariaLabel }: ReadoutPr
         {suffix && <em>{suffix}</em>}
       </strong>
       <small className="prism-warbird__meta">{meta}</small>
-      <div className="prism-warbird__meter" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
+      {typeof shieldCount === "number" && (
+        <div
+          className="prism-warbird__shield-meter"
+          role="meter"
+          aria-label={`${shieldCount} boucliers actifs sur 3`}
+          aria-valuemin={0}
+          aria-valuemax={3}
+          aria-valuenow={shieldCount}
+        >
+          {Array.from({ length: 3 }, (_, index) => (
+            <i key={index} className={index < shieldCount ? "is-live" : ""} />
+          ))}
+        </div>
+      )}
     </article>
   );
 }
 
 export default function PrismWarbirdInterior() {
+  const zoneValue = 27;
+  const zoneMax = 80;
+  const zoneProgress = (zoneValue / zoneMax) * 100;
+
   return (
     <main className="prism-warbird" aria-label="Fragments Neon Prism Warbird cockpit interior">
       <section className="prism-warbird__stage" aria-label="Faceted pilot instrument panel">
@@ -90,6 +99,7 @@ export default function PrismWarbirdInterior() {
           value="3"
           meta="ARMOR LOCK"
           ariaLabel="Three shields"
+          shieldCount={3}
         />
         <Readout
           className="prism-warbird__readout--zone"
@@ -97,8 +107,18 @@ export default function PrismWarbirdInterior() {
           value="27"
           suffix=" / 80"
           meta="CUT DEPTH"
-          ariaLabel="Zone 27 out of 80"
+          ariaLabel={`Zone ${zoneValue} out of ${zoneMax}`}
         />
+        <div
+          className="prism-warbird__zone-progress"
+          role="progressbar"
+          aria-label={`Zone sécurisée ${zoneValue} sur ${zoneMax}`}
+          aria-valuemin={0}
+          aria-valuemax={zoneMax}
+          aria-valuenow={zoneValue}
+        >
+          <span style={{ width: `${zoneProgress}%` }} />
+        </div>
       </section>
     </main>
   );

@@ -12,7 +12,6 @@ import Svg, { Circle, G, Image as SvgImage, Line, Polygon, Polyline, Rect } from
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors } from '@/hooks/useColors';
 import {
   buildOrthogonalCaptureRegions,
   captureRegionsOverlapCircle,
@@ -29,6 +28,16 @@ const CAPTURED_ZONE_OPACITY = 0.15;
 const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
+const LEVEL_CAPTURE_TARGET = 80;
+const HUD_COLORS = {
+  cyan: '#00f3ff',
+  lime: '#b8ff4a',
+  amber: '#ffb02e',
+  magenta: '#ff2bb5',
+  warmWhite: '#fff3d6',
+  panel: 'rgba(8, 10, 18, 0.92)',
+  panelMuted: 'rgba(8, 10, 18, 0.78)',
+} as const;
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 
@@ -1125,7 +1134,6 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
 };
 
 export default function GameScreen() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const canvasRef = useRef<any>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
@@ -1290,7 +1298,12 @@ export default function GameScreen() {
     setHud({
       score: previousScore,
       shields: previousShields,
-      capture: 0,
+      capture: preserveStats && !resetBoard
+        ? Math.min(
+          LEVEL_CAPTURE_TARGET,
+          Math.floor(clamp(previousCapturedArea / totalPlayableArea, 0, 1) * 100),
+        )
+        : 0,
       level: previousLevel,
       mode: 'SLOW',
       feedback: '',
@@ -1969,7 +1982,7 @@ export default function GameScreen() {
               if (enemyInside) burstEnemy(g, enemy, now);
             });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
-            if (g.level === 1 && g.capturedArea / g.totalPlayableArea >= 0.8) {
+            if (g.level === 1 && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
               g.level = 2;
               resetGame(true, true);
               return;
@@ -2311,7 +2324,10 @@ export default function GameScreen() {
           setHud({
             score: g.score,
             shields: Math.max(0, g.shields),
-            capture: Math.floor((g.capturedArea / g.totalPlayableArea) * 100),
+            capture: Math.min(
+              LEVEL_CAPTURE_TARGET,
+              Math.floor(clamp(g.capturedArea / g.totalPlayableArea, 0, 1) * 100),
+            ),
             level: g.level,
             mode: g.mode,
             feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : g.fillQueue.length > 0 ? 'SECTEUR EN SYNCHRONISATION' : '',
@@ -2323,7 +2339,7 @@ export default function GameScreen() {
 
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
-  }, [resetGame, colors, pickupChimePlayer]);
+  }, [resetGame, pickupChimePlayer]);
 
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
@@ -2355,6 +2371,9 @@ export default function GameScreen() {
     );
   };
 
+  const zoneProgress = clamp(hud.capture / LEVEL_CAPTURE_TARGET, 0, 1);
+  const shieldSegments = Array.from({ length: hud.shields });
+
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
       <View style={styles.arena} onLayout={handleArenaLayout} testID="game-arena">
@@ -2367,16 +2386,67 @@ export default function GameScreen() {
       </View>
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
-        <View style={styles.hudRow}>
-          <Text style={[styles.hudText, { color: colors.primary }]}>
-            SECTEUR {hud.level.toString().padStart(2, '0')}
-          </Text>
-          <Text style={[styles.scoreText, { color: colors.foreground }]}>SCORE {hud.score.toString().padStart(6, '0')}</Text>
+        <View style={styles.hudSignalRail}>
+          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
+          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.lime }]} />
+          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.amber }]} />
+          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.magenta }]} />
+          <Text style={styles.signalLabel}>REACTOR / FLIGHT SYSTEMS</Text>
+          <Text style={styles.signalLabel}>SECTEUR {hud.level.toString().padStart(2, '0')}</Text>
         </View>
-        <View style={styles.hudRow}>
-          <Text style={[styles.hudSubtext, { color: colors.accent }]}>BOUCLIERS {hud.shields}</Text>
-          <Text style={[styles.hudSubtext, { color: colors.secondary }]}>ZONE {hud.capture}%/80</Text>
+
+        <View style={styles.hudDeck}>
+          <View style={[styles.hudCard, styles.sectorCard]}>
+            <Text style={[styles.cardLabel, { color: HUD_COLORS.cyan }]}>SECTEUR</Text>
+            <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
+              {hud.level.toString().padStart(2, '0')}
+            </Text>
+            <Text style={[styles.cardMeta, { color: HUD_COLORS.cyan }]}>VECTOR / LOCK</Text>
+          </View>
+
+          <View style={[styles.hudCard, styles.scoreCard]}>
+            <Text style={[styles.cardLabel, { color: HUD_COLORS.warmWhite }]}>SCORE</Text>
+            <Text style={[styles.scoreValue, { color: HUD_COLORS.warmWhite }]}>
+              {hud.score.toString().padStart(6, '0')}
+            </Text>
+            <Text style={[styles.cardMeta, { color: HUD_COLORS.amber }]}>COMBAT INDEX</Text>
+          </View>
+
+          <View style={[styles.hudCard, styles.shieldCard]}>
+            <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
+            <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
+            <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
+              {shieldSegments.map((_, index) => (
+                <View
+                  key={`shield-${index}`}
+                  style={[
+                    styles.shieldSegment,
+                    { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index % 3] },
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
+          </View>
         </View>
+
+        <View style={styles.zoneModule}>
+          <View style={[styles.hudCard, styles.zoneCard]}>
+            <Text style={[styles.cardLabel, { color: HUD_COLORS.amber }]}>ZONE SÉCURISÉE</Text>
+            <View style={styles.zoneValueRow}>
+              <Text style={[styles.zoneValue, { color: HUD_COLORS.amber }]}>{hud.capture}</Text>
+              <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
+            </View>
+            <Text style={[styles.cardMeta, { color: HUD_COLORS.amber }]}>CUT DEPTH / NEXT SECTOR</Text>
+          </View>
+          <View style={styles.zoneProgressRail}>
+            <View style={[styles.zoneProgressFill, { width: `${zoneProgress * 100}%` }]} />
+            <View style={styles.zoneProgressTicks}>
+              {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
+            </View>
+          </View>
+        </View>
+
         {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
 
@@ -2410,32 +2480,170 @@ const styles = StyleSheet.create({
     left: 18,
     right: 18,
   },
-  hudRow: {
+  hudSignalRail: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 7,
+    paddingHorizontal: 6,
+  },
+  signalDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 1,
+    shadowColor: '#ffffff',
+    shadowRadius: 5,
+    shadowOpacity: 0.8,
+  },
+  signalLabel: {
+    color: '#7e879b',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 1,
+    marginLeft: 3,
+  },
+  hudDeck: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    minHeight: 86,
   },
-  hudText: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 16,
-    letterSpacing: 1.5,
+  hudCard: {
+    borderWidth: 1,
+    borderRadius: 3,
+    backgroundColor: HUD_COLORS.panel,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    shadowColor: '#000000',
+    shadowOpacity: 0.55,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  scoreText: {
+  sectorCard: {
+    width: '24%',
+    minHeight: 60,
+    borderColor: HUD_COLORS.cyan,
+    transform: [{ translateY: 2 }, { rotate: '-1deg' }],
+  },
+  scoreCard: {
+    width: '48%',
+    minHeight: 92,
+    marginHorizontal: -5,
+    zIndex: 2,
+    borderColor: HUD_COLORS.amber,
+    backgroundColor: 'rgba(10, 12, 20, 0.96)',
+    transform: [{ translateY: 8 }],
+  },
+  shieldCard: {
+    width: '27%',
+    minHeight: 70,
+    borderColor: HUD_COLORS.lime,
+    transform: [{ translateY: 1 }, { rotate: '1deg' }],
+  },
+  cardLabel: {
     fontFamily: 'Inter_700Bold',
-    fontSize: 18,
-    letterSpacing: 2.4,
-    textShadowColor: '#00f3ff',
+    fontSize: 8,
+    letterSpacing: 1.6,
+  },
+  cardMeta: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 0.8,
+    marginTop: 3,
+  },
+  sectorValue: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 29,
+    letterSpacing: 1,
+    lineHeight: 32,
+  },
+  scoreValue: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 31,
+    letterSpacing: 2,
+    lineHeight: 35,
+    textShadowColor: HUD_COLORS.amber,
     textShadowRadius: 9,
     textShadowOffset: { width: 0, height: 0 },
   },
-  hudSubtext: {
+  shieldValue: {
     fontFamily: 'Inter_700Bold',
-    fontSize: 11,
-    letterSpacing: 1.2,
+    fontSize: 24,
+    lineHeight: 27,
+  },
+  shieldSegments: {
+    flexDirection: 'row',
+    gap: 3,
+    marginTop: 1,
+    minHeight: 5,
+  },
+  shieldSegment: {
+    flex: 1,
+    height: 5,
+    borderRadius: 1,
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.85,
+    shadowRadius: 4,
+  },
+  zoneModule: {
+    alignItems: 'center',
+    marginTop: -1,
+    zIndex: 3,
+  },
+  zoneCard: {
+    width: '56%',
+    minHeight: 65,
+    borderColor: HUD_COLORS.amber,
+    backgroundColor: HUD_COLORS.panelMuted,
+    transform: [{ translateY: -3 }],
+  },
+  zoneValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  zoneValue: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 28,
+    lineHeight: 31,
+    letterSpacing: 1,
+  },
+  zoneTarget: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    letterSpacing: 1,
+    marginLeft: 4,
+  },
+  zoneProgressRail: {
+    width: '62%',
+    height: 7,
+    marginTop: -1,
+    borderWidth: 1,
+    borderColor: '#667085',
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
+  },
+  zoneProgressFill: {
+    height: '100%',
+    backgroundColor: HUD_COLORS.cyan,
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 1,
+    shadowRadius: 7,
+  },
+  zoneProgressTicks: {
+    ...StyleSheet.absoluteFill,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  zoneProgressTick: {
+    width: 1,
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.42)',
   },
   feedback: {
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: 'Inter_700Bold',
     fontSize: 11,
     letterSpacing: 1.8,

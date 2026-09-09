@@ -52,8 +52,8 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  min-height: 92px;
-  padding: .72rem 1rem .65rem;
+  min-height: 112px;
+  padding: .92rem 1.15rem .9rem;
   overflow: hidden;
   border: 3px solid rgba(255, 189, 98, .9);
   background: rgba(18, 14, 15, .94);
@@ -63,33 +63,11 @@
     0 0 0 1px rgba(12, 9, 10, .88),
     0 7px 0 rgba(3, 2, 5, .74),
     0 0 18px rgba(255, 189, 98, .12);
-  transform: skewX(-5deg);
-}
-
-.prism-warbird__readout::before {
-  position: absolute;
-  top: .45rem;
-  right: .58rem;
-  left: .58rem;
-  height: 2px;
-  background: linear-gradient(90deg, var(--cyan), transparent 54%, var(--amber));
-  content: "";
-  opacity: .82;
+  transform: skewX(-6deg);
 }
 
 .prism-warbird__readout > * {
-  transform: skewX(5deg);
-}
-
-.prism-warbird__readout::after {
-  position: absolute;
-  right: .4rem;
-  bottom: .52rem;
-  width: 6px;
-  height: 6px;
-  background: var(--cyan);
-  box-shadow: 11px 0 var(--lime), 22px 0 var(--amber), 33px 0 var(--magenta), 44px 0 var(--cyan);
-  content: "";
+  transform: skewX(6deg);
 }
 
 .prism-warbird__readout-head {
@@ -117,10 +95,10 @@
 }
 
 .prism-warbird__value {
-  margin-top: .45rem;
+  margin-top: .72rem;
   color: var(--paper);
   font-family: "Orbitron", "Share Tech Mono", monospace;
-  font-size: clamp(24px, 3.35vw, 42px);
+  font-size: clamp(28px, 4vw, 54px);
   font-weight: 700;
   letter-spacing: .08em;
   line-height: 1;
@@ -148,37 +126,29 @@
   white-space: nowrap;
 }
 
-.prism-warbird__meter {
+.prism-warbird__shield-meter {
+  position: absolute;
+  right: 1.1rem;
+  bottom: .78rem;
+  left: 1.1rem;
   display: flex;
-  gap: 4px;
-  height: 6px;
-  margin-top: .48rem;
+  gap: 8px;
+  height: 9px;
+  margin-top: 0;
 }
 
-.prism-warbird__meter i {
+.prism-warbird__shield-meter i {
   flex: 1;
-  min-width: 5px;
-  background: rgba(255, 232, 210, .14);
-  border: 1px solid rgba(255, 232, 210, .18);
+  min-width: 18px;
+  border: 1px solid rgba(184, 242, 106, .34);
+  background: rgba(184, 242, 106, .08);
+  transform: skewX(-12deg);
 }
 
-.prism-warbird__meter i:nth-child(-n + 5) {
-  background: var(--cyan);
-  border-color: var(--cyan);
-  box-shadow: 0 0 7px rgba(105, 244, 238, .52);
-}
-
-.prism-warbird__readout--shields .prism-warbird__meter i:nth-child(-n + 3),
-.prism-warbird__readout--zone .prism-warbird__meter i:nth-child(-n + 6) {
-  background: var(--amber);
-  border-color: var(--amber);
-  box-shadow: 0 0 7px rgba(255, 189, 98, .52);
-}
-
-.prism-warbird__readout--sector .prism-warbird__meter i:nth-child(-n + 4) {
-  background: var(--magenta);
-  border-color: var(--magenta);
-  box-shadow: 0 0 7px rgba(212, 139, 203, .48);
+.prism-warbird__shield-meter i.is-live {
+  border-color: var(--lime);
+  background: linear-gradient(90deg, var(--cyan), var(--lime));
+  box-shadow: 0 0 11px rgba(184, 242, 106, .68);
 }
 
 .prism-warbird__signal-bank {
@@ -280,19 +250,28 @@
 }
 
 .prism-warbird__readout--score {
-  top: 34%;
-  left: 33%;
-  width: 34%;
-  height: 30%;
+  top: 26%;
+  left: 24%;
+  width: 52%;
+  height: 42%;
   border-color: rgba(255, 189, 98, .94);
+  z-index: 6;
+  transform: skewX(-6deg) rotate(-1deg);
+}
+
+.prism-warbird__readout--score .prism-warbird__value {
+  font-size: clamp(36px, 5.8vw, 72px);
+  letter-spacing: .12em;
 }
 
 .prism-warbird__readout--sector {
-  top: 65%;
-  left: 2%;
-  width: 25%;
-  height: 31%;
+  top: 61%;
+  left: -1%;
+  width: 31%;
+  height: 37%;
   border-color: rgba(105, 244, 238, .9);
+  z-index: 7;
+  transform: skewX(-6deg) rotate(-1deg);
 }
 
 .prism-warbird__readout--sector .prism-warbird__value {
@@ -301,11 +280,13 @@
 }
 
 .prism-warbird__readout--shields {
-  top: 65%;
-  right: 2%;
-  width: 25%;
-  height: 31%;
+  top: 61%;
+  right: -1%;
+  width: 31%;
+  height: 37%;
   border-color: rgba(184, 242, 106, .88);
+  z-index: 9;
+  transform: skewX(-6deg) rotate(1deg);
 }
 
 .prism-warbird__readout--shields .prism-warbird__value {
@@ -314,16 +295,40 @@
 }
 
 .prism-warbird__readout--zone {
-  top: 65%;
-  right: 28%;
-  width: 24%;
-  height: 31%;
+  top: 70%;
+  right: 21%;
+  width: 37%;
+  height: 28%;
   border-color: rgba(255, 189, 98, .94);
+  z-index: 7;
+  transform: skewX(-6deg) rotate(1deg);
 }
 
 .prism-warbird__readout--zone .prism-warbird__value {
   color: var(--amber);
   text-shadow: 0 0 12px rgba(255, 189, 98, .5);
+}
+
+.prism-warbird__zone-progress {
+  position: absolute;
+  right: 21%;
+  bottom: -3%;
+  z-index: 8;
+  width: 37%;
+  height: 11px;
+  padding: 2px;
+  border: 1px solid rgba(255, 189, 98, .64);
+  background: rgba(16, 12, 12, .92);
+  box-shadow: 0 0 12px rgba(255, 189, 98, .14);
+  transform: skewX(-6deg);
+}
+
+.prism-warbird__zone-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--amber));
+  box-shadow: 0 0 10px rgba(255, 189, 98, .58);
+  transform-origin: left center;
 }
 
 @media (max-width: 700px) {
