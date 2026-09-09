@@ -180,7 +180,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'SECTOR' | 'ENEMY' | 'CLEAN';
+  kind: 'RECORD' | 'DIAMOND' | 'SECTOR' | 'ENEMY' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -2770,8 +2770,12 @@ export default function GameScreen() {
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
-          if (g.shields <= 0) resetGame(false);
-          else resetGame(true);
+          if (g.shields <= 0) {
+            enqueueBanner({ kind: 'GAME_OVER', score: g.score });
+            resetGame(false);
+          } else {
+            resetGame(true);
+          }
         }
         return;
       }
@@ -3355,7 +3359,9 @@ export default function GameScreen() {
                       ? styles.sectorBanner
                       : banner.kind === 'CLEAN'
                         ? styles.cleanBanner
-                      : styles.enemyBanner,
+                          : banner.kind === 'GAME_OVER'
+                            ? styles.gameOverBanner
+                            : styles.enemyBanner,
                 { transform: [{ translateX: bannerTranslateX }] },
               ]}
             >
@@ -3375,7 +3381,9 @@ export default function GameScreen() {
                       ? 'SECTEUR TERMINÉ'
                         : banner.kind === 'CLEAN'
                           ? 'SECTEUR NETTOYÉ !'
-                      : 'ENNEMI DÉTRUIT'}
+                          : banner.kind === 'GAME_OVER'
+                            ? 'GAME OVER'
+                            : 'ENNEMI DÉTRUIT'}
               </Text>
               <Text style={styles.bannerScore} numberOfLines={1}>
                 {banner.kind === 'RECORD'
@@ -3385,8 +3393,10 @@ export default function GameScreen() {
                     : banner.kind === 'SECTOR'
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
                       : banner.kind === 'CLEAN'
-                        ? 'TERMINEZ LA SÉCURISATION À 80%'
-                      : `+${banner.points ?? 0} POINTS`}
+                          ? 'SÉCURISEZ 80%'
+                          : banner.kind === 'GAME_OVER'
+                            ? `SCORE FINAL  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
+                            : `+${banner.points ?? 0} POINTS`}
               </Text>
             </Animated.View>
           </View>
@@ -3712,6 +3722,10 @@ const styles = StyleSheet.create({
   cleanBanner: {
     borderColor: HUD_COLORS.lime,
     backgroundColor: 'rgba(18, 34, 8, 0.56)',
+  },
+  gameOverBanner: {
+    borderColor: '#ff5500',
+    backgroundColor: 'rgba(42, 8, 3, 0.62)',
   },
   enemyBanner: {
     borderColor: HUD_COLORS.lime,
