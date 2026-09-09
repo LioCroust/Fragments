@@ -745,16 +745,14 @@ const playerOuterBounds = (
 ) => {
   const arenaWidth = bounds.left + bounds.right;
   const arenaHeight = bounds.top + bounds.bottom;
-  const spriteSize = playerSpriteSize(cell);
-  const halfSpriteWidth = spriteSize.width * 0.5;
-  const halfSpriteHeight = spriteSize.height * 0.5;
+  const radius = playerBodyRadius(cell);
   return {
-    // The entire visible sprite stays inside the physical arena viewport
-    // while its center can travel through the safe band outside the blue line.
-    left: halfSpriteWidth + OUTER_STOP_GAP,
-    right: arenaWidth - halfSpriteWidth - OUTER_STOP_GAP,
-    top: halfSpriteHeight + OUTER_STOP_GAP,
-    bottom: arenaHeight - halfSpriteHeight - OUTER_STOP_GAP,
+    // Keep the drone body inside the physical viewport while its sprite can
+    // visibly sit behind the blue perimeter in the outer safe band.
+    left: radius + OUTER_STOP_GAP,
+    right: arenaWidth - radius - OUTER_STOP_GAP,
+    top: radius + OUTER_STOP_GAP,
+    bottom: arenaHeight - radius - OUTER_STOP_GAP,
   };
 };
 
@@ -764,17 +762,17 @@ const playerPerimeterSafetyPoint = (
   bounds: ReturnType<typeof perimeterBounds>,
   cell: number,
 ) => {
-  const spriteSize = playerSpriteSize(cell);
+  const radius = playerBodyRadius(cell);
   const safePoint = { ...point };
   if (direction.x < 0) {
-    safePoint.x = bounds.left - spriteSize.width * 0.5 - OUTER_STOP_GAP;
+    safePoint.x = bounds.left - radius - OUTER_STOP_GAP;
   } else if (direction.x > 0) {
-    safePoint.x = bounds.right + spriteSize.width * 0.5 + OUTER_STOP_GAP;
+    safePoint.x = bounds.right + radius + OUTER_STOP_GAP;
   }
   if (direction.y < 0) {
-    safePoint.y = bounds.top - spriteSize.height * 0.5 - OUTER_STOP_GAP;
+    safePoint.y = bounds.top - radius - OUTER_STOP_GAP;
   } else if (direction.y > 0) {
-    safePoint.y = bounds.bottom + spriteSize.height * 0.5 + OUTER_STOP_GAP;
+    safePoint.y = bounds.bottom + radius + OUTER_STOP_GAP;
   }
   return safePoint;
 };
