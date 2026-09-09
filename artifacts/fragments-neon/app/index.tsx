@@ -2014,29 +2014,55 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           0.3,
           0.78,
         );
+        const webSize = snapshot.cell * SPIDER_WEB_SIZE_CELLS;
         return (
           <G key={`spider-thread-${index}`} opacity={active ? 0.82 : 0.92}>
-            <Line
-              x1={thread.start.x}
-              y1={thread.start.y}
-              x2={thread.end.x}
-              y2={thread.end.y}
-              stroke={active ? '#ff2bb5' : '#fff3d6'}
-              strokeWidth={active ? 3.2 : 2.6}
-              strokeLinecap="round"
-            />
-            {active && (
+            {!thread.anchored && (
+              <>
+                <Line
+                  x1={thread.start.x}
+                  y1={thread.start.y}
+                  x2={thread.end.x}
+                  y2={thread.end.y}
+                  stroke="#fff3d6"
+                  strokeWidth={2.8}
+                  strokeLinecap="round"
+                />
+                <Line
+                  x1={thread.start.x}
+                  y1={thread.start.y}
+                  x2={thread.end.x}
+                  y2={thread.end.y}
+                  stroke="#ff2bb5"
+                  strokeWidth={1.15}
+                  strokeLinecap="round"
+                />
+              </>
+            )}
+            {thread.anchored && (
+              <SvgImage
+                href={spiderWebSource}
+                x={thread.target.x - webSize / 2}
+                y={thread.target.y - webSize / 2}
+                width={webSize}
+                height={webSize}
+                opacity={clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88)}
+              />
+            )}
+            {!thread.anchored && (
               <Line
                 x1={thread.start.x}
                 y1={thread.start.y}
                 x2={thread.end.x}
                 y2={thread.end.y}
                 stroke="#00f3ff"
-                strokeWidth={0.9}
+                strokeWidth={0.72}
                 strokeLinecap="round"
               />
             )}
-            <Circle cx={thread.end.x} cy={thread.end.y} r={active ? 2.4 : 3.1} fill={active ? '#fff3d6' : '#ff2bb5'} />
+            {!thread.anchored && (
+              <Circle cx={thread.end.x} cy={thread.end.y} r={3.2} fill="#fff3d6" />
+            )}
           </G>
         );
       })}
@@ -3751,12 +3777,17 @@ export default function GameScreen() {
           };
           const caughtInSpiderWeb = g.spiderThreads.some((thread) => (
             spiderThreadIsActive(thread)
-            && distanceBetweenSegments(
-              g.player,
-              probe,
-              thread.start,
-              thread.end,
-            ) <= playerBodyRadius(g.cell) + g.cell * 0.12
+            && (
+              thread.anchored
+                ? Math.hypot(probe.x - thread.target.x, probe.y - thread.target.y)
+                  <= playerBodyRadius(g.cell) + g.cell * SPIDER_WEB_RADIUS_CELLS
+                : distanceBetweenSegments(
+                  g.player,
+                  probe,
+                  thread.start,
+                  thread.end,
+                ) <= playerBodyRadius(g.cell) + g.cell * 0.12
+            )
           ));
           const movementDistance = (
             (caughtInSpiderWeb ? baseSpeed * SPIDER_THREAD_SLOW_FACTOR : baseSpeed) * dt
@@ -4118,40 +4149,54 @@ export default function GameScreen() {
          }
        }
 
-        context.globalCompositeOperation = 'lighter';
-         g.spiderThreads.forEach((thread) => {
-           const active = spiderThreadIsActive(thread);
-          context.save();
-           context.globalAlpha = active ? 0.82 : 0.94;
-          context.lineCap = 'round';
-           context.setLineDash([]);
-           context.strokeStyle = active ? '#ff2bb5' : '#fff3d6';
-           context.shadowColor = active ? '#ff2bb5' : '#00f3ff';
-           context.shadowBlur = active ? 12 : 9;
-           context.lineWidth = active ? 3.2 : 2.6;
-          context.beginPath();
-           context.moveTo(thread.start.x, thread.start.y);
-           context.lineTo(thread.end.x, thread.end.y);
-          context.stroke();
-          if (active) {
+         context.globalCompositeOperation = 'lighter';
+          const spiderWebImage = spiderWebImageRef.current;
+          g.spiderThreads.forEach((thread) => {
+            const active = spiderThreadIsActive(thread);
+            if (thread.anchored && spiderWebImage) {
+              const webSize = g.cell * SPIDER_WEB_SIZE_CELLS;
+              context.save();
+              context.globalAlpha = clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88);
+              context.shadowColor = '#00f3ff';
+              context.shadowBlur = g.cell * 0.16;
+              context.drawImage(
+                spiderWebImage,
+                thread.target.x - webSize / 2,
+                thread.target.y - webSize / 2,
+                webSize,
+                webSize,
+              );
+              context.restore();
+              return;
+            }
+            context.save();
+            context.globalAlpha = active ? 0.82 : 0.94;
+            context.lineCap = 'round';
             context.setLineDash([]);
+            context.strokeStyle = '#fff3d6';
+            context.shadowColor = '#ff2bb5';
+            context.shadowBlur = 9;
+            context.lineWidth = 2.8;
+            context.beginPath();
+            context.moveTo(thread.start.x, thread.start.y);
+            context.lineTo(thread.end.x, thread.end.y);
+            context.stroke();
             context.shadowColor = '#00f3ff';
             context.shadowBlur = 4;
             context.strokeStyle = '#00f3ff';
-            context.lineWidth = 0.9;
+            context.lineWidth = 0.72;
             context.beginPath();
-             context.moveTo(thread.start.x, thread.start.y);
-             context.lineTo(thread.end.x, thread.end.y);
+            context.moveTo(thread.start.x, thread.start.y);
+            context.lineTo(thread.end.x, thread.end.y);
             context.stroke();
-          }
-          context.shadowColor = '#fff3d6';
-          context.shadowBlur = 7;
-          context.fillStyle = '#fff3d6';
-          context.beginPath();
-           context.arc(thread.end.x, thread.end.y, active ? 2.4 : 3.1, 0, Math.PI * 2);
-          context.fill();
-          context.restore();
-        });
+            context.shadowColor = '#fff3d6';
+            context.shadowBlur = 7;
+            context.fillStyle = '#fff3d6';
+            context.beginPath();
+            context.arc(thread.end.x, thread.end.y, 3.2, 0, Math.PI * 2);
+            context.fill();
+            context.restore();
+          });
         const diamondImage = diamondSpriteImageRef.current;
         if (diamondImage) {
          const diamondSize = g.cell * 1.5;
