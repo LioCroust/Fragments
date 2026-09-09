@@ -40,6 +40,7 @@ const HUD_COLORS = {
 } as const;
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
+const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -2376,6 +2377,22 @@ export default function GameScreen() {
 
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
+      <View style={styles.cockpitHeader} pointerEvents="none">
+        <RNImage
+          source={cockpitInteriorSource}
+          style={styles.cockpitInterior}
+          resizeMode="cover"
+          accessibilityLabel="Intérieur du cockpit Prism Warbird vu depuis le siège du pilote"
+        />
+        <View style={styles.cockpitShade} />
+        <View style={styles.cockpitBottomRail}>
+          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.cyan }]} />
+          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.lime }]} />
+          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.amber }]} />
+          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.magenta }]} />
+        </View>
+      </View>
+
       <View style={styles.arena} onLayout={handleArenaLayout} testID="game-arena">
         {Platform.OS === 'web'
           ? React.createElement('canvas' as any, {
@@ -2467,18 +2484,59 @@ const styles = StyleSheet.create({
   },
   arena: {
     position: 'absolute',
-    top: 72,
+    top: 168,
     left: 0,
     right: 0,
     bottom: 76,
     backgroundColor: '#000000',
     overflow: 'hidden',
   },
+  cockpitHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 220,
+    zIndex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#050509',
+  },
+  cockpitInterior: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+    opacity: 0.9,
+  },
+  cockpitShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.34)',
+  },
+  cockpitBottomRail: {
+    position: 'absolute',
+    left: 34,
+    right: 34,
+    bottom: 6,
+    height: 5,
+    flexDirection: 'row',
+    gap: 5,
+    padding: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 189, 98, 0.58)',
+    backgroundColor: 'rgba(5, 5, 10, 0.88)',
+  },
+  cockpitRailLight: {
+    flex: 1,
+    height: 1,
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+  },
   hud: {
     position: 'absolute',
     top: 0,
     left: 18,
     right: 18,
+    zIndex: 2,
   },
   hudSignalRail: {
     flexDirection: 'row',
