@@ -255,6 +255,24 @@ type Enemy = Point & {
   lastSafeY?: number;
 };
 
+type EnemySpawnSpec = {
+  baseIndex: number;
+  spiderGrade?: number;
+  isBoss?: boolean;
+  bossTier?: number;
+};
+
+const BOSS_SECTOR_KINDS: Record<number, EnemyKind> = {
+  10: 'SPIDER',
+  20: 'DRAGON',
+  30: 'SEVEN',
+  40: 'SHIP',
+  50: 'SPIDER',
+};
+
+const isBossSector = (level: number) => Boolean(BOSS_SECTOR_KINDS[level]);
+const bossKindForSector = (level: number) => BOSS_SECTOR_KINDS[level];
+
 type Diamond = Point & {
   phase: number;
   collected: boolean;
@@ -277,6 +295,10 @@ type SpiderThread = {
   target: Point;
   vx: number;
   vy: number;
+  projectileSpeed: number;
+  webSizeCells: number;
+  webRadiusCells: number;
+  slowFactor: number;
   ownerIndex: number;
   remaining: number;
   anchored: boolean;
