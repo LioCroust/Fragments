@@ -122,3 +122,17 @@ mtime_ms = 1788962606913
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/39fb5f26-28c2-4f10-a6d2-71878bee6501/9c49defb-472d-4b4b-ad0e-bb042f91828b"
 storage_version_token = "1788962625728845"
 content_type = "audio/wav"
+
+[[outputs]]
+id = "AW3WfKAq9e_FGb_i-sM15"
+uri = "file://artifacts/fragments-neon/assets/audio/diamond-capture.wav"
+type = "audio"
+title = "Diamond Capture — Neon Prism Reward"
+description = "Effet original de 1,82 seconde pour la capture d’un diamant : arpège cristallin ascendant, scintillements stéréo et résolution néon chaleureuse. Intégré séparément du son de capture de zone."
+logical_id = "b8860673-b50a-4417-82d0-edc688d3b07b"
+content_hash = "sha256:70befb554cea608f121845988ad5455039dbfb31c42f72757dcd6534500616ba"
+size = 321092
+mtime_ms = 1788964013661
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/b8860673-b50a-4417-82d0-edc688d3b07b/3b909005-aee0-42b9-892e-c5af463640da"
+storage_version_token = "1788964043297941"
+content_type = "audio/wav"

@@ -53,6 +53,7 @@ const HUD_COLORS = {
 } as const;
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
+const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
 const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
@@ -1427,6 +1428,10 @@ export default function GameScreen() {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
+  const diamondCapturePlayer = useAudioPlayer(diamondCaptureSource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
   const shieldLossExplosionPlayer = useAudioPlayer(shieldLossExplosionSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
@@ -1449,6 +1454,22 @@ export default function GameScreen() {
       if (__DEV__) console.warn('Unable to play shield loss explosion', error);
     });
   }, [shieldLossExplosionPlayer]);
+
+  const playDiamondCapture = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    void audioSessionReadyRef.current.then(async () => {
+      diamondCapturePlayer.muted = false;
+      diamondCapturePlayer.volume = 0.88;
+      try {
+        await diamondCapturePlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      diamondCapturePlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play diamond capture sound', error);
+    });
+  }, [diamondCapturePlayer]);
 
   const enqueueBanner = useCallback((nextBanner: Banner) => {
     bannerQueueRef.current.push(nextBanner);
@@ -1516,6 +1537,8 @@ export default function GameScreen() {
   useEffect(() => {
     pickupChimePlayer.muted = false;
     pickupChimePlayer.volume = 0.78;
+    diamondCapturePlayer.muted = false;
+    diamondCapturePlayer.volume = 0.88;
     shieldLossExplosionPlayer.muted = false;
     shieldLossExplosionPlayer.volume = 0.92;
     audioSessionReadyRef.current = setAudioModeAsync({
@@ -1529,7 +1552,7 @@ export default function GameScreen() {
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Unable to initialize native audio session', error);
       });
-  }, [pickupChimePlayer, shieldLossExplosionPlayer]);
+  }, [diamondCapturePlayer, pickupChimePlayer, shieldLossExplosionPlayer]);
 
   const playPickupChime = useCallback(() => {
     if (!audioUnlockedRef.current) return;
@@ -2386,7 +2409,7 @@ export default function GameScreen() {
               g.diamond.collected = true;
               g.score += DIAMOND_SCORE;
               diamondCaptured = true;
-              playPickupChime();
+              playDiamondCapture();
               enqueueBanner({ kind: 'DIAMOND', points: DIAMOND_SCORE });
               for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
@@ -2827,7 +2850,7 @@ export default function GameScreen() {
 
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
-  }, [enqueueBanner, playPickupChime, playShieldLossExplosion, resetGame]);
+  }, [enqueueBanner, playDiamondCapture, playPickupChime, playShieldLossExplosion, resetGame]);
 
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
