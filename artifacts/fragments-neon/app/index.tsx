@@ -1572,6 +1572,7 @@ export default function GameScreen() {
     };
     setHud({
       score: previousScore,
+      bestScore: bestScoreRef.current,
       shields: previousShields,
       capture: preserveStats && !resetBoard
         ? Math.min(
@@ -1993,23 +1994,51 @@ export default function GameScreen() {
         if (enemy.behavior === 'PLANNED') {
           enemy.thinkTimer -= dt;
           if (enemy.thinkTimer <= 0) {
-            const playerAngle = Math.atan2(g.player.y - enemy.y, g.player.x - enemy.x);
+            const playerDirection = g.trail.length > 0
+              ? g.cutDir
+              : (g.inputDir.x !== 0 || g.inputDir.y !== 0 ? g.inputDir : g.facingDir);
+            const isDragon = enemy.kind === 'DRAGON';
+            const predictionTime = isDragon
+              ? (g.trail.length > 0 ? 0.42 : 0.68)
+              : 0;
+            const predictedPlayer = {
+              x: clamp(g.player.x + playerDirection.x * 118 * predictionTime, minX, maxX),
+              y: clamp(g.player.y + playerDirection.y * 118 * predictionTime, minY, maxY),
+            };
+            const planningCenter = isDragon ? predictedPlayer : g.player;
+            const playerAngle = Math.atan2(planningCenter.y - enemy.y, planningCenter.x - enemy.x);
             const orbitDirection = enemy.kind === 'DRAGON' ? 1 : -1;
-            const idealDistance = Math.min(g.width, g.height) * (enemy.kind === 'DRAGON' ? 0.25 : 0.18);
+            const idealDistance = Math.min(g.width, g.height) * (isDragon ? 0.2 : 0.18);
             let bestScore = Number.POSITIVE_INFINITY;
-            let bestTarget = { x: g.player.x, y: g.player.y };
+            let bestTarget = { x: planningCenter.x, y: planningCenter.y };
 
-            for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
-              const candidateAngle = playerAngle + orbitDirection * (0.55 + candidateIndex * 0.62) + Math.sin(enemy.routePhase) * 0.12;
-              const candidateRadius = idealDistance * (0.82 + (candidateIndex % 3) * 0.13);
+            for (let candidateIndex = 0; candidateIndex < (isDragon ? 12 : 8); candidateIndex += 1) {
+              const candidateAngle = playerAngle
+                + orbitDirection * (isDragon ? 0.28 + candidateIndex * 0.44 : 0.55 + candidateIndex * 0.62)
+                + Math.sin(enemy.routePhase) * (isDragon ? 0.08 : 0.12);
+              const candidateRadius = idealDistance * (
+                isDragon
+                  ? 0.76 + (candidateIndex % 4) * 0.1
+                  : 0.82 + (candidateIndex % 3) * 0.13
+              );
               const candidate = {
-                x: clamp(g.player.x + Math.cos(candidateAngle) * candidateRadius, minX, maxX),
-                y: clamp(g.player.y + Math.sin(candidateAngle) * candidateRadius, minY, maxY),
+                x: clamp(planningCenter.x + Math.cos(candidateAngle) * candidateRadius, minX, maxX),
+                y: clamp(planningCenter.y + Math.sin(candidateAngle) * candidateRadius, minY, maxY),
               };
-              const playerDistance = Math.hypot(candidate.x - g.player.x, candidate.y - g.player.y);
+              const playerDistance = Math.hypot(candidate.x - planningCenter.x, candidate.y - planningCenter.y);
               const headingDistance = Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y);
               const blockedPenalty = enemyCanMoveAt(candidate.x, candidate.y) ? 0 : 10000;
-              const score = blockedPenalty + Math.abs(playerDistance - idealDistance) * 2 + headingDistance * 0.08;
+              const forwardProjection = (
+                (candidate.x - g.player.x) * playerDirection.x
+                + (candidate.y - g.player.y) * playerDirection.y
+              );
+              const interceptionPenalty = isDragon
+                ? Math.max(0, -forwardProjection) * 0.65
+                : 0;
+              const score = blockedPenalty
+                + Math.abs(playerDistance - idealDistance) * (isDragon ? 2.8 : 2)
+                + headingDistance * (isDragon ? 0.055 : 0.08)
+                + interceptionPenalty;
               if (score < bestScore) {
                 bestScore = score;
                 bestTarget = candidate;
@@ -2018,7 +2047,7 @@ export default function GameScreen() {
 
             enemy.targetX = bestTarget.x;
             enemy.targetY = bestTarget.y;
-            enemy.thinkTimer = enemy.kind === 'DRAGON' ? 0.72 : 0.56;
+            enemy.thinkTimer = isDragon ? 0.38 : 0.56;
           }
 
           const targetVector = {
@@ -2026,7 +2055,7 @@ export default function GameScreen() {
             y: enemy.targetY - enemy.y,
           };
           const targetLength = Math.hypot(targetVector.x, targetVector.y) || 1;
-          const planningBias = enemy.kind === 'DRAGON' ? 0.68 : 0.76;
+          const planningBias = enemy.kind === 'DRAGON' ? 0.82 : 0.76;
           desiredVelocity = {
             x: (enemy.vx / currentLength) * (1 - planningBias) + (targetVector.x / targetLength) * planningBias,
             y: (enemy.vy / currentLength) * (1 - planningBias) + (targetVector.y / targetLength) * planningBias,
@@ -2049,7 +2078,10 @@ export default function GameScreen() {
         }
 
         const desiredLength = Math.hypot(desiredVelocity.x, desiredVelocity.y) || 1;
-        const steering = clamp(enemy.agility * dt * (enemy.behavior === 'PLANNED' ? 3.4 : 2.2), 0, 1);
+        const steeringRate = enemy.kind === 'DRAGON'
+          ? 4.1
+          : (enemy.behavior === 'PLANNED' ? 3.4 : 2.2);
+        const steering = clamp(enemy.agility * dt * steeringRate, 0, 1);
         enemy.vx += ((desiredVelocity.x / desiredLength) * desiredSpeed - enemy.vx) * steering;
         enemy.vy += ((desiredVelocity.y / desiredLength) * desiredSpeed - enemy.vy) * steering;
 
@@ -2411,7 +2443,7 @@ export default function GameScreen() {
             g.trail.push({ ...g.player });
             // The atlas already contains its sparks. Avoid allocating or
             // rendering dynamic cut particles in the optimized mode.
-            const sparkCount = CUTTING_SPRITE_ENABLED ? 0 : 4;
+            const sparkCount = CUTTING_SPRITE_ENABLED ? 1 : 4;
             for (let spark = 0; spark < sparkCount; spark += 1) addParticle(g, g.cutDir);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
@@ -2773,7 +2805,9 @@ export default function GameScreen() {
             <Text style={[styles.scoreValue, { color: HUD_COLORS.warmWhite }]}>
               {hud.score.toString().padStart(6, '0')}
             </Text>
-            <Text style={[styles.cardMeta, { color: HUD_COLORS.amber }]}>COMBAT INDEX</Text>
+            <Text style={[styles.cardMeta, { color: HUD_COLORS.amber }]}>
+              MEILLEUR SCORE : {hud.bestScore.toString().padStart(6, '0')}
+            </Text>
           </View>
 
           <View style={[styles.hudCard, styles.shieldCard]}>
