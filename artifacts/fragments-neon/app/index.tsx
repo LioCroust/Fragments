@@ -764,6 +764,73 @@ const pointInsideClaimedSurface = (point: Point, claimedPolygons: Point[][], tol
   ))
 );
 
+const claimedBoundaryExitContact = (
+  from: Point,
+  to: Point,
+  claimedPolygons: Point[][],
+  tolerance: number,
+) => {
+  if (
+    !pointInsideClaimedSurface(from, claimedPolygons, tolerance)
+    || pointInsideClaimedSurface(to, claimedPolygons, tolerance)
+  ) {
+    return null;
+  }
+
+  const cross = (first: Point, second: Point) => first.x * second.y - first.y * second.x;
+  const direction = { x: to.x - from.x, y: to.y - from.y };
+  let nearestProgress = Number.POSITIVE_INFINITY;
+
+  claimedPolygons.forEach((polygon) => {
+    if (
+      !pointInPolygon(from, polygon)
+      && polygonBoundaryDistance(from, polygon) > tolerance
+    ) {
+      return;
+    }
+
+    for (let index = 0; index < polygon.length; index += 1) {
+      const edgeStart = polygon[index];
+      const edgeEnd = polygon[(index + 1) % polygon.length];
+      const edge = { x: edgeEnd.x - edgeStart.x, y: edgeEnd.y - edgeStart.y };
+      const denominator = cross(direction, edge);
+      if (Math.abs(denominator) < 1e-8) continue;
+
+      const offset = { x: edgeStart.x - from.x, y: edgeStart.y - from.y };
+      const progress = cross(offset, edge) / denominator;
+      const edgeProgress = cross(offset, direction) / denominator;
+      if (
+        progress >= -1e-6
+        && progress <= 1 + 1e-6
+        && edgeProgress >= -1e-6
+        && edgeProgress <= 1 + 1e-6
+      ) {
+        nearestProgress = Math.min(nearestProgress, Math.max(0, progress));
+      }
+    }
+  });
+
+  if (!Number.isFinite(nearestProgress)) {
+    let low = 0;
+    let high = 1;
+    for (let iteration = 0; iteration < 24; iteration += 1) {
+      const progress = (low + high) * 0.5;
+      const midpoint = {
+        x: from.x + direction.x * progress,
+        y: from.y + direction.y * progress,
+      };
+      if (pointInsideClaimedSurface(midpoint, claimedPolygons)) low = progress;
+      else high = progress;
+    }
+    nearestProgress = high;
+  }
+
+  return {
+    x: from.x + direction.x * nearestProgress,
+    y: from.y + direction.y * nearestProgress,
+  };
+};
+
 const segmentsIntersect = (firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point) => {
   const orientation = (a: Point, b: Point, c: Point) => (
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
@@ -1907,11 +1974,20 @@ export default function GameScreen() {
               g.cutDir = direction;
               g.cutCoordinate = direction.x !== 0 ? g.player.y : g.player.x;
               g.score += 1;
-              // A cut can start by leaving an already claimed region. The
-              // anchor is the exact transition point, never a cell boundary.
-              const trailStart = pointInsidePerimeter(previous, bounds)
-                ? previous
-                : perimeterEntryContact(previous, direction, bounds);
+              // A cut can start by leaving an already claimed region. Snap
+              // its anchor to the actual boundary crossing; using the prior
+              // frame's point leaves a wedge between the fill and the trail
+              // after successive captures.
+              const claimedExit = claimedBoundaryExitContact(
+                previous,
+                g.player,
+                g.claimedPolygons,
+                g.cell * 0.18,
+              );
+              const trailStart = claimedExit
+                ?? (pointInsidePerimeter(previous, bounds)
+                  ? previous
+                  : perimeterEntryContact(previous, direction, bounds));
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
