@@ -13,7 +13,10 @@ import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { buildOrthogonalCaptureRegions } from '../components/captureGeometry';
+import {
+  buildOrthogonalCaptureRegions,
+  captureRegionsOverlapCircle,
+} from '../components/captureGeometry';
 
 const COLS = 12;
 const PERIMETER_INSET_CELLS = 2;
@@ -1932,7 +1935,7 @@ export default function GameScreen() {
             );
             if (
               !g.diamond.collected
-              && completedPolygons.some((polygon) => pointInPolygon(g.diamond, polygon))
+              && captureRegionsOverlapCircle(g.diamond, g.cell * 0.55, completedPolygons)
             ) {
               g.diamond.collected = true;
               g.score += DIAMOND_SCORE;

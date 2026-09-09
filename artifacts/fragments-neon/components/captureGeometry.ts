@@ -43,6 +43,38 @@ const pointInPolygon = (point: CapturePoint, polygon: CapturePoint[]) => {
   return inside;
 };
 
+const distanceToSegment = (
+  point: CapturePoint,
+  start: CapturePoint,
+  end: CapturePoint,
+) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= EPSILON * EPSILON) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+  const projection = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared),
+  );
+  return Math.hypot(
+    point.x - (start.x + projection * dx),
+    point.y - (start.y + projection * dy),
+  );
+};
+
+export const captureRegionsOverlapCircle = (
+  center: CapturePoint,
+  radius: number,
+  regions: CapturePoint[][],
+) => regions.some((polygon) => (
+  pointInPolygon(center, polygon)
+  || polygon.some((point, index) => (
+    distanceToSegment(center, point, polygon[(index + 1) % polygon.length]) <= radius + EPSILON
+  ))
+));
+
 const simplifyPath = (path: CapturePoint[]) => {
   const deduplicated: CapturePoint[] = [];
   path.forEach((point) => {

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { buildOrthogonalCaptureRegions } from '../components/captureGeometry.ts';
+import {
+  buildOrthogonalCaptureRegions,
+  captureRegionsOverlapCircle,
+} from '../components/captureGeometry.ts';
 
 const bounds = { left: 0, top: 0, right: 100, bottom: 100 };
 const run = (trail, protectedTrails = [], claimedPolygons = []) => (
@@ -139,5 +142,15 @@ const tinyCapture = run([{ x: 0.001, y: 100 }, { x: 0.001, y: 0 }]);
 assert.ok(tinyCapture);
 assert.equal(tinyCapture.area, 0.1);
 assertOrthogonal(tinyCapture.regions);
+
+const diamondCaptureRegion = [[
+  { x: 0, y: 60 },
+  { x: 30, y: 60 },
+  { x: 30, y: 100 },
+  { x: 0, y: 100 },
+]];
+assert.equal(captureRegionsOverlapCircle({ x: 15, y: 75 }, 5, diamondCaptureRegion), true);
+assert.equal(captureRegionsOverlapCircle({ x: 34.9, y: 75 }, 5, diamondCaptureRegion), true);
+assert.equal(captureRegionsOverlapCircle({ x: 35.1, y: 75 }, 5, diamondCaptureRegion), false);
 
 console.log('Capture geometry regression tests passed.');
