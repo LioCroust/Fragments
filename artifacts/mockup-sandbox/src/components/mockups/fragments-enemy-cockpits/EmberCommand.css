@@ -1,0 +1,204 @@
+.ember-command {
+  --ember-ink: #f9e4ce;
+  --ember-muted: #ad7661;
+  --ember-copper: #c6653f;
+  --ember-hot: #ff4b9c;
+  --ember-gold: #f4a341;
+  min-height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.8vw, 18px);
+  padding: clamp(14px, 3vw, 34px);
+  background: #120d10;
+  color: var(--ember-ink);
+  font-family: "Space Mono", "Courier New", monospace;
+  letter-spacing: 0.11em;
+}
+
+.ember-command *,
+.ember-command *::before,
+.ember-command *::after {
+  box-sizing: border-box;
+}
+
+.ember-command__masthead,
+.ember-command__caption {
+  width: min(100%, 1100px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-inline: 4px;
+  color: var(--ember-muted);
+  font-size: clamp(7px, 0.9vw, 10px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ember-command__live {
+  color: var(--ember-gold);
+}
+
+.ember-command__live i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--ember-gold);
+  vertical-align: 1px;
+}
+
+.ember-command__stage {
+  position: relative;
+  width: min(100%, 1100px);
+  aspect-ratio: 10 / 3;
+  isolation: isolate;
+}
+
+.ember-command__shell {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ember-command__counter {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: clamp(5px, 0.75vw, 10px) clamp(8px, 1vw, 14px);
+  border: 1px solid var(--ember-copper);
+  border-radius: 2px;
+  background: rgba(30, 13, 16, 0.94);
+  box-shadow: inset 0 0 0 2px rgba(253, 180, 110, 0.08), 0 3px 0 rgba(9, 5, 7, 0.9);
+}
+
+.ember-command__counter-label {
+  color: var(--ember-muted);
+  font-size: clamp(6px, 0.72vw, 9px);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ember-command__counter-value {
+  margin-top: clamp(5px, 0.55vw, 8px);
+  color: var(--ember-ink);
+  font-size: clamp(13px, 2vw, 24px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.ember-command__counter-value small {
+  color: var(--ember-gold);
+  font-size: 0.48em;
+  letter-spacing: 0.03em;
+}
+
+.ember-command__counter-detail {
+  margin-top: 5px;
+  color: #7c4a42;
+  font-size: clamp(5px, 0.58vw, 8px);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ember-command__score {
+  top: 7%;
+  left: 39%;
+  width: 22%;
+  border-color: var(--ember-gold);
+}
+
+.ember-command__score .ember-command__counter-value {
+  color: var(--ember-gold);
+}
+
+.ember-command__sector {
+  top: 42%;
+  left: 14%;
+  width: 13%;
+  border-color: var(--ember-hot);
+}
+
+.ember-command__sector .ember-command__counter-value {
+  color: var(--ember-hot);
+}
+
+.ember-command__shields {
+  top: 42%;
+  right: 14%;
+  width: 13%;
+  border-color: var(--ember-copper);
+}
+
+.ember-command__shields .ember-command__counter-value {
+  color: var(--ember-ink);
+}
+
+.ember-command__zone {
+  bottom: 7%;
+  left: 42%;
+  width: 16%;
+  border-color: var(--ember-gold);
+  text-align: center;
+}
+
+.ember-command__zone .ember-command__counter-value {
+  color: var(--ember-gold);
+}
+
+.ember-command__status {
+  position: absolute;
+  z-index: 3;
+  right: 29%;
+  bottom: 8%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #9a5c4d;
+  font-size: clamp(5px, 0.58vw, 8px);
+  white-space: nowrap;
+}
+
+.ember-command__status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ember-hot);
+}
+
+@media (max-width: 620px) {
+  .ember-command {
+    justify-content: flex-start;
+    padding-top: 22vh;
+  }
+
+  .ember-command__stage {
+    width: 118vw;
+    max-width: none;
+    transform: translateX(0);
+  }
+
+  .ember-command__masthead,
+  .ember-command__caption {
+    width: 118vw;
+  }
+
+  .ember-command__counter-detail,
+  .ember-command__status {
+    display: none;
+  }
+}

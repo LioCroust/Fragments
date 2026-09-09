@@ -1,0 +1,282 @@
+.prism-warbird {
+  --ember: #ff7a33;
+  --furnace: #c3312e;
+  --ruby: #ed3e8d;
+  --magenta: #ff58b6;
+  --gold: #d79a51;
+  --glass: #f4c9df;
+  --ink: #160f18;
+  --plate: rgba(22, 12, 20, .9);
+  min-height: 100dvh;
+  overflow: hidden;
+  color: #f8e5ed;
+  background:
+    radial-gradient(ellipse at 50% 36%, rgba(116, 24, 64, .24), transparent 52%),
+    linear-gradient(180deg, #100b12 0%, #08070b 58%, #11080d 100%);
+  font-family: "Space Mono", "SFMono-Regular", monospace;
+  letter-spacing: .08em;
+}
+
+.prism-warbird *,
+.prism-warbird *::before,
+.prism-warbird *::after {
+  box-sizing: border-box;
+}
+
+.prism-warbird__topline,
+.prism-warbird__footer {
+  display: flex;
+  width: min(1040px, calc(100% - 32px));
+  margin: 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(246, 202, 221, .62);
+  font-size: clamp(7px, .75vw, 10px);
+  font-weight: 700;
+}
+
+.prism-warbird__topline {
+  padding-top: clamp(16px, 3vw, 30px);
+}
+
+.prism-warbird__mark {
+  color: var(--glass);
+  letter-spacing: .18em;
+}
+
+.prism-warbird__mark b {
+  margin: 0 7px;
+  color: var(--ember);
+  font-weight: 400;
+}
+
+.prism-warbird__mission {
+  color: var(--ember);
+}
+
+.prism-warbird__mission i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--ember);
+  box-shadow: 0 0 10px rgba(255, 122, 51, .8);
+}
+
+.prism-warbird__mission b {
+  margin-left: 11px;
+  color: var(--magenta);
+  font-size: .8em;
+}
+
+.prism-warbird__stage {
+  position: relative;
+  width: min(1080px, calc(100% - 20px));
+  aspect-ratio: 10 / 3;
+  margin: clamp(12px, 2vw, 24px) auto 0;
+  isolation: isolate;
+}
+
+.prism-warbird__shell {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  filter: drop-shadow(0 21px 17px rgba(0, 0, 0, .8));
+}
+
+.prism-warbird__telemetry {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
+.warbird-readout {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 110px;
+  height: 52px;
+  padding: 6px 12px 5px;
+  overflow: hidden;
+  border: 1px solid rgba(220, 154, 81, .86);
+  border-left: 3px solid var(--ember);
+  border-radius: 2px;
+  background: var(--plate);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 223, 200, .08),
+    inset 0 -9px 16px rgba(157, 25, 60, .13),
+    0 4px 0 rgba(0, 0, 0, .38);
+}
+
+.warbird-readout__label {
+  color: rgba(252, 196, 211, .67);
+  font-size: clamp(7px, .76vw, 10px);
+  font-weight: 700;
+  letter-spacing: .16em;
+}
+
+.warbird-readout strong {
+  margin-top: 3px;
+  color: #fff0f5;
+  font-size: clamp(15px, 2.1vw, 27px);
+  line-height: 1;
+  letter-spacing: .04em;
+}
+
+.warbird-readout small {
+  margin-top: 3px;
+  color: var(--gold);
+  font-size: clamp(6px, .58vw, 8px);
+  letter-spacing: .12em;
+}
+
+.warbird-readout--sector {
+  top: 37%;
+  left: 13%;
+  border-color: rgba(237, 62, 141, .9);
+}
+
+.warbird-readout--sector strong {
+  color: var(--magenta);
+}
+
+.warbird-readout--score {
+  top: 18%;
+  left: 34%;
+  width: 19%;
+  border-color: rgba(255, 122, 51, .94);
+}
+
+.warbird-readout--score strong {
+  color: #ffc27f;
+}
+
+.warbird-readout--shields {
+  top: 37%;
+  right: 13%;
+  border-color: rgba(237, 62, 141, .9);
+}
+
+.warbird-readout--shields strong {
+  color: var(--magenta);
+}
+
+.warbird-readout--zone {
+  right: 34%;
+  bottom: 8%;
+  width: 16%;
+  border-color: rgba(215, 154, 81, .92);
+  text-align: center;
+}
+
+.warbird-readout--zone strong {
+  color: #ffc27f;
+}
+
+.prism-warbird__core-status {
+  position: absolute;
+  z-index: 4;
+  bottom: 6%;
+  left: 50%;
+  display: flex;
+  width: 14%;
+  min-width: 130px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: rgba(255, 185, 202, .7);
+  font-size: clamp(6px, .6vw, 8px);
+  transform: translateX(-50%);
+}
+
+.core-status__tick {
+  color: var(--ember);
+}
+
+.core-status__line {
+  width: 22px;
+  height: 1px;
+  background: var(--ruby);
+}
+
+.core-status__state {
+  color: rgba(255, 213, 226, .58);
+}
+
+.prism-warbird__footer {
+  margin-top: clamp(6px, 1vw, 14px);
+  padding-bottom: 20px;
+  border-top: 1px solid rgba(215, 154, 81, .22);
+  padding-top: 10px;
+}
+
+.prism-warbird__footer b {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+@media (max-width: 680px) {
+  .prism-warbird__topline,
+  .prism-warbird__footer {
+    width: calc(100% - 20px);
+  }
+
+  .prism-warbird__topline {
+    font-size: 7px;
+  }
+
+  .prism-warbird__mark {
+    max-width: 62%;
+    line-height: 1.5;
+  }
+
+  .warbird-readout {
+    min-width: 0;
+    height: 43px;
+    padding: 4px 7px;
+  }
+
+  .warbird-readout strong {
+    font-size: 14px;
+  }
+
+  .warbird-readout small {
+    display: none;
+  }
+
+  .prism-warbird__footer {
+    gap: 8px;
+    justify-content: center;
+    font-size: 6px;
+  }
+
+  .prism-warbird__footer span:first-child {
+    display: none;
+  }
+}
+
+@media (max-height: 380px) {
+  .prism-warbird__topline {
+    position: absolute;
+    z-index: 6;
+    top: 12px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    padding-top: 0;
+  }
+
+  .prism-warbird__stage {
+    margin-top: 0;
+  }
+
+  .prism-warbird__footer {
+    display: none;
+  }
+}

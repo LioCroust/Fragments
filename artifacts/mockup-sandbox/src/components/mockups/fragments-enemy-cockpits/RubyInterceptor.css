@@ -1,0 +1,243 @@
+.ruby-interceptor {
+  --ruby-ink: #f9e5d4;
+  --ruby-muted: #bf7465;
+  --ruby-ember: #e9462d;
+  --ruby-hot: #ff5b35;
+  --ruby-gold: #f3ae45;
+  --ruby-magenta: #e83280;
+  min-height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 28px clamp(14px, 4vw, 60px);
+  color: var(--ruby-ink);
+  background:
+    linear-gradient(rgba(191, 63, 52, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(191, 63, 52, .045) 1px, transparent 1px),
+    #120a10;
+  background-size: 36px 36px;
+  font-family: "Space Mono", "SFMono-Regular", Consolas, monospace;
+  letter-spacing: .12em;
+}
+
+.ruby-interceptor *,
+.ruby-interceptor *::before,
+.ruby-interceptor *::after {
+  box-sizing: border-box;
+}
+
+.ruby-interceptor__caption,
+.ruby-interceptor__footer {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  color: #87483f;
+  font-size: clamp(7px, .8vw, 10px);
+  font-weight: 700;
+  letter-spacing: .19em;
+}
+
+.ruby-interceptor__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ruby-hot);
+}
+
+.ruby-interceptor__live i {
+  width: 6px;
+  height: 6px;
+  display: inline-block;
+  border-radius: 50%;
+  background: var(--ruby-hot);
+  box-shadow: 0 0 10px rgba(255, 91, 53, .8);
+}
+
+.ruby-interceptor__stage {
+  isolation: isolate;
+  position: relative;
+  width: min(100%, 1080px);
+  aspect-ratio: 10 / 3;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.ruby-interceptor__shell {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transform: scale(3.05, 1.22);
+  filter: drop-shadow(0 18px 16px rgba(0, 0, 0, .62));
+}
+
+.ruby-telemetry {
+  position: absolute;
+  z-index: 3;
+  min-width: 116px;
+  height: 58px;
+  padding: 9px 11px 7px 15px;
+  overflow: hidden;
+  border: 1px solid rgba(244, 174, 69, .72);
+  border-left-width: 4px;
+  border-radius: 2px;
+  background: rgba(31, 12, 17, .95);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 219, 153, .09),
+    inset 0 -8px 0 rgba(111, 20, 28, .16),
+    0 5px 0 rgba(4, 3, 6, .75);
+}
+
+.ruby-telemetry__bolt {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: .8;
+}
+
+.ruby-telemetry__label,
+.ruby-telemetry__detail {
+  display: block;
+  font-size: 7px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: .16em;
+}
+
+.ruby-telemetry__label {
+  color: #a95e4e;
+}
+
+.ruby-telemetry__detail {
+  margin-top: 5px;
+  color: #7e3f3f;
+  font-size: 6px;
+  letter-spacing: .12em;
+}
+
+.ruby-telemetry__value {
+  display: block;
+  margin-top: 7px;
+  color: currentColor;
+  font-size: clamp(16px, 2.2vw, 25px);
+  line-height: .82;
+  letter-spacing: .08em;
+}
+
+.ruby-telemetry__value small {
+  margin-left: 3px;
+  color: #bc7159;
+  font-size: .42em;
+  letter-spacing: .04em;
+}
+
+.ruby-telemetry--gold {
+  color: var(--ruby-gold);
+}
+
+.ruby-telemetry--ruby {
+  color: #fa4389;
+  border-color: rgba(232, 50, 128, .78);
+}
+
+.ruby-telemetry--ember {
+  color: var(--ruby-hot);
+  border-color: rgba(233, 70, 45, .78);
+}
+
+.ruby-telemetry--score {
+  top: 19%;
+  left: 17.5%;
+  width: 19%;
+}
+
+.ruby-telemetry--sector {
+  bottom: 13%;
+  left: 24%;
+  width: 13%;
+}
+
+.ruby-telemetry--shields {
+  right: 24%;
+  bottom: 13%;
+  width: 13%;
+}
+
+.ruby-telemetry--zone {
+  top: 19%;
+  right: 17.5%;
+  width: 19%;
+}
+
+.ruby-interceptor__spine-readout {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 17%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  color: #ce6b5a;
+  font-size: clamp(6px, .65vw, 8px);
+  letter-spacing: .12em;
+}
+
+.ruby-interceptor__spine-readout i {
+  width: 7px;
+  height: 7px;
+  display: block;
+  border: 1px solid var(--ruby-hot);
+  transform: rotate(45deg);
+  box-shadow: 0 0 8px rgba(255, 91, 53, .65);
+}
+
+@media (max-width: 640px) {
+  .ruby-interceptor {
+    align-content: center;
+    min-height: 100dvh;
+    padding: 20px 8px;
+  }
+
+  .ruby-interceptor__caption,
+  .ruby-interceptor__footer {
+    font-size: 6px;
+    letter-spacing: .1em;
+  }
+
+  .ruby-interceptor__stage {
+    width: 112%;
+    margin-left: -6%;
+  }
+
+  .ruby-telemetry {
+    min-width: 0;
+    height: 46px;
+    padding: 7px 7px 5px 9px;
+  }
+
+  .ruby-telemetry__label {
+    font-size: 5px;
+  }
+
+  .ruby-telemetry__detail {
+    margin-top: 3px;
+    font-size: 4px;
+  }
+
+  .ruby-telemetry__value {
+    margin-top: 5px;
+    font-size: 13px;
+  }
+}

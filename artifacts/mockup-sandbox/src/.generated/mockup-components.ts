@@ -10,5 +10,10 @@ export const modules: ModuleMap = {
   "./components/mockups/fragments-hud/Circuit.tsx": () => import("../components/mockups/fragments-hud/Circuit.tsx"),
   "./components/mockups/fragments-hud/Command.tsx": () => import("../components/mockups/fragments-hud/Command.tsx"),
   "./components/mockups/fragments-hud/Prism.tsx": () => import("../components/mockups/fragments-hud/Prism.tsx"),
-  "./components/mockups/fragments-hud/Rivet.tsx": () => import("../components/mockups/fragments-hud/Rivet.tsx")
+  "./components/mockups/fragments-hud/Rivet.tsx": () => import("../components/mockups/fragments-hud/Rivet.tsx"),
+  "./components/mockups/fragments-enemy-cockpits/CinderReactor.tsx": () => import("../components/mockups/fragments-enemy-cockpits/CinderReactor.tsx"),
+  "./components/mockups/fragments-enemy-cockpits/EmberCommand.tsx": () => import("../components/mockups/fragments-enemy-cockpits/EmberCommand.tsx"),
+  "./components/mockups/fragments-enemy-cockpits/FurnaceCarrier.tsx": () => import("../components/mockups/fragments-enemy-cockpits/FurnaceCarrier.tsx"),
+  "./components/mockups/fragments-enemy-cockpits/PrismWarbird.tsx": () => import("../components/mockups/fragments-enemy-cockpits/PrismWarbird.tsx"),
+  "./components/mockups/fragments-enemy-cockpits/RubyInterceptor.tsx": () => import("../components/mockups/fragments-enemy-cockpits/RubyInterceptor.tsx")
 };
