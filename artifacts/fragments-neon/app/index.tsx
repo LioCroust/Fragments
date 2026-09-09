@@ -166,6 +166,7 @@ type Enemy = Point & {
   edgeDirectionY: number;
   visualRotation?: number;
   sevenFireTimer?: number;
+  spiderWebTimer?: number;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -186,6 +187,14 @@ type SevenProjectile = Point & {
   radius: number;
 };
 
+type SpiderWeb = {
+  start: Point;
+  end: Point;
+  ownerIndex: number;
+  warningRemaining: number;
+  activeRemaining: number;
+};
+
 const ENEMY_SCORE: Record<EnemyKind, number> = {
   SHIP: 180,
   DRAGON: 420,
@@ -197,6 +206,12 @@ const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
 const DRAGON_NOMINAL_SPEED = 40;
 const DRAGON_ATTACK_SPEED = 105;
+const SPIDER_WEB_INITIAL_DELAY = 4.5;
+const SPIDER_WEB_COOLDOWN = 7.5;
+const SPIDER_WEB_WARNING_DURATION = 0.95;
+const SPIDER_WEB_ACTIVE_DURATION = 3.8;
+const SPIDER_WEB_LENGTH_CELLS = 2.2;
+const SPIDER_WEB_SLOW_FACTOR = 0.58;
 
 type Game = {
   width: number;
@@ -215,6 +230,7 @@ type Game = {
   diamonds: Diamond[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
+  spiderWebs: SpiderWeb[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
@@ -269,6 +285,7 @@ type Snapshot = {
   diamonds: Diamond[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
+  spiderWebs: SpiderWeb[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
@@ -299,6 +316,10 @@ const distanceBetweenSegments = (firstStart: Point, firstEnd: Point, secondStart
     distanceToSegment(secondStart, firstStart, firstEnd),
     distanceToSegment(secondEnd, firstStart, firstEnd),
   )
+);
+
+const spiderWebIsActive = (web: SpiderWeb) => (
+  web.warningRemaining <= 0 && web.activeRemaining > 0
 );
 
 const pointTouchesOldTrail = (
@@ -1373,10 +1394,10 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -25.69, vy: 30.66, speed: DRAGON_NOMINAL_SPEED, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.3), vx: -49 * levelSpeed, vy: 32 * levelSpeed, speed: 62 * levelSpeed, agility: 0.9, phase: 1.6, spin: -0.22, routePhase: 1.1, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, sevenFireTimer: SEVEN_PROJECTILE_INTERVAL },
-    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, spiderWebTimer: SPIDER_WEB_INITIAL_DELAY },
   ];
   const rosterByLevel: Record<number, number[]> = {
-    1: [0],
+    1: [0, 4],
     2: [0, 2],
     3: [0, 1],
     4: [0, 2, 3],
@@ -1979,6 +2000,41 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         )
       ))}
+      {snapshot.spiderWebs.map((web, index) => {
+        const active = spiderWebIsActive(web);
+        const warningOpacity = clamp(
+          0.3 + (SPIDER_WEB_WARNING_DURATION - Math.max(0, web.warningRemaining)) * 0.45,
+          0.3,
+          0.78,
+        );
+        return (
+          <G key={`spider-web-${index}`} opacity={active ? 0.82 : warningOpacity}>
+            <Line
+              x1={web.start.x}
+              y1={web.start.y}
+              x2={web.end.x}
+              y2={web.end.y}
+              stroke={active ? '#ff2bb5' : '#ffb02e'}
+              strokeWidth={active ? 3.2 : 2.2}
+              strokeLinecap="round"
+              strokeDasharray={active ? undefined : '4 8'}
+            />
+            {active && (
+              <Line
+                x1={web.start.x}
+                y1={web.start.y}
+                x2={web.end.x}
+                y2={web.end.y}
+                stroke="#00f3ff"
+                strokeWidth={0.9}
+                strokeLinecap="round"
+              />
+            )}
+            <Circle cx={web.start.x} cy={web.start.y} r={2.4} fill="#fff3d6" />
+            <Circle cx={web.end.x} cy={web.end.y} r={2.4} fill="#fff3d6" />
+          </G>
+        );
+      })}
       {snapshot.bombs.map((bomb, bombIndex) => {
         if (bomb.destroyed) return null;
         const frame = Math.floor(snapshot.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
@@ -2149,7 +2205,8 @@ export default function GameScreen() {
     enemies: [],
     diamonds: [],
     bombs: [],
-      projectiles: [],
+    projectiles: [],
+    spiderWebs: [],
     particles: [],
     smokePuffs: [],
     smokeAccumulator: 0,
@@ -2562,6 +2619,7 @@ export default function GameScreen() {
       diamonds: previousDiamonds,
       bombs,
       projectiles: [],
+      spiderWebs: [],
       particles: [],
       smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
         ? enemies
@@ -2927,6 +2985,26 @@ export default function GameScreen() {
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
+      let activeWebCount = 0;
+      for (let index = 0; index < g.spiderWebs.length; index += 1) {
+        const web = g.spiderWebs[index];
+        if (web.warningRemaining > 0) {
+          web.warningRemaining -= dt;
+        } else {
+          web.activeRemaining -= dt;
+        }
+        const owner = g.enemies[web.ownerIndex];
+        if (
+          web.warningRemaining > 0
+          || web.activeRemaining > 0
+        ) {
+          if (!owner || !enemyIsDestroyed(owner)) {
+            g.spiderWebs[activeWebCount] = web;
+            activeWebCount += 1;
+          }
+        }
+      }
+      g.spiderWebs.length = activeWebCount;
       if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES') {
         let activeSmokeCount = 0;
         for (let index = 0; index < g.smokePuffs.length; index += 1) {
@@ -2942,7 +3020,7 @@ export default function GameScreen() {
         }
         g.smokePuffs.length = activeSmokeCount;
       }
-      g.enemies.forEach((enemy) => {
+      g.enemies.forEach((enemy, enemyIndex) => {
         if (g.status !== 'PLAYING') return;
         if (enemy.respawnAt > now) return;
         if (enemy.respawnAt > 0) {
@@ -2957,6 +3035,9 @@ export default function GameScreen() {
           enemy.edgeDirectionY = 0;
           enemy.vx = enemy.kind === 'DRAGON' ? -enemy.speed * 0.55 : enemy.speed * 0.55;
           enemy.vy = enemy.kind === 'SPIDER' ? -enemy.speed * 0.45 : enemy.speed * 0.45;
+          if (enemy.kind === 'SPIDER') {
+            enemy.spiderWebTimer = SPIDER_WEB_INITIAL_DELAY;
+          }
           enemy.targetX = enemy.x;
           enemy.targetY = enemy.y;
           enemy.thinkTimer = 0;
@@ -2970,6 +3051,9 @@ export default function GameScreen() {
         enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
         if (enemy.kind === 'SEVEN') {
           enemy.sevenFireTimer = (enemy.sevenFireTimer ?? SEVEN_PROJECTILE_INTERVAL) - dt;
+        }
+        if (enemy.kind === 'SPIDER') {
+          enemy.spiderWebTimer = (enemy.spiderWebTimer ?? SPIDER_WEB_INITIAL_DELAY) - dt;
         }
         enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
 
@@ -3366,6 +3450,40 @@ export default function GameScreen() {
           playSevenFireShot();
           enemy.sevenFireTimer = SEVEN_PROJECTILE_INTERVAL;
         }
+        if (
+          enemy.kind === 'SPIDER'
+          && (enemy.spiderWebTimer ?? 0) <= 0
+          && !g.spiderWebs.some((web) => web.ownerIndex === enemyIndex)
+        ) {
+          const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
+          const forwardX = enemy.vx / velocityLength;
+          const forwardY = enemy.vy / velocityLength;
+          const center = {
+            x: enemy.x + forwardX * g.cell * 1.35,
+            y: enemy.y + forwardY * g.cell * 1.35,
+          };
+          const perpendicularX = -forwardY;
+          const perpendicularY = forwardX;
+          const halfLength = g.cell * SPIDER_WEB_LENGTH_CELLS * 0.5;
+          const clampWebPoint = (point: Point): Point => ({
+            x: clamp(point.x, bounds.left + g.cell * 0.16, bounds.right - g.cell * 0.16),
+            y: clamp(point.y, bounds.top + g.cell * 0.16, bounds.bottom - g.cell * 0.16),
+          });
+          g.spiderWebs.push({
+            start: clampWebPoint({
+              x: center.x - perpendicularX * halfLength,
+              y: center.y - perpendicularY * halfLength,
+            }),
+            end: clampWebPoint({
+              x: center.x + perpendicularX * halfLength,
+              y: center.y + perpendicularY * halfLength,
+            }),
+            ownerIndex: enemyIndex,
+            warningRemaining: SPIDER_WEB_WARNING_DURATION,
+            activeRemaining: SPIDER_WEB_ACTIVE_DURATION,
+          });
+          enemy.spiderWebTimer = SPIDER_WEB_COOLDOWN;
+        }
 
         if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
           const velocityLength = Math.hypot(enemy.vx, enemy.vy);
@@ -3416,6 +3534,8 @@ export default function GameScreen() {
 
     const update = (g: Game, dt: number, now: number) => {
       g.frame += 1;
+      // Keep hot-reloaded sessions compatible with the new web state.
+      g.spiderWebs ??= [];
       let activeParticleCount = 0;
       for (let index = 0; index < g.particles.length; index += 1) {
         const particle = g.particles[index];
@@ -3539,17 +3659,33 @@ export default function GameScreen() {
             ? g.facingDir
             : ZERO;
       if (direction.x !== 0 || direction.y !== 0) g.facingDir = direction;
-      const speed = 118;
-      const distance = speed * dt;
+      const baseSpeed = 118;
+      const baseDistance = baseSpeed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
-        const steps = Math.max(1, Math.ceil(distance));
-        const stepX = (direction.x * distance) / steps;
-        const stepY = (direction.y * distance) / steps;
+        const steps = Math.max(1, Math.ceil(baseDistance));
 
         for (let i = 0; i < steps; i += 1) {
           const bounds = perimeterBounds(g.width, g.height, g.cell);
           const previous = { ...g.player };
           const activeTrail = g.trail.length > 0;
+          const probe = {
+            x: g.player.x + direction.x * (baseDistance / steps),
+            y: g.player.y + direction.y * (baseDistance / steps),
+          };
+          const caughtInSpiderWeb = g.spiderWebs.some((web) => (
+            spiderWebIsActive(web)
+            && distanceBetweenSegments(
+              g.player,
+              probe,
+              web.start,
+              web.end,
+            ) <= playerBodyRadius(g.cell) + g.cell * 0.12
+          ));
+          const movementDistance = (
+            (caughtInSpiderWeb ? baseSpeed * SPIDER_WEB_SLOW_FACTOR : baseSpeed) * dt
+          ) / steps;
+          const stepX = direction.x * movementDistance;
+          const stepY = direction.y * movementDistance;
           let next = {
             x: g.player.x + stepX,
             y: g.player.y + stepY,
@@ -3905,7 +4041,47 @@ export default function GameScreen() {
          }
        }
 
-       context.globalCompositeOperation = 'lighter';
+        context.globalCompositeOperation = 'lighter';
+        g.spiderWebs.forEach((web) => {
+          const active = spiderWebIsActive(web);
+          const warningOpacity = clamp(
+            0.3 + (SPIDER_WEB_WARNING_DURATION - Math.max(0, web.warningRemaining)) * 0.45,
+            0.3,
+            0.78,
+          );
+          context.save();
+          context.globalAlpha = active ? 0.82 : warningOpacity;
+          context.lineCap = 'round';
+          context.setLineDash(active ? [] : [4, 8]);
+          context.strokeStyle = active ? '#ff2bb5' : '#ffb02e';
+          context.shadowColor = active ? '#ff2bb5' : '#ffb02e';
+          context.shadowBlur = active ? 12 : 6;
+          context.lineWidth = active ? 3.2 : 2.2;
+          context.beginPath();
+          context.moveTo(web.start.x, web.start.y);
+          context.lineTo(web.end.x, web.end.y);
+          context.stroke();
+          if (active) {
+            context.setLineDash([]);
+            context.shadowColor = '#00f3ff';
+            context.shadowBlur = 4;
+            context.strokeStyle = '#00f3ff';
+            context.lineWidth = 0.9;
+            context.beginPath();
+            context.moveTo(web.start.x, web.start.y);
+            context.lineTo(web.end.x, web.end.y);
+            context.stroke();
+          }
+          context.setLineDash([]);
+          context.shadowColor = '#fff3d6';
+          context.shadowBlur = 7;
+          context.fillStyle = '#fff3d6';
+          context.beginPath();
+          context.arc(web.start.x, web.start.y, 2.4, 0, Math.PI * 2);
+          context.arc(web.end.x, web.end.y, 2.4, 0, Math.PI * 2);
+          context.fill();
+          context.restore();
+        });
         const diamondImage = diamondSpriteImageRef.current;
         if (diamondImage) {
          const diamondSize = g.cell * 1.5;
@@ -4064,6 +4240,11 @@ export default function GameScreen() {
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
                projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
+              spiderWebs: g.spiderWebs.map((web) => ({
+                ...web,
+                start: { ...web.start },
+                end: { ...web.end },
+              })),
               particles: g.particles.slice(-200),
              // Keep native SVG state immutable between frames. The game loop
              // mutates live puff objects in place, which can otherwise leave
