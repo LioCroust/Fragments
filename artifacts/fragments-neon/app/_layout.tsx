@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Platform, StatusBar as NativeStatusBar } from 'react-native';
+import { BackHandler, Platform, StatusBar as NativeStatusBar } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -23,9 +23,22 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+
+    // The game owns horizontal swipes. Consume Android's system back action
+    // while this single-screen game is mounted so an edge swipe cannot leave
+    // the game or navigate to the previous screen.
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => true,
+    );
+    return () => subscription.remove();
+  }, []);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
+      <Stack.Screen name="index" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }
