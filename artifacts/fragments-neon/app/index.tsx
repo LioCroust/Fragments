@@ -42,6 +42,7 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
 const LEVEL_CAPTURE_TARGET = 80;
+const MAX_LEVEL = 10;
 const CONTACT_FREEZE_DURATION = 1000;
 const HUD_COLORS = {
   cyan: '#00f3ff',
@@ -63,6 +64,30 @@ const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
+const level4SpaceBackgroundSource = require('../assets/images/level-4-space-background.png');
+const level5GridBackgroundSource = require('../assets/images/level-5-grid-background.png');
+const level6SpaceBackgroundSource = require('../assets/images/level-6-space-background.png');
+const level7GridBackgroundSource = require('../assets/images/level-7-grid-background.png');
+const level8SpaceBackgroundSource = require('../assets/images/level-8-space-background.png');
+const level9GridBackgroundSource = require('../assets/images/level-9-grid-background.png');
+const level10SpaceBackgroundSource = require('../assets/images/level-10-space-background.png');
+
+const LEVEL_BACKGROUND_SOURCES: Record<number, any> = {
+  1: sector1SpaceBackgroundSource,
+  2: sector2SpaceBackgroundSource,
+  3: sector3SpaceBackgroundSource,
+  4: level4SpaceBackgroundSource,
+  5: level5GridBackgroundSource,
+  6: level6SpaceBackgroundSource,
+  7: level7GridBackgroundSource,
+  8: level8SpaceBackgroundSource,
+  9: level9GridBackgroundSource,
+  10: level10SpaceBackgroundSource,
+};
+
+const backgroundSourceForLevel = (level: number) => (
+  LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
+);
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
@@ -755,9 +780,7 @@ const createDiamonds = (width: number, height: number, cell: number, count: numb
 };
 
 const diamondCountForLevel = (level: number) => {
-  if (level === 2) return 2;
-  if (level >= 3) return 3;
-  return 1;
+  return Math.min(5, Math.max(1, 1 + Math.floor(level / 2)));
 };
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
@@ -1219,9 +1242,20 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
   ];
-  if (level === 2) return [enemies[0], enemies[2]];
-  if (level >= 3) return [enemies[0], enemies[1]];
-  return [enemies[0]];
+  const rosterByLevel: Record<number, number[]> = {
+    1: [0],
+    2: [0, 2],
+    3: [0, 1],
+    4: [0, 2, 3],
+    5: [0, 1, 2],
+    6: [0, 1, 3],
+    7: [0, 1, 2, 4],
+    8: [0, 1, 3, 4],
+    9: [0, 1, 2, 3, 4],
+    10: [0, 1, 2, 3, 4],
+  };
+  return (rosterByLevel[Math.min(MAX_LEVEL, Math.max(1, level))] ?? rosterByLevel[1])
+    .map((enemyIndex) => enemies[enemyIndex]);
 };
 
 const enemyIsDestroyed = (enemy: Enemy) => enemy.respawnAt === Number.POSITIVE_INFINITY;
@@ -1390,11 +1424,7 @@ const NativeArenaStatic = React.memo(({
   claimedCount,
   protectedTrailCount,
 }: NativeArenaStaticProps) => {
-  const backgroundSource = level === 1
-    ? sector1SpaceBackgroundSource
-    : level === 2
-      ? sector2SpaceBackgroundSource
-      : sector3SpaceBackgroundSource;
+  const backgroundSource = backgroundSourceForLevel(level);
   const gridLines = [];
   if (level === 1) {
     for (let x = 0; x <= COLS; x += 1) {
@@ -1459,7 +1489,7 @@ const NativeArenaStatic = React.memo(({
         />,
       );
     }
-  } else {
+  } else if (level === 3) {
     const spacing = cell * 2.4;
     for (let offset = -height; offset < width + height; offset += spacing) {
       gridLines.push(
@@ -2045,16 +2075,12 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
-    [
-      [1, sector1SpaceBackgroundSource],
-      [2, sector2SpaceBackgroundSource],
-      [3, sector3SpaceBackgroundSource],
-    ].forEach(([level, source]) => {
+    Object.entries(LEVEL_BACKGROUND_SOURCES).forEach(([level, source]) => {
       const resolvedBackground = (RNImage as any).resolveAssetSource?.(source);
       const backgroundImage = new (globalThis as any).Image();
       backgroundImage.decoding = 'async';
       backgroundImage.onload = () => {
-        if (!cancelled) sectorBackgroundImageRefs.current[level] = backgroundImage;
+        if (!cancelled) sectorBackgroundImageRefs.current[Number(level)] = backgroundImage;
       };
       backgroundImage.src = resolvedBackground?.uri ?? source;
     });
@@ -2942,8 +2968,8 @@ export default function GameScreen() {
               if (enemyInside) burstEnemy(g, enemy, now);
             });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
-            if (g.level < 3 && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
-              const nextLevel = Math.min(3, g.level + 1);
+            if (g.level < MAX_LEVEL && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
+              const nextLevel = Math.min(MAX_LEVEL, g.level + 1);
               enqueueBanner({ kind: 'SECTOR', level: nextLevel });
               playSectorTransition();
               g.level = nextLevel;

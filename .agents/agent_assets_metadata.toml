@@ -234,3 +234,101 @@ mtime_ms = 1788975583080
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/22d83908-1429-4d19-9baf-da4a7e35dd6c/3409c96a-aaf0-4053-bcc1-67301b943392"
 storage_version_token = "1788975700214052"
 content_type = "image/png"
+
+[[outputs]]
+id = "QxgM_dxef9sxeEm8uWS2P"
+uri = "file://artifacts/fragments-neon/assets/images/level-4-space-background.png"
+type = "image"
+title = "Fond spatial — niveau 4"
+description = "Nouvelle scène spatiale sombre avec poussière cosmique rouge-indigo."
+logical_id = "3d7eaf37-5584-4473-8dc7-eebd94211230"
+content_hash = "sha256:db35411f79b5a8b7ea80b3ac391af35bd542a03c921da8c82bff553c9185a813"
+size = 1292445
+mtime_ms = 1788977046011
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/3d7eaf37-5584-4473-8dc7-eebd94211230/7caffae1-d95a-4a84-945c-a6c5ab3b5e2c"
+storage_version_token = "1788977194419025"
+content_type = "image/png"
+
+[[outputs]]
+id = "m2aDwJhONVUuNesDNZ25l"
+uri = "file://artifacts/fragments-neon/assets/images/level-5-grid-background.png"
+type = "image"
+title = "Fond grille — niveau 5"
+description = "Grille tactique sombre cobalt, segmentée et discrète."
+logical_id = "85fb3bae-471a-4e48-b42a-02a12c44897b"
+content_hash = "sha256:d16daa8a782f84e0e9698676743a7fd4e7aeacfc3cd18c55fb50b73bde8619aa"
+size = 1128739
+mtime_ms = 1788977037196
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/85fb3bae-471a-4e48-b42a-02a12c44897b/4e8916ec-50cc-4188-863a-26ecade690d2"
+storage_version_token = "1788977195018124"
+content_type = "image/png"
+
+[[outputs]]
+id = "Atm1W2dysba5CKmuukIsk"
+uri = "file://artifacts/fragments-neon/assets/images/level-6-space-background.png"
+type = "image"
+title = "Fond spatial — niveau 6"
+description = "Scène spatiale sombre avec filaments teal et bleus."
+logical_id = "ce52d694-3555-40fe-85e3-ab026f7ed0ae"
+content_hash = "sha256:2596b85611466e72c104ccab853c650efeb234e7bb74da75eacd2b435787be38"
+size = 1427154
+mtime_ms = 1788977038813
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/ce52d694-3555-40fe-85e3-ab026f7ed0ae/9b602dfe-99a7-498b-886a-8c2379844ae9"
+storage_version_token = "1788977195590127"
+content_type = "image/png"
+
+[[outputs]]
+id = "ZaFIp0nvHlsHga_I6SS9Y"
+uri = "file://artifacts/fragments-neon/assets/images/level-7-grid-background.png"
+type = "image"
+title = "Fond grille — niveau 7"
+description = "Grille fracturée sombre violette et magenta."
+logical_id = "20652585-dd6c-4d01-a3b6-565e2f32f08e"
+content_hash = "sha256:96710695f0ba153609711bb1e27f1026be393eab4e3551a2794d34d6959868ea"
+size = 1133154
+mtime_ms = 1788977036266
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/20652585-dd6c-4d01-a3b6-565e2f32f08e/0b8763b1-6df4-48af-a1ec-04b582de2167"
+storage_version_token = "1788977196291769"
+content_type = "image/png"
+
+[[outputs]]
+id = "Nwcf82hi-kp1NPs4p_bYv"
+uri = "file://artifacts/fragments-neon/assets/images/level-8-space-background.png"
+type = "image"
+title = "Fond spatial — niveau 8"
+description = "Scène spatiale sombre avec poussière aurorale émeraude et bleue."
+logical_id = "4319fac0-1176-421e-95ff-3b6462173b51"
+content_hash = "sha256:7314ef176a6f6ccc7a7b5ccf515fb5c119e779ca0fdfa7d84d4087b14fef69d4"
+size = 1201924
+mtime_ms = 1788977037196
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/4319fac0-1176-421e-95ff-3b6462173b51/086ebceb-44d9-47e5-9068-7d07b7f07ea8"
+storage_version_token = "1788977196839580"
+content_type = "image/png"
+
+[[outputs]]
+id = "LlHMYoNE4SJr2dACAaEGg"
+uri = "file://artifacts/fragments-neon/assets/images/level-9-grid-background.png"
+type = "image"
+title = "Fond grille — niveau 9"
+description = "Grille de navigation sombre ambre et violet."
+logical_id = "34c70706-dc7a-4d4d-9f0a-18694c7d1e94"
+content_hash = "sha256:55e3be26cac865f8ed8712d2b3a90b127ba8f235ef93e5be43e2f656f5384e74"
+size = 1158428
+mtime_ms = 1788977040614
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/34c70706-dc7a-4d4d-9f0a-18694c7d1e94/119780ae-9eb2-4cba-9b26-7deada6dfb57"
+storage_version_token = "1788977197365349"
+content_type = "image/png"
+
+[[outputs]]
+id = "_zW-MGnBrUP4utqdt2lzX"
+uri = "file://artifacts/fragments-neon/assets/images/level-10-space-background.png"
+type = "image"
+title = "Fond spatial — niveau 10"
+description = "Scène finale dans un espace presque noir, avec fractures violettes et dorées."
+logical_id = "817f892a-a3e0-47a4-a114-c4bd6001df9c"
+content_hash = "sha256:147a2444c1ad1f8b7458a75b4e130056792a1095eca84dc9b4e91fe127eede49"
+size = 1254907
+mtime_ms = 1788977041669
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/817f892a-a3e0-47a4-a114-c4bd6001df9c/d4b9055b-b3c2-4c18-989b-d6af3bb0cf3a"
+storage_version_token = "1788977197957477"
+content_type = "image/png"
