@@ -42,6 +42,7 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
 const LEVEL_CAPTURE_TARGET = 80;
+const CONTACT_FREEZE_DURATION = 1000;
 const HUD_COLORS = {
   cyan: '#00f3ff',
   lime: '#b8ff4a',
@@ -1775,12 +1776,9 @@ export default function GameScreen() {
           color: i % 3 === 0 ? '#ffffff' : '#ff6a00',
         });
       }
-      g.trail = [];
-      g.inputDir = ZERO;
-      g.cutDir = ZERO;
       g.shields -= 1;
       g.status = 'RESPAWN';
-      g.respawnAt = now + (g.shields > 0 ? 520 : 1050);
+      g.respawnAt = now + CONTACT_FREEZE_DURATION;
       playShieldLossExplosion();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     };
@@ -1925,6 +1923,7 @@ export default function GameScreen() {
       }
       g.smokePuffs.length = activeSmokeCount;
       g.enemies.forEach((enemy) => {
+        if (g.status !== 'PLAYING') return;
         if (enemy.respawnAt > now) return;
         if (enemy.respawnAt > 0) {
           if (!spawnPointAfterBurst(g, enemy)) {
@@ -2318,12 +2317,14 @@ export default function GameScreen() {
         const collisionRadius = enemyRadius(enemy, g.cell) + playerBodyRadius(g.cell);
         if (droneIsActive && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
           explode(g, now);
+          return;
         }
         if (
           enemyTouchesTrail(enemy.x, enemy.y)
           || enemySweepTouchesTrail(previousEnemyX, previousEnemyY, enemy.x, enemy.y)
         ) {
           explode(g, now);
+          return;
         }
 
         if (enemy.kind === 'SHIP') {
