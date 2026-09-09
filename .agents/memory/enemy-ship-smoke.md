@@ -14,3 +14,9 @@ When the ship is destroyed or respawns, discard its previous puffs and seed a fr
 **Why:** Reusing puffs from the previous route makes the exhaust appear detached from the ship after a respawn.
 
 **How to apply:** Treat the ship's smoke as a local visual trail that resets with the ship's lifecycle, while keeping its drift proportional to the current ship velocity.
+
+On native SVG rendering, pass cloned puff objects into each frame snapshot rather than the live mutable game array.
+
+**Why:** The Web canvas reads the live simulation directly, but Expo Go can retain stale particle coordinates when React Native state shares the simulation's mutable objects.
+
+**How to apply:** Keep simulation state mutable internally, but treat every native render snapshot as immutable presentation data.
