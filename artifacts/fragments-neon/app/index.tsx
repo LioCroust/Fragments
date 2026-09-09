@@ -1905,10 +1905,6 @@ export default function GameScreen() {
           if (velocityLength > 8) {
             g.smokeAccumulator += dt;
             if (g.smokeAccumulator >= 0.04) {
-              const backwardX = -enemy.vx / velocityLength;
-              const backwardY = -enemy.vy / velocityLength;
-              const sideX = -backwardY;
-              const sideY = backwardX;
               g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 1));
               g.smokeAccumulator = 0;
             }
