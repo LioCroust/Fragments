@@ -13,3 +13,4 @@
 - [Fill chime device validation](fill-chime-device-validation.md) — Confirmed on Android Expo Go; iOS silent-mode behavior still needs a real-device check.
 - [Mockup PNG cache](mockup-png-cache.md) — Restart the mockup preview workflow after replacing a public PNG when screenshots still show the previous asset.
 - [Cockpit interior viewpoint](cockpit-interior-viewpoint.md) — Cockpit concepts must be pilot-facing interiors with canopy framing and instrumentation, never exterior ship silhouettes.
+- [Published app billing suspension](published-app-billing-suspension.md) — A completed build can still show “This app isn’t live yet” when Replit suspends the live service for usage-based billing.
