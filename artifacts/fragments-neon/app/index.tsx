@@ -119,6 +119,7 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
   SPIDER: 800,
 };
 const DIAMOND_SCORE = 750;
+const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 
 type Game = {
   width: number;
@@ -168,9 +169,10 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND';
+  kind: 'RECORD' | 'DIAMOND' | 'SECTOR';
   score?: number;
   points?: number;
+  level?: number;
 };
 
 type Snapshot = {
@@ -1430,8 +1432,10 @@ export default function GameScreen() {
     keepAudioSessionActive: true,
   });
   const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
+  const audioUnlockedRef = useRef(Platform.OS !== 'web');
 
   const playShieldLossExplosion = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
     void audioSessionReadyRef.current.then(async () => {
       shieldLossExplosionPlayer.muted = false;
       shieldLossExplosionPlayer.volume = 0.92;
@@ -1528,6 +1532,7 @@ export default function GameScreen() {
   }, [pickupChimePlayer, shieldLossExplosionPlayer]);
 
   const playPickupChime = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
     void audioSessionReadyRef.current.then(async () => {
       pickupChimePlayer.muted = false;
       pickupChimePlayer.volume = 0.78;
@@ -1679,6 +1684,9 @@ export default function GameScreen() {
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        audioUnlockedRef.current = true;
+      },
       onPanResponderMove: (_, gesture) => {
         const g = gameRef.current;
         if (g.status !== 'PLAYING' || Math.hypot(gesture.dx, gesture.dy) < 10) return;
@@ -2364,6 +2372,7 @@ export default function GameScreen() {
         }
         if (g.fillCursor >= g.fillQueue.length) {
           const completedPolygons = g.pendingCapturePolygons;
+          let diamondCaptured = false;
           if (completedPolygons.length > 0) {
             g.claimedPolygons.push(...completedPolygons);
             g.capturedArea = Math.min(
@@ -2376,6 +2385,8 @@ export default function GameScreen() {
             ) {
               g.diamond.collected = true;
               g.score += DIAMOND_SCORE;
+              diamondCaptured = true;
+              playPickupChime();
               enqueueBanner({ kind: 'DIAMOND', points: DIAMOND_SCORE });
               for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
@@ -2408,6 +2419,7 @@ export default function GameScreen() {
             });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (g.level === 1 && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
+              enqueueBanner({ kind: 'SECTOR', level: g.level + 1 });
               g.level = 2;
               resetGame(true, true);
               return;
@@ -2418,7 +2430,7 @@ export default function GameScreen() {
           g.scanY = 0;
           g.pendingCapturePolygons = [];
           g.pendingCaptureArea = 0;
-          playPickupChime();
+          if (!diamondCaptured) playPickupChime();
         }
         return;
       }
@@ -2758,13 +2770,15 @@ export default function GameScreen() {
       if (!g.initialized && sizeRef.current.width > 0) resetGame(false);
       if (g.initialized) {
         update(g, dt, now);
-        if (
-          bestScoreHydratedRef.current
-          && !recordBannerShownRef.current
-          && g.score > bestScoreRef.current
-        ) {
-          recordBannerShownRef.current = true;
-          enqueueBanner({ kind: 'RECORD', score: g.score });
+        if (bestScoreHydratedRef.current && g.score > bestScoreRef.current) {
+          const previousBestScore = bestScoreRef.current;
+          if (
+            !recordBannerShownRef.current
+            && previousBestScore >= RECORD_BANNER_MINIMUM_BEST_SCORE
+          ) {
+            recordBannerShownRef.current = true;
+            enqueueBanner({ kind: 'RECORD', score: g.score });
+          }
           bestScoreRef.current = g.score;
           void AsyncStorage.setItem(BEST_SCORE_STORAGE_KEY, String(g.score)).catch((error: unknown) => {
             if (__DEV__) console.warn('Unable to save best score', error);
@@ -2872,7 +2886,11 @@ export default function GameScreen() {
             <Animated.View
               style={[
                 styles.arcadeBanner,
-                banner.kind === 'RECORD' ? styles.recordBanner : styles.diamondBanner,
+                banner.kind === 'RECORD'
+                  ? styles.recordBanner
+                  : banner.kind === 'DIAMOND'
+                    ? styles.diamondBanner
+                    : styles.sectorBanner,
                 { transform: [{ translateX: bannerTranslateX }] },
               ]}
             >
@@ -2884,12 +2902,18 @@ export default function GameScreen() {
                 adjustsFontSizeToFit
                 minimumFontScale={0.62}
               >
-                {banner.kind === 'RECORD' ? 'NOUVEAU RECORD !' : 'BONUS DIAMANT CAPTURÉ'}
+                {banner.kind === 'RECORD'
+                  ? 'NOUVEAU RECORD !'
+                  : banner.kind === 'DIAMOND'
+                    ? 'BONUS DIAMANT CAPTURÉ'
+                    : 'SECTEUR TERMINÉ'}
               </Text>
               <Text style={styles.bannerScore} numberOfLines={1}>
                 {banner.kind === 'RECORD'
                   ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
-                  : `+${banner.points ?? DIAMOND_SCORE} POINTS`}
+                  : banner.kind === 'DIAMOND'
+                    ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
+                    : `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`}
               </Text>
             </Animated.View>
           </View>
@@ -3185,10 +3209,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   arcadeBanner: {
-    width: '84%',
-    minHeight: 96,
+    width: '80%',
+    minHeight: 78,
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 9,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -3202,11 +3226,15 @@ const styles = StyleSheet.create({
   },
   recordBanner: {
     borderColor: HUD_COLORS.amber,
-    backgroundColor: 'rgba(38, 15, 4, 0.82)',
+    backgroundColor: 'rgba(38, 15, 4, 0.70)',
   },
   diamondBanner: {
     borderColor: HUD_COLORS.cyan,
-    backgroundColor: 'rgba(0, 24, 34, 0.84)',
+    backgroundColor: 'rgba(0, 24, 34, 0.72)',
+  },
+  sectorBanner: {
+    borderColor: HUD_COLORS.magenta,
+    backgroundColor: 'rgba(24, 4, 24, 0.72)',
   },
   bannerGloss: {
     position: 'absolute',
