@@ -45,8 +45,8 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
 ) / (1 - INITIAL_MAP_OPACITY);
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 10;
-// Temporary QA control. Set to false before production builds to remove the selector.
-const DEBUG_SECTOR_SELECTOR_ENABLED = true;
+// Temporary QA control. __DEV__ hides it automatically from production builds.
+const DEBUG_SECTOR_SELECTOR_ENABLED = __DEV__;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -2016,14 +2016,16 @@ const DebugSectorSelector = ({
   currentSector,
   onSelect,
   onLayout,
+  bottomInset,
 }: {
   currentSector: number;
   onSelect: (sector: number) => void;
   onLayout: (event: LayoutChangeEvent) => void;
+  bottomInset: number;
 }) => {
   if (!DEBUG_SECTOR_SELECTOR_ENABLED) return null;
   return (
-    <View style={styles.debugSectorSelector} onLayout={onLayout}>
+    <View style={[styles.debugSectorSelector, { bottom: bottomInset }]} onLayout={onLayout}>
       <Text style={styles.debugSectorLabel}>TEST SECTEUR</Text>
       <ScrollView
         horizontal
@@ -4157,6 +4159,12 @@ export default function GameScreen() {
         {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
 
+      <DebugSectorSelector
+        currentSector={hud.level}
+        onSelect={teleportToSector}
+        onLayout={handleDebugSectorSelectorLayout}
+        bottomInset={Math.max(insets.bottom, Platform.OS === 'web' ? 34 : 12)}
+      />
     </View>
   );
 }
@@ -4175,6 +4183,62 @@ const styles = StyleSheet.create({
     bottom: 4,
     backgroundColor: '#000000',
     overflow: 'hidden',
+  },
+  debugSectorSelector: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 5,
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 243, 255, 0.75)',
+    borderRadius: 4,
+    backgroundColor: 'rgba(4, 8, 18, 0.9)',
+    shadowColor: '#00f3ff',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  debugSectorLabel: {
+    color: '#7e879b',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 1.4,
+    marginBottom: 5,
+  },
+  debugSectorContent: {
+    gap: 6,
+    paddingRight: 2,
+  },
+  debugSectorButton: {
+    width: 31,
+    height: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(184, 255, 74, 0.55)',
+    borderRadius: 2,
+    backgroundColor: 'rgba(8, 18, 28, 0.92)',
+  },
+  debugSectorButtonSelected: {
+    borderColor: '#ffb02e',
+    backgroundColor: 'rgba(255, 176, 46, 0.18)',
+    shadowColor: '#ffb02e',
+    shadowOpacity: 0.85,
+    shadowRadius: 7,
+    elevation: 4,
+  },
+  debugSectorButtonText: {
+    color: '#b8ff4a',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+  },
+  debugSectorButtonTextSelected: {
+    color: '#fff3d6',
+    textShadowColor: '#ffb02e',
+    textShadowRadius: 6,
   },
   cockpitHeader: {
     position: 'absolute',
