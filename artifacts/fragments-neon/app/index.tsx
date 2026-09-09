@@ -1640,6 +1640,28 @@ export default function GameScreen() {
             ));
           });
         };
+        const enemySweepTouchesTrail = (
+          fromX: number,
+          fromY: number,
+          toX: number,
+          toY: number,
+        ) => {
+          if (g.trail.length < 2) return false;
+          const movementStart = { x: fromX, y: fromY };
+          const movementEnd = { x: toX, y: toY };
+          const collisionRadius = enemyRadius(enemy, g.cell) + PERIMETER_STROKE_WIDTH * 0.5;
+          return g.trail.slice(1).some((trailPoint, index) => {
+            const trailStart = g.trail[index];
+            const trailEnd = trailPoint;
+            if (segmentsIntersect(movementStart, movementEnd, trailStart, trailEnd)) return true;
+            return Math.min(
+              distanceToSegment(movementStart, trailStart, trailEnd),
+              distanceToSegment(movementEnd, trailStart, trailEnd),
+              distanceToSegment(trailStart, movementStart, movementEnd),
+              distanceToSegment(trailEnd, movementStart, movementEnd),
+            ) <= collisionRadius;
+          });
+        };
         if (enemyTouchesTrail(enemy.x, enemy.y)) {
           explode(g, now);
           return;
@@ -1793,6 +1815,8 @@ export default function GameScreen() {
 
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
+        const previousEnemyX = enemy.x;
+        const previousEnemyY = enemy.y;
         const canMoveFull = enemyCanMoveAt(nextX, nextY);
         const canMoveX = enemyCanMoveAt(nextX, enemy.y);
         const canMoveY = enemyCanMoveAt(enemy.x, nextY);
@@ -1898,7 +1922,12 @@ export default function GameScreen() {
         if (droneIsActive && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
           explode(g, now);
         }
-        if (enemyTouchesTrail(enemy.x, enemy.y)) explode(g, now);
+        if (
+          enemyTouchesTrail(enemy.x, enemy.y)
+          || enemySweepTouchesTrail(previousEnemyX, previousEnemyY, enemy.x, enemy.y)
+        ) {
+          explode(g, now);
+        }
 
         if (enemy.kind === 'SHIP') {
           const velocityLength = Math.hypot(enemy.vx, enemy.vy);
