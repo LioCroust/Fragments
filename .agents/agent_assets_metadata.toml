@@ -108,3 +108,17 @@ mtime_ms = 1788894243003
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/3520f37b-eeb8-407c-b816-09c68577ae65/5c65ae50-86c1-461d-bf21-2df751c2ff43"
 storage_version_token = "1788894245990292"
 content_type = "image/png"
+
+[[outputs]]
+id = "J8L2tRl7kmpgxBMiiFuSi"
+uri = "file://artifacts/fragments-neon/assets/audio/shield-loss-explosion.wav"
+type = "audio"
+title = "Shield Loss Explosion"
+description = "Effet WAV stéréo de perte de bouclier et explosion néon, 1,18 seconde en 44,1 kHz."
+logical_id = "39fb5f26-28c2-4f10-a6d2-71878bee6501"
+content_hash = "sha256:0e8ed383c3e8eb07a64fd2629fce80821db087454d2b25973078c64e0a52182e"
+size = 208196
+mtime_ms = 1788962394077
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/39fb5f26-28c2-4f10-a6d2-71878bee6501/50dda174-5177-4715-838e-e7b92329d301"
+storage_version_token = "1788962399671945"
+content_type = "audio/wav"
