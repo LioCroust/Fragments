@@ -4,6 +4,8 @@ import {
   LayoutChangeEvent,
   PanResponder,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -43,6 +45,8 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
 ) / (1 - INITIAL_MAP_OPACITY);
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 10;
+// Temporary QA control. Set to false before production builds to remove the selector.
+const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -64,6 +68,7 @@ const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-n
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
 const coreReactorSpriteSource = require('../assets/images/core-reactor-sprite-sheet.png');
+const sevenFireOrbSource = require('../assets/images/seven-fire-orb.png');
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
@@ -106,6 +111,12 @@ const SHIP_SMOKE_SPRITE_FRAME_DURATION = 4;
 const CORE_REACTOR_SPRITE_FRAME_COUNT = 8;
 const CORE_REACTOR_SPRITE_FRAME_SIZE = 256;
 const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
+const SEVEN_PROJECTILE_COUNT = 7;
+const SEVEN_PROJECTILE_INTERVAL = 7;
+const SEVEN_PROJECTILE_SPEED = 42;
+const SEVEN_PROJECTILE_MAX_LIFE = 9;
+const SEVEN_PROJECTILE_RADIUS_CELLS = 0.16;
+const SEVEN_PROJECTILE_SIZE_CELLS = 0.82;
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -147,6 +158,7 @@ type Enemy = Point & {
   edgeTurnTimer: number;
   edgeDirectionX: number;
   edgeDirectionY: number;
+  sevenFireTimer?: number;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -158,6 +170,13 @@ type Diamond = Point & {
 
 type Bomb = Point & {
   destroyed: boolean;
+};
+
+type SevenProjectile = Point & {
+  vx: number;
+  vy: number;
+  life: number;
+  radius: number;
 };
 
 const ENEMY_SCORE: Record<EnemyKind, number> = {
@@ -188,6 +207,7 @@ type Game = {
   enemies: Enemy[];
   diamonds: Diamond[];
   bombs: Bomb[];
+  projectiles: SevenProjectile[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
@@ -241,6 +261,7 @@ type Snapshot = {
   enemies: Enemy[];
   diamonds: Diamond[];
   bombs: Bomb[];
+  projectiles: SevenProjectile[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
@@ -1118,6 +1139,44 @@ const bombTouchesTrail = (bomb: Bomb, cell: number, trail: Point[]) => (
   ))
 );
 
+const sevenProjectileRadius = (cell: number) => cell * SEVEN_PROJECTILE_RADIUS_CELLS;
+const sevenProjectileSize = (cell: number) => cell * SEVEN_PROJECTILE_SIZE_CELLS;
+
+const createSevenVolley = (enemy: Enemy, cell: number): SevenProjectile[] => (
+  Array.from({ length: SEVEN_PROJECTILE_COUNT }, (_, index) => {
+    const angle = enemy.spin + (Math.PI * 2 * index) / SEVEN_PROJECTILE_COUNT;
+    return {
+      x: enemy.x,
+      y: enemy.y,
+      vx: Math.cos(angle) * SEVEN_PROJECTILE_SPEED,
+      vy: Math.sin(angle) * SEVEN_PROJECTILE_SPEED,
+      life: SEVEN_PROJECTILE_MAX_LIFE,
+      radius: sevenProjectileRadius(cell),
+    };
+  })
+);
+
+const sevenProjectileTouchesBlueBoundary = (
+  projectile: SevenProjectile,
+  from: Point,
+  to: Point,
+  bounds: ReturnType<typeof perimeterBounds>,
+  protectedTrails: Point[][],
+) => {
+  const collisionDistance = projectile.radius + PERIMETER_STROKE_WIDTH * 0.5;
+  if (
+    !pointInsidePerimeter(to, bounds)
+    || distanceToPerimeter(to, bounds) <= collisionDistance
+  ) {
+    return true;
+  }
+  return protectedTrails.some((trail) => (
+    trail.slice(1).some((trailPoint, index) => (
+      distanceBetweenSegments(from, to, trail[index], trailPoint) <= collisionDistance
+    ))
+  ));
+};
+
 const pointInPolygon = (point: Point, polygon: Point[]) => {
   let inside = false;
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
@@ -1268,7 +1327,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 56 * levelSpeed, vy: 38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -25.69, vy: 30.66, speed: DRAGON_NOMINAL_SPEED, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.3), vx: -49 * levelSpeed, vy: 32 * levelSpeed, speed: 62 * levelSpeed, agility: 0.9, phase: 1.6, spin: -0.22, routePhase: 1.1, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
-    { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, sevenFireTimer: SEVEN_PROJECTILE_INTERVAL },
     { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
   ];
   const rosterByLevel: Record<number, number[]> = {
@@ -1882,6 +1941,20 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           </G>
         );
       })}
+      {snapshot.projectiles.map((projectile, projectileIndex) => {
+        const spriteSize = sevenProjectileSize(snapshot.cell);
+        return (
+          <SvgImage
+            key={`seven-projectile-${projectileIndex}`}
+            href={sevenFireOrbSource}
+            x={projectile.x - spriteSize / 2}
+            y={projectile.y - spriteSize / 2}
+            width={spriteSize}
+            height={spriteSize}
+            opacity={0.96}
+          />
+        );
+      })}
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
         const frame = enemyFrameIndex(enemy);
@@ -1939,6 +2012,56 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   );
 };
 
+const DebugSectorSelector = ({
+  currentSector,
+  onSelect,
+  onLayout,
+}: {
+  currentSector: number;
+  onSelect: (sector: number) => void;
+  onLayout: (event: LayoutChangeEvent) => void;
+}) => {
+  if (!DEBUG_SECTOR_SELECTOR_ENABLED) return null;
+  return (
+    <View style={styles.debugSectorSelector} onLayout={onLayout}>
+      <Text style={styles.debugSectorLabel}>TEST SECTEUR</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.debugSectorContent}
+      >
+        {Array.from({ length: MAX_LEVEL }, (_, index) => {
+          const sector = index + 1;
+          const selected = sector === currentSector;
+          return (
+            <Pressable
+              key={`debug-sector-${sector}`}
+              style={[
+                styles.debugSectorButton,
+                selected && styles.debugSectorButtonSelected,
+              ]}
+              onPress={() => onSelect(sector)}
+              accessibilityRole="button"
+              accessibilityLabel={`Téléporter au secteur ${sector}`}
+              accessibilityState={{ selected }}
+              testID={`debug-sector-${sector}`}
+            >
+              <Text
+                style={[
+                  styles.debugSectorButtonText,
+                  selected && styles.debugSectorButtonTextSelected,
+                ]}
+              >
+                {sector}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
+
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
   const canvasRef = useRef<any>(null);
@@ -1959,6 +2082,7 @@ export default function GameScreen() {
     enemies: [],
     diamonds: [],
     bombs: [],
+      projectiles: [],
     particles: [],
     smokePuffs: [],
     smokeAccumulator: 0,
@@ -1994,6 +2118,7 @@ export default function GameScreen() {
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
+  const sevenFireOrbImageRef = useRef<any>(null);
   const diamondImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
@@ -2005,6 +2130,7 @@ export default function GameScreen() {
   const bannerQueueRef = useRef<Banner[]>([]);
   const bannerAnimatingRef = useRef(false);
   const bannerSequenceRef = useRef(0);
+  const debugSectorSelectorBoundsRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
@@ -2215,6 +2341,13 @@ export default function GameScreen() {
       if (!cancelled) coreReactorImageRef.current = coreReactorImage;
     };
     coreReactorImage.src = resolvedCoreReactorSprite?.uri ?? coreReactorSpriteSource;
+    const resolvedSevenFireOrb = (RNImage as any).resolveAssetSource?.(sevenFireOrbSource);
+    const sevenFireOrbImage = new (globalThis as any).Image();
+    sevenFireOrbImage.decoding = 'async';
+    sevenFireOrbImage.onload = () => {
+      if (!cancelled) sevenFireOrbImageRef.current = sevenFireOrbImage;
+    };
+    sevenFireOrbImage.src = resolvedSevenFireOrb?.uri ?? sevenFireOrbSource;
     const resolvedPlayer = (RNImage as any).resolveAssetSource?.(playerSource);
     const playerImage = new (globalThis as any).Image();
     playerImage.decoding = 'async';
@@ -2250,6 +2383,7 @@ export default function GameScreen() {
       cancelled = true;
       spriteImagesRef.current = {};
       coreReactorImageRef.current = null;
+      sevenFireOrbImageRef.current = null;
       diamondImageRef.current = null;
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
@@ -2340,6 +2474,7 @@ export default function GameScreen() {
       enemies,
       diamonds: previousDiamonds,
       bombs,
+      projectiles: [],
       particles: [],
       smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
         ? enemies
@@ -2381,6 +2516,27 @@ export default function GameScreen() {
     });
   }, []);
 
+  const teleportToSector = useCallback((sector: number) => {
+    const g = gameRef.current;
+    if (!g.initialized) return;
+    g.level = Math.round(clamp(sector, 1, MAX_LEVEL));
+    resetGame(true, true);
+  }, [resetGame]);
+
+  const handleDebugSectorSelectorLayout = useCallback((event: LayoutChangeEvent) => {
+    debugSectorSelectorBoundsRef.current = event.nativeEvent.layout;
+  }, []);
+
+  const isDebugSectorSelectorTouch = (x: number, y: number) => {
+    if (!DEBUG_SECTOR_SELECTOR_ENABLED) return false;
+    const bounds = debugSectorSelectorBoundsRef.current;
+    return bounds.width > 0
+      && x >= bounds.x
+      && x <= bounds.x + bounds.width
+      && y >= bounds.y
+      && y <= bounds.y + bounds.height;
+  };
+
   const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width <= 0 || height <= 0) return;
@@ -2392,8 +2548,12 @@ export default function GameScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: (_, gesture) => (
+        !isDebugSectorSelectorTouch(gesture.x0, gesture.y0)
+      ),
+      onMoveShouldSetPanResponder: (_, gesture) => (
+        !isDebugSectorSelectorTouch(gesture.x0, gesture.y0)
+      ),
       onPanResponderGrant: () => {
         audioUnlockedRef.current = true;
       },
@@ -2502,6 +2662,42 @@ export default function GameScreen() {
         )
       ));
       if (bomb) explode(g, now);
+    };
+
+    const moveProjectiles = (g: Game, dt: number, now: number) => {
+      if (g.status !== 'PLAYING') return;
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      let activeProjectileCount = 0;
+      for (let index = 0; index < g.projectiles.length; index += 1) {
+        const projectile = g.projectiles[index];
+        const from = { x: projectile.x, y: projectile.y };
+        projectile.x += projectile.vx * dt;
+        projectile.y += projectile.vy * dt;
+        projectile.life -= dt;
+
+        const touchesDrone = distanceToSegment(
+          g.player,
+          from,
+          projectile,
+        ) <= projectile.radius + playerBodyRadius(g.cell);
+        if (touchesDrone) {
+          explode(g, now);
+          return;
+        }
+
+        const blockedByBlue = sevenProjectileTouchesBlueBoundary(
+          projectile,
+          from,
+          projectile,
+          bounds,
+          g.protectedTrails,
+        );
+        if (blockedByBlue || projectile.life <= 0) continue;
+
+        g.projectiles[activeProjectileCount] = projectile;
+        activeProjectileCount += 1;
+      }
+      g.projectiles.length = activeProjectileCount;
     };
 
     const capture = (g: Game) => {
@@ -2677,6 +2873,9 @@ export default function GameScreen() {
         enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
         enemy.spin += dt * (enemy.kind === 'DRAGON' ? -1.15 : enemy.kind === 'SEVEN' ? 0.42 : enemy.kind === 'SHIP' ? 0.18 : -0.08);
         enemy.routePhase += dt * (enemy.pattern === 'ZIGZAG' ? 2.1 : 0.85);
+        if (enemy.kind === 'SEVEN') {
+          enemy.sevenFireTimer = (enemy.sevenFireTimer ?? SEVEN_PROJECTILE_INTERVAL) - dt;
+        }
         enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
 
         // Do not add a safety rectangle around the sprite here. The exact
@@ -3053,6 +3252,11 @@ export default function GameScreen() {
           return;
         }
 
+        if (enemy.kind === 'SEVEN' && (enemy.sevenFireTimer ?? 0) <= 0) {
+          g.projectiles.push(...createSevenVolley(enemy, g.cell));
+          enemy.sevenFireTimer = SEVEN_PROJECTILE_INTERVAL;
+        }
+
         if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
           const velocityLength = Math.hypot(enemy.vx, enemy.vy);
           if (velocityLength > 8) {
@@ -3339,6 +3543,8 @@ export default function GameScreen() {
         }
       }
 
+      moveProjectiles(g, dt, now);
+      if (g.status !== 'PLAYING') return;
       checkBombContact(g, now);
       if (g.status !== 'PLAYING') return;
       moveEnemies(g, dt, now);
@@ -3620,6 +3826,22 @@ export default function GameScreen() {
            context.restore();
          });
        }
+       const sevenFireOrbImage = sevenFireOrbImageRef.current;
+       if (sevenFireOrbImage) {
+         const projectileSize = sevenProjectileSize(g.cell);
+         context.globalCompositeOperation = 'lighter';
+         context.globalAlpha = 0.96;
+         g.projectiles.forEach((projectile) => {
+           context.drawImage(
+             sevenFireOrbImage,
+             projectile.x - projectileSize / 2,
+             projectile.y - projectileSize / 2,
+             projectileSize,
+             projectileSize,
+           );
+         });
+         context.globalAlpha = 1;
+       }
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
@@ -3711,6 +3933,7 @@ export default function GameScreen() {
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
+               projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
               particles: g.particles.slice(-200),
              // Keep native SVG state immutable between frames. The game loop
              // mutates live puff objects in place, which can otherwise leave
