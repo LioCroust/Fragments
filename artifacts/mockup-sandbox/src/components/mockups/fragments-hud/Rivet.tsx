@@ -10,16 +10,7 @@ export default function Rivet() {
           <span className="rivet-mockup__status">LIVE <i /></span>
         </header>
         <section className="rivet-bay" aria-label="Mechanical cockpit statistics">
-          <span className="rivet-bay__backplate" aria-hidden="true" />
-          <span className="rivet-bay__rail rivet-bay__rail--top" aria-hidden="true" />
-          <span className="rivet-bay__rail rivet-bay__rail--bottom" aria-hidden="true" />
-          <span className="rivet-bay__bolt rivet-bay__bolt--a" aria-hidden="true" />
-          <span className="rivet-bay__bolt rivet-bay__bolt--b" aria-hidden="true" />
-          <span className="rivet-bay__bolt rivet-bay__bolt--c" aria-hidden="true" />
-          <span className="rivet-bay__bolt rivet-bay__bolt--d" aria-hidden="true" />
-          <span className="rivet-bay__claw rivet-bay__claw--left" aria-hidden="true" />
-          <span className="rivet-bay__claw rivet-bay__claw--right" aria-hidden="true" />
-          <img className="rivet-bay__crystal" src="/__mockup/images/neon-diamond-fragment.png" alt="" aria-hidden="true" />
+          <img className="rivet-bay__shell" src="/__mockup/images/rivet-command-cockpit-shell_cutout.png" alt="" aria-hidden="true" />
           <article className="rivet-readout rivet-readout--score" aria-label="Score 000000">
             <span className="rivet-readout__label">MISSION SCORE</span>
             <strong>000000</strong>
