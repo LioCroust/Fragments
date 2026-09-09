@@ -3,8 +3,8 @@ name: Capture union geometry
 description: Rules for rendering and measuring captured surfaces without seams, holes, or double-counted area.
 ---
 
-Boundary loops may be sampled for navigation, but a capture polygon must replace its sampled start and end points with the exact continuous trail endpoints. Otherwise tiny triangular gaps appear at perimeter joins.
+Captured territory must be resolved through an exact coordinate-compressed orthogonal subdivision. Protected trails and the arena perimeter are barriers; compare connectivity before and after the new cut, then select the smallest newly separated unclaimed component without a minimum-area exception. Store the result as disjoint orthogonal rectangles, never by walking sampled historical polygon loops.
 
-**Why:** Summing captured polygon areas double-counts overlaps and produces incorrect progress percentages; drawing separate translucent polygons also creates visibly different opacities.
+**Why:** Sampled-loop reconstruction repeatedly invented diagonal closing edges and left triangular holes after successive captures. Before/after connectivity prevents retraced boundaries from masquerading as new captures, while disjoint rectangles make cumulative area exact.
 
-**How to apply:** Compose captured surfaces as one uniform layer and calculate progress from the geometric union of the captured polygons. Keep protected red trails as a separate layer above the cyan fill.
+**How to apply:** Preserve one canonical connected orthogonal path, including tiny 90-degree connectors for corner contacts. Sum disjoint captured rectangles for progress, render them uniformly, and keep protected red trails above the cyan fill.

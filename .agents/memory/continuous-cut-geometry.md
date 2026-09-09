@@ -3,8 +3,8 @@ name: Continuous cut geometry
 description: The relationship between the visual grid and freeform red cuts.
 ---
 
-The cyan field may remain visually cell-based and continue to block enemies and count toward score, but the player's red cut is continuous and must not snap to cyan cell boundaries.
+The cyan grid is decorative only. The player's red cut and all capture topology are continuous and must not snap to visual grid cells.
 
-**Why:** The user wants the cyan cells to remain a visual/gameplay layer while allowing the red trait to be drawn anywhere.
+**Why:** The user wants the red trait to be drawn anywhere, and grid-based bookkeeping would reintroduce visible quantization and mismatched fills.
 
-**How to apply:** Keep grid cells for capture bookkeeping and enemy gameplay, but never reposition the player or final red-trail point to a cell edge solely because it enters a cyan cell.
+**How to apply:** Use exact continuous coordinates. Snap only genuine closure contacts to actual perimeter, claimed, protected, or earlier-trail boundaries; if a corner snap would create a diagonal, preserve it with an explicit 90-degree connector.

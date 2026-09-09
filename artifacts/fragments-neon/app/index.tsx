@@ -13,6 +13,7 @@ import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { buildOrthogonalCaptureRegions } from '../components/captureGeometry';
 
 const COLS = 12;
 const PERIMETER_INSET_CELLS = 2;
@@ -97,7 +98,7 @@ type Game = {
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
   claimedPolygons: Point[][];
-  pendingCapturePolygon: Point[] | null;
+  pendingCapturePolygons: Point[][];
   fillQueue: number[];
   fillCursor: number;
   scanY: number;
@@ -138,7 +139,7 @@ type Snapshot = {
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
-  pendingCapturePolygon: Point[] | null;
+  pendingCapturePolygons: Point[][];
   scanY: number;
 };
 
@@ -726,14 +727,14 @@ const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 1.7, height: cell * 1.7 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
   if (kind === 'SPIDER') return { width: cell * 3.5, height: cell * 3.5 };
-  return { width: cell * 2.5, height: cell * 2.5 };
+  return { width: cell * 1.9, height: cell * 1.9 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
   if (enemy.kind === 'DRAGON') return cell * 0.6;
   if (enemy.kind === 'SPIDER') return cell * 1.0;
   if (enemy.kind === 'SEVEN') return cell * 1.32;
-  return cell * 1.08;
+  return cell * 0.8;
 };
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
@@ -1038,21 +1039,11 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
-  const pendingFill = snapshot.pendingCapturePolygon
-    ? clipPolygonAboveY(snapshot.pendingCapturePolygon, snapshot.scanY)
-    : [];
-  const scanIntervals = snapshot.pendingCapturePolygon
-    ? polygonHorizontalIntervals(snapshot.pendingCapturePolygon, snapshot.scanY)
-    : [];
+  const scanIntervals = snapshot.pendingCapturePolygons.flatMap((polygon) => (
+    polygonHorizontalIntervals(polygon, snapshot.scanY)
+  ));
   return (
     <>
-      {pendingFill.length >= 3 && (
-        <Polygon
-          points={pointsToString(pendingFill)}
-          fill={ZONE_COLOR}
-          opacity={CAPTURED_ZONE_LAYER_OPACITY}
-        />
-      )}
       {!snapshot.diamond.collected && (
         <SvgImage
           href={diamondSource}
@@ -1154,7 +1145,7 @@ export default function GameScreen() {
     smokePuffs: [],
     smokeAccumulator: 0,
     claimedPolygons: [],
-    pendingCapturePolygon: null,
+    pendingCapturePolygons: [],
     fillQueue: [],
     fillCursor: 0,
     scanY: 0,
@@ -1276,7 +1267,7 @@ export default function GameScreen() {
       smokePuffs: [],
       smokeAccumulator: 0,
       claimedPolygons: previousClaimedPolygons,
-      pendingCapturePolygon: null,
+      pendingCapturePolygons: [],
       fillQueue: [],
       fillCursor: 0,
       scanY: 0,
@@ -1388,29 +1379,32 @@ export default function GameScreen() {
     };
 
     const capture = (g: Game) => {
-      const continuousPolygon = buildContinuousCapturePolygon(
-        g.trail,
-        perimeterBounds(g.width, g.height, g.cell),
-        g.cell,
-        g.claimedPolygons,
-      );
-      if (!continuousPolygon) {
+      const captureResult = buildOrthogonalCaptureRegions({
+        trail: g.trail,
+        protectedTrails: g.protectedTrails,
+        claimedPolygons: g.claimedPolygons,
+        bounds: perimeterBounds(g.width, g.height, g.cell),
+        contactTolerance: g.cell * 0.4,
+      });
+      if (!captureResult || captureResult.regions.length === 0) {
         g.trail = [];
         return;
       }
 
-      const area = polygonArea(continuousPolygon);
-      g.protectedTrails.push(g.trail.map((point) => ({ ...point })));
-      g.pendingCapturePolygon = continuousPolygon;
-      g.pendingCaptureArea = area;
+      g.protectedTrails.push(captureResult.protectedTrail);
+      g.pendingCapturePolygons = captureResult.regions;
+      g.pendingCaptureArea = captureResult.area;
+      g.inputDir = ZERO;
+      g.cutDir = ZERO;
+      g.hasMoveCommand = false;
       // These are only timing units for the scan animation. They are not
       // cells and never participate in collision, capture, or scoring.
       g.fillQueue = Array.from({
-        length: Math.max(18, Math.min(240, Math.ceil(area / Math.max(1, g.cell * g.cell * 0.65)))),
+        length: Math.max(18, Math.min(240, Math.ceil(captureResult.area / Math.max(1, g.cell * g.cell * 0.65)))),
       }, (_, index) => index);
       g.trail = [];
       g.fillCursor = 0;
-      g.scanY = Math.min(...continuousPolygon.map((point) => point.y));
+      g.scanY = Math.min(...captureResult.regions.flatMap((polygon) => polygon.map((point) => point.y)));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     };
 
@@ -1921,26 +1915,25 @@ export default function GameScreen() {
       if (g.fillQueue.length > 0) {
         const unitsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
         g.fillCursor = Math.min(g.fillQueue.length, g.fillCursor + unitsPerFrame);
-        const pendingPolygon = g.pendingCapturePolygon;
-        if (pendingPolygon) {
-          const minY = Math.min(...pendingPolygon.map((point) => point.y));
-          const maxY = Math.max(...pendingPolygon.map((point) => point.y));
+        const pendingPoints = g.pendingCapturePolygons.flat();
+        if (pendingPoints.length > 0) {
+          const minY = Math.min(...pendingPoints.map((point) => point.y));
+          const maxY = Math.max(...pendingPoints.map((point) => point.y));
           const progress = g.fillCursor / Math.max(1, g.fillQueue.length);
           g.scanY = minY + (maxY - minY) * progress;
         }
         if (g.fillCursor >= g.fillQueue.length) {
-          const completedPolygon = g.pendingCapturePolygon;
-          if (completedPolygon) {
-            g.claimedPolygons.push(completedPolygon);
+          const completedPolygons = g.pendingCapturePolygons;
+          if (completedPolygons.length > 0) {
+            g.claimedPolygons.push(...completedPolygons);
             g.capturedArea = Math.min(
               g.totalPlayableArea,
-              claimedUnionArea(
-                g.claimedPolygons,
-                perimeterBounds(g.width, g.height, g.cell),
-                g.cell,
-              ),
+              g.claimedPolygons.reduce((area, polygon) => area + polygonArea(polygon), 0),
             );
-            if (!g.diamond.collected && pointInPolygon(g.diamond, completedPolygon)) {
+            if (
+              !g.diamond.collected
+              && completedPolygons.some((polygon) => pointInPolygon(g.diamond, polygon))
+            ) {
               g.diamond.collected = true;
               g.score += DIAMOND_SCORE;
               for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
@@ -1964,9 +1957,11 @@ export default function GameScreen() {
                 { x: enemy.x, y: enemy.y + motion.offsetY },
                 ...enemySpriteCorners(enemy, g.cell, enemy.x, enemy.y),
               ];
-              const enemyInside = enemyPoints.some((point) => (
-                pointInPolygon(point, completedPolygon)
-                || polygonBoundaryDistance(point, completedPolygon) <= g.cell * 0.12
+              const enemyInside = completedPolygons.some((polygon) => (
+                enemyPoints.some((point) => (
+                  pointInPolygon(point, polygon)
+                  || polygonBoundaryDistance(point, polygon) <= g.cell * 0.12
+                ))
               ));
               if (enemyInside) burstEnemy(g, enemy, now);
             });
@@ -1980,12 +1975,13 @@ export default function GameScreen() {
           g.fillQueue = [];
           g.fillCursor = 0;
           g.scanY = 0;
-          g.pendingCapturePolygon = null;
+          g.pendingCapturePolygons = [];
           g.pendingCaptureArea = 0;
           void pickupChimePlayer.seekTo(0)
             .catch(() => undefined)
             .then(() => pickupChimePlayer.play());
         }
+        return;
       }
 
       const direction = g.trail.length > 0
@@ -2134,10 +2130,7 @@ export default function GameScreen() {
        context.globalAlpha = CAPTURED_ZONE_LAYER_OPACITY;
        context.fillStyle = ZONE_COLOR;
        context.beginPath();
-       const pendingFill = g.pendingCapturePolygon
-         ? clipPolygonAboveY(g.pendingCapturePolygon, g.scanY)
-         : [];
-       [...g.claimedPolygons, pendingFill].forEach((polygon) => {
+       g.claimedPolygons.forEach((polygon) => {
          if (polygon.length < 3) return;
          context.moveTo(polygon[0].x, polygon[0].y);
          polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
@@ -2242,12 +2235,14 @@ export default function GameScreen() {
       context.shadowBlur = 0;
 
       if (g.fillQueue.length > 0) {
-        const scanIntervals = g.pendingCapturePolygon
-          ? polygonHorizontalIntervals(g.pendingCapturePolygon, g.scanY)
-          : [];
+        const scanIntervals = g.pendingCapturePolygons.flatMap((polygon) => (
+          polygonHorizontalIntervals(polygon, g.scanY)
+        ));
+        context.save();
+        context.globalCompositeOperation = 'source-over';
         context.strokeStyle = '#ffffff';
-        context.shadowColor = '#00f3ff';
-        context.shadowBlur = 18;
+        context.shadowColor = 'transparent';
+        context.shadowBlur = 0;
         context.lineWidth = 2;
         scanIntervals.forEach(([startX, endX]) => {
           context.beginPath();
@@ -2255,6 +2250,7 @@ export default function GameScreen() {
           context.lineTo(endX, g.scanY);
           context.stroke();
         });
+        context.restore();
       }
 
        const angle = Math.atan2(g.trail.length > 0 ? g.cutDir.y : g.facingDir.y, g.trail.length > 0 ? g.cutDir.x : g.facingDir.x);
@@ -2270,21 +2266,6 @@ export default function GameScreen() {
            playerSpriteSize(g.cell),
            '#00f3ff',
          );
-       } else {
-         context.fillStyle = '#ffffff';
-         context.shadowColor = '#00f3ff';
-         context.shadowBlur = 20;
-         context.beginPath();
-         context.moveTo(g.cell * PLAYER_RADIUS_CELLS, 0);
-         context.lineTo(-g.cell * 0.55, -g.cell * 0.48);
-         context.lineTo(-g.cell * 0.24, 0);
-         context.lineTo(-g.cell * 0.55, g.cell * 0.48);
-         context.closePath();
-         context.fill();
-         context.fillStyle = '#00f3ff';
-         context.beginPath();
-         context.arc(0, 0, g.cell * 0.22, 0, Math.PI * 2);
-         context.fill();
        }
       context.restore();
       context.globalCompositeOperation = 'source-over';
@@ -2314,7 +2295,7 @@ export default function GameScreen() {
               particles: g.particles.slice(-200),
              smokePuffs: g.smokePuffs,
              claimedPolygons: g.claimedPolygons,
-             pendingCapturePolygon: g.pendingCapturePolygon,
+             pendingCapturePolygons: g.pendingCapturePolygons,
             scanY: g.scanY,
           });
         }
