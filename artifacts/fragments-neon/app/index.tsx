@@ -138,6 +138,7 @@ type Snapshot = {
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
+  pendingCapturePolygon: Point[] | null;
   scanY: number;
 };
 
@@ -242,6 +243,44 @@ const polygonArea = (polygon: Point[]) => Math.abs(polygon.reduce((area, point, 
   const next = polygon[(index + 1) % polygon.length];
   return area + point.x * next.y - next.x * point.y;
 }, 0) * 0.5);
+
+const clipPolygonAboveY = (polygon: Point[], maxY: number) => {
+  if (polygon.length < 3) return [];
+  const clipped: Point[] = [];
+  polygon.forEach((current, index) => {
+    const previous = polygon[(index - 1 + polygon.length) % polygon.length];
+    const currentInside = current.y <= maxY;
+    const previousInside = previous.y <= maxY;
+
+    if (currentInside !== previousInside) {
+      const dy = current.y - previous.y;
+      const progress = Math.abs(dy) < 1e-9 ? 0 : (maxY - previous.y) / dy;
+      clipped.push({
+        x: previous.x + (current.x - previous.x) * progress,
+        y: maxY,
+      });
+    }
+    if (currentInside) clipped.push(current);
+  });
+  return clipped;
+};
+
+const polygonHorizontalIntervals = (polygon: Point[], y: number): Array<[number, number]> => {
+  const intersections: number[] = [];
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index];
+    const end = polygon[(index + 1) % polygon.length];
+    if ((start.y > y) === (end.y > y)) continue;
+    const progress = (y - start.y) / (end.y - start.y);
+    intersections.push(start.x + (end.x - start.x) * progress);
+  }
+  intersections.sort((first, second) => first - second);
+  const intervals: Array<[number, number]> = [];
+  for (let index = 0; index + 1 < intersections.length; index += 2) {
+    intervals.push([intersections[index], intersections[index + 1]]);
+  }
+  return intervals;
+};
 
 const claimedUnionArea = (
   polygons: Point[][],
@@ -999,8 +1038,21 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
+  const pendingFill = snapshot.pendingCapturePolygon
+    ? clipPolygonAboveY(snapshot.pendingCapturePolygon, snapshot.scanY)
+    : [];
+  const scanIntervals = snapshot.pendingCapturePolygon
+    ? polygonHorizontalIntervals(snapshot.pendingCapturePolygon, snapshot.scanY)
+    : [];
   return (
     <>
+      {pendingFill.length >= 3 && (
+        <Polygon
+          points={pointsToString(pendingFill)}
+          fill={ZONE_COLOR}
+          opacity={CAPTURED_ZONE_LAYER_OPACITY}
+        />
+      )}
       {!snapshot.diamond.collected && (
         <SvgImage
           href={diamondSource}
@@ -1044,16 +1096,17 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           </G>
         );
       })}
-      {snapshot.scanY > 0 && (
+      {scanIntervals.map(([startX, endX], index) => (
         <Line
-          x1={0}
+          key={`capture-scan-${index}`}
+          x1={startX}
           y1={snapshot.scanY}
-          x2={snapshot.width}
+          x2={endX}
           y2={snapshot.scanY}
           stroke="#ffffff"
           strokeWidth={2}
         />
-      )}
+      ))}
       {snapshot.smokePuffs.map((puff, index) => {
         const opacity = clamp(puff.life / puff.maxLife, 0, 1);
         return (
@@ -1357,7 +1410,7 @@ export default function GameScreen() {
       }, (_, index) => index);
       g.trail = [];
       g.fillCursor = 0;
-      g.scanY = 0;
+      g.scanY = Math.min(...continuousPolygon.map((point) => point.y));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     };
 
@@ -1868,7 +1921,13 @@ export default function GameScreen() {
       if (g.fillQueue.length > 0) {
         const unitsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
         g.fillCursor = Math.min(g.fillQueue.length, g.fillCursor + unitsPerFrame);
-        g.scanY = (g.fillCursor / Math.max(1, g.fillQueue.length)) * g.height;
+        const pendingPolygon = g.pendingCapturePolygon;
+        if (pendingPolygon) {
+          const minY = Math.min(...pendingPolygon.map((point) => point.y));
+          const maxY = Math.max(...pendingPolygon.map((point) => point.y));
+          const progress = g.fillCursor / Math.max(1, g.fillQueue.length);
+          g.scanY = minY + (maxY - minY) * progress;
+        }
         if (g.fillCursor >= g.fillQueue.length) {
           const completedPolygon = g.pendingCapturePolygon;
           if (completedPolygon) {
@@ -2075,7 +2134,10 @@ export default function GameScreen() {
        context.globalAlpha = CAPTURED_ZONE_LAYER_OPACITY;
        context.fillStyle = ZONE_COLOR;
        context.beginPath();
-       g.claimedPolygons.forEach((polygon) => {
+       const pendingFill = g.pendingCapturePolygon
+         ? clipPolygonAboveY(g.pendingCapturePolygon, g.scanY)
+         : [];
+       [...g.claimedPolygons, pendingFill].forEach((polygon) => {
          if (polygon.length < 3) return;
          context.moveTo(polygon[0].x, polygon[0].y);
          polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
@@ -2180,14 +2242,19 @@ export default function GameScreen() {
       context.shadowBlur = 0;
 
       if (g.fillQueue.length > 0) {
+        const scanIntervals = g.pendingCapturePolygon
+          ? polygonHorizontalIntervals(g.pendingCapturePolygon, g.scanY)
+          : [];
         context.strokeStyle = '#ffffff';
         context.shadowColor = '#00f3ff';
         context.shadowBlur = 18;
         context.lineWidth = 2;
-        context.beginPath();
-        context.moveTo(0, g.scanY);
-        context.lineTo(g.width, g.scanY);
-        context.stroke();
+        scanIntervals.forEach(([startX, endX]) => {
+          context.beginPath();
+          context.moveTo(startX, g.scanY);
+          context.lineTo(endX, g.scanY);
+          context.stroke();
+        });
       }
 
        const angle = Math.atan2(g.trail.length > 0 ? g.cutDir.y : g.facingDir.y, g.trail.length > 0 ? g.cutDir.x : g.facingDir.x);
@@ -2247,6 +2314,7 @@ export default function GameScreen() {
               particles: g.particles.slice(-200),
              smokePuffs: g.smokePuffs,
              claimedPolygons: g.claimedPolygons,
+             pendingCapturePolygon: g.pendingCapturePolygon,
             scanY: g.scanY,
           });
         }
