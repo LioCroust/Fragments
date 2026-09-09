@@ -2036,7 +2036,9 @@ export default function GameScreen() {
       g.score += ENEMY_SCORE[enemy.kind];
       enqueueBanner({ kind: 'ENEMY', points: ENEMY_SCORE[enemy.kind] });
       enemy.blockedTime = 0;
-      enemy.respawnAt = now + 900;
+      // A destroyed enemy stays permanently inactive for this sector. The
+      // next sector creates a fresh enemy roster through resetGame.
+      enemy.respawnAt = Number.POSITIVE_INFINITY;
       enemy.vx = 0;
       enemy.vy = 0;
       if (enemy.kind === 'SHIP') {
