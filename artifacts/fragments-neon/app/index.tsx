@@ -1472,7 +1472,7 @@ export default function GameScreen() {
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(1500),
+        Animated.delay(1000),
         Animated.timing(bannerTranslateX, {
           toValue: Math.max(sizeRef.current.width, 360) + 120,
           duration: 170,
@@ -3185,7 +3185,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   arcadeBanner: {
-    width: '92%',
+    width: '84%',
     minHeight: 96,
     paddingHorizontal: 16,
     paddingVertical: 13,
@@ -3202,11 +3202,11 @@ const styles = StyleSheet.create({
   },
   recordBanner: {
     borderColor: HUD_COLORS.amber,
-    backgroundColor: 'rgba(38, 15, 4, 0.94)',
+    backgroundColor: 'rgba(38, 15, 4, 0.82)',
   },
   diamondBanner: {
     borderColor: HUD_COLORS.cyan,
-    backgroundColor: 'rgba(0, 24, 34, 0.95)',
+    backgroundColor: 'rgba(0, 24, 34, 0.84)',
   },
   bannerGloss: {
     position: 'absolute',
