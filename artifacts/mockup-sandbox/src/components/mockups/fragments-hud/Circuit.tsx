@@ -5,35 +5,42 @@ export default function Circuit() {
   return (
     <main className="fragments-hud fragments-hud--circuit" aria-label="Fragments Neon Neon Circuit HUD">
       <section className="fragments-hud__phone" aria-label="Mobile game screen preview">
-        <div className="circuit__hud">
-          <header className="circuit__masthead">
-            <span className="circuit__title">PERIMETER / LIVE</span>
-            <span className="circuit__read">TRACE 0007</span>
+        <div className="cockpit__hud">
+          <header className="cockpit__masthead">
+            <span className="cockpit__title">PERIMETER / LIVE</span>
+            <span className="cockpit__readout">TRACE 0007</span>
           </header>
-          <section className="circuit__board" aria-label="Connected energy rail statistics">
-            <span className="circuit__trace circuit__trace--top" aria-hidden="true" />
-            <span className="circuit__trace circuit__trace--left" aria-hidden="true" />
-            <span className="circuit__trace circuit__trace--right" aria-hidden="true" />
-            <span className="circuit__trace circuit__trace--bottom" aria-hidden="true" />
-            <span className="circuit__joint circuit__joint--a" aria-hidden="true" />
-            <span className="circuit__joint circuit__joint--b" aria-hidden="true" />
-            <span className="circuit__joint circuit__joint--c" aria-hidden="true" />
-            <span className="circuit__joint circuit__joint--d" aria-hidden="true" />
-            <article className="circuit__node circuit__node--score" aria-label="Score 000000">
-              <span className="fragments-hud__label">SCORE</span>
-              <strong className="fragments-hud__value">000000</strong>
+          <section className="cockpit__silhouette" aria-label="Connected reactor cockpit statistics">
+            <img className="cockpit__diamond" src="/__mockup/images/neon-diamond-fragment.png" alt="" aria-hidden="true" />
+            <span className="cockpit__core-glass" aria-hidden="true" />
+            <span className="cockpit__wing cockpit__wing--left" aria-hidden="true" />
+            <span className="cockpit__wing cockpit__wing--right" aria-hidden="true" />
+            <span className="cockpit__fin cockpit__fin--left" aria-hidden="true" />
+            <span className="cockpit__fin cockpit__fin--right" aria-hidden="true" />
+            <span className="cockpit__trace circuit__trace--one" aria-hidden="true" />
+            <span className="cockpit__trace circuit__trace--two" aria-hidden="true" />
+            <span className="cockpit__trace circuit__trace--three" aria-hidden="true" />
+            <span className="cockpit__shard cockpit__shard--a" aria-hidden="true" />
+            <span className="cockpit__shard cockpit__shard--b" aria-hidden="true" />
+            <span className="cockpit__shard cockpit__shard--c" aria-hidden="true" />
+            <span className="cockpit__shard cockpit__shard--d" aria-hidden="true" />
+            <article className="cockpit__visor cockpit__visor--score" aria-label="Score 000000">
+              <span className="cockpit__eyebrow">REACTOR CHARGE</span>
+              <strong className="cockpit__value">000000</strong>
+              <span className="cockpit__label">SCORE</span>
             </article>
-            <article className="circuit__node circuit__node--sector" aria-label="Sector 01">
-              <span className="fragments-hud__label">SECTEUR</span>
-              <strong className="fragments-hud__value">01</strong>
+            <article className="cockpit__visor cockpit__visor--sector" aria-label="Sector 01">
+              <span className="cockpit__label">SECTEUR</span>
+              <strong className="cockpit__value">01</strong>
             </article>
-            <article className="circuit__node circuit__node--shield" aria-label="Three shields">
-              <span className="fragments-hud__label">BOUCLIERS</span>
-              <strong className="fragments-hud__value">3</strong>
+            <article className="cockpit__visor cockpit__visor--shields" aria-label="Three shields">
+              <span className="cockpit__label">BOUCLIERS</span>
+              <strong className="cockpit__value">3</strong>
+              <span className="cockpit__shield-facets" aria-hidden="true"><i /><i /><i /></span>
             </article>
-            <article className="circuit__node circuit__node--zone" aria-label="Zone 0 percent out of 80">
-              <span className="fragments-hud__label">ZONE</span>
-              <strong className="fragments-hud__value">0%<small>/80</small></strong>
+            <article className="cockpit__visor cockpit__visor--zone" aria-label="Zone 0 percent out of 80">
+              <span className="cockpit__label">ZONE</span>
+              <strong className="cockpit__value">0%<small>/80</small></strong>
             </article>
           </section>
         </div>
