@@ -3,7 +3,7 @@ name: Torch cut effect
 description: Visual direction for the player's cutting/soldering effect on the active red trail.
 ---
 
-The torch effect must read as a real sheet-metal cutting tool: a compact mechanical nozzle mounted directly behind the Prism Arrow, with a narrow white-hot/orange flame touching the red trail, a thin molten kerf, directional sparks, and embers that cool behind it. Avoid a dominant circular ring or energy halo.
+The torch effect must read as a real sheet-metal cutting point: no large tool body drawn above the line, only a compact embedded nozzle directly behind the Prism Arrow, with a narrow white-hot/orange flame touching the red trail, a thin molten kerf, sparks projected upward, downward, and backward, and embers that cool behind it. Avoid a dominant circular ring or energy halo.
 
 **Why:** The player watches this effect continuously, and the earlier circular treatment looked like an energy portal rather than a torch cutting metal.
 

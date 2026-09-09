@@ -28,7 +28,7 @@ function Spark({
 }) {
   return (
     <span
-      className="spark"
+      className={`spark ${angle < 0 ? "spark--up" : "spark--down"}`}
       style={{
         left: `${x}%`,
         top: `${y}%`,
@@ -45,19 +45,19 @@ function Spark({
 function TorchHead({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`torch-head ${compact ? "torch-head--compact" : ""}`}>
-      <div className="torch-body" />
-      <div className="torch-grip" />
       <div className="torch-nozzle" />
       <div className="torch-flame" />
       <div className="torch-fusion" />
       <div className="torch-heat" />
       <div className="torch-haze haze-one" />
       <div className="torch-haze haze-two" />
-      <Spark x={35} y={48} length={20} angle={-154} delay={0.1} color="#fff5c7" />
-      <Spark x={25} y={68} length={15} angle={158} delay={0.4} />
-      <Spark x={49} y={52} length={11} angle={-136} delay={0.65} color="#ffe19b" />
-      <Spark x={18} y={58} length={23} angle={142} delay={0.85} color="#ff6b22" />
-      <Spark x={43} y={76} length={12} angle={166} delay={0.95} color="#ffd36e" />
+      <Spark x={40} y={48} length={21} angle={-154} delay={0.08} color="#fff5c7" />
+      <Spark x={52} y={48} length={15} angle={-90} delay={0.24} color="#ffe19b" />
+      <Spark x={31} y={51} length={17} angle={-128} delay={0.44} />
+      <Spark x={39} y={52} length={24} angle={154} delay={0.16} color="#ff6b22" />
+      <Spark x={54} y={54} length={18} angle={90} delay={0.38} color="#ffd36e" />
+      <Spark x={28} y={56} length={14} angle={132} delay={0.72} color="#ff9d38" />
+      <Spark x={47} y={57} length={20} angle={72} delay={0.9} color="#fff0b0" />
     </div>
   );
 }
@@ -266,18 +266,18 @@ export function TorchCuttingSprite() {
         .torch-anchor {
           position: absolute;
           left: 61%;
-          top: calc(58% - 80px);
+          top: calc(58% - 18px);
           z-index: 9;
-          width: 96px;
-          height: 92px;
+          width: 76px;
+          height: 38px;
           transform: translateX(-50%);
         }
 
         .torch-head {
           position: relative;
-          width: 96px;
-          height: 92px;
-          filter: drop-shadow(0 0 5px rgba(255, 119, 41, .9));
+          width: 76px;
+          height: 38px;
+          filter: drop-shadow(0 0 5px rgba(255, 119, 41, .82));
           animation: torchJitter .12s steps(2) infinite;
         }
 
@@ -286,91 +286,49 @@ export function TorchCuttingSprite() {
           transform-origin: center;
         }
 
-        .torch-body {
-          position: absolute;
-          left: 8px;
-          top: 8px;
-          width: 55px;
-          height: 27px;
-          border: 2px solid #b97845;
-          border-radius: 5px 10px 4px 4px;
-          transform: skewX(-17deg);
-          background:
-            linear-gradient(180deg, rgba(246, 184, 105, .68), transparent 25%),
-            linear-gradient(180deg, #5a4435, #17191a 67%, #33251e);
-          box-shadow: inset 0 0 0 1px rgba(255, 231, 165, .18), 0 0 8px rgba(255, 102, 29, .28);
-        }
-
-        .torch-body::after {
-          content: "";
-          position: absolute;
-          right: 7px;
-          top: 7px;
-          width: 12px;
-          height: 8px;
-          border: 1px solid #e8ae65;
-          border-radius: 2px;
-          background: #2b2520;
-          box-shadow: inset 0 0 4px #ff983a;
-        }
-
-        .torch-grip {
-          position: absolute;
-          left: 14px;
-          top: 29px;
-          width: 44px;
-          height: 17px;
-          border: 1px solid #8b5a3a;
-          border-radius: 3px;
-          transform: skewX(-17deg);
-          background: repeating-linear-gradient(90deg, #1b1c1b 0 6px, #8b5433 7px 8px);
-          box-shadow: 0 3px 5px rgba(0, 0, 0, .64);
-        }
-
         .torch-nozzle {
           position: absolute;
-          left: 43px;
-          top: 36px;
-          width: 18px;
-          height: 47px;
-          border: 2px solid #c5874c;
-          border-top: 0;
-          border-radius: 2px 2px 8px 8px;
-          transform: skewX(-6deg);
-          background: linear-gradient(90deg, #211d1a, #a76335 48%, #30211c);
-          box-shadow: inset 2px 0 rgba(255, 222, 141, .24), 0 0 7px rgba(255, 97, 24, .35);
+          left: 37px;
+          top: 13px;
+          width: 25px;
+          height: 9px;
+          border: 1px solid #c5874c;
+          border-radius: 3px 5px 3px 3px;
+          transform: skewX(-18deg);
+          background: linear-gradient(180deg, #a76335, #211d1a 60%, #30211c);
+          box-shadow: inset 0 1px rgba(255, 222, 141, .3), 0 0 7px rgba(255, 97, 24, .35);
         }
 
         .torch-nozzle::after {
           content: "";
           position: absolute;
-          left: 4px;
-          bottom: -5px;
-          width: 7px;
-          height: 8px;
-          border-radius: 1px 1px 4px 4px;
+          right: -5px;
+          top: 2px;
+          width: 6px;
+          height: 4px;
+          border-radius: 1px 3px 3px 1px;
           background: #f3bf73;
           box-shadow: 0 0 5px #fff0bd, 0 0 15px #ff7c25;
         }
 
         .torch-flame {
           position: absolute;
-          left: 46px;
-          top: 67px;
+          left: 60px;
+          top: 16px;
           width: 12px;
-          height: 19px;
-          clip-path: polygon(50% 100%, 0 0, 100% 0);
-          background: linear-gradient(180deg, #fffde1, #ffffff 23%, #ffca62 59%, #ff5b1b);
+          height: 7px;
+          clip-path: polygon(100% 50%, 0 0, 0 100%);
+          background: linear-gradient(90deg, #fffde1, #ffffff 23%, #ffca62 59%, #ff5b1b);
           filter: blur(.45px) drop-shadow(0 0 5px #fff2ae);
           animation: flamePulse .25s ease-in-out infinite alternate;
         }
 
         .torch-fusion {
           position: absolute;
-          left: 31px;
-          top: 83px;
-          width: 43px;
-          height: 7px;
+          left: 22px;
+          top: 18px;
+          width: 44px;
+          height: 5px;
           border-radius: 50%;
           background: linear-gradient(90deg, transparent, #ff6a20 16%, #fff0b4 49%, #ff6a20 82%, transparent);
           filter: blur(1px);
@@ -380,10 +338,10 @@ export function TorchCuttingSprite() {
 
         .torch-heat {
           position: absolute;
-          left: 22px;
-          top: 73px;
-          width: 58px;
-          height: 21px;
+          left: 16px;
+          top: 9px;
+          width: 57px;
+          height: 22px;
           background: linear-gradient(90deg, transparent, rgba(255, 88, 22, .34), rgba(255, 190, 92, .38), rgba(255, 88, 22, .22), transparent);
           filter: blur(8px);
           animation: heatShimmer .55s ease-in-out infinite alternate;
@@ -391,16 +349,16 @@ export function TorchCuttingSprite() {
 
         .torch-haze {
           position: absolute;
-          left: 20px;
-          width: 45px;
-          height: 12px;
+          left: 15px;
+          width: 43px;
+          height: 8px;
           border-top: 1px solid rgba(255, 148, 71, .32);
           filter: blur(2px);
           opacity: .4;
         }
 
-        .haze-one { top: 58px; transform: rotate(-18deg); animation: hazeFloat 1.5s ease-in-out infinite; }
-        .haze-two { top: 68px; transform: rotate(14deg); animation: hazeFloat 1.9s ease-in-out infinite reverse; }
+        .haze-one { top: 7px; transform: rotate(-18deg); animation: hazeFloat 1.5s ease-in-out infinite; }
+        .haze-two { top: 24px; transform: rotate(14deg); animation: hazeFloat 1.9s ease-in-out infinite reverse; }
 
         .spark {
           position: absolute;
@@ -409,7 +367,17 @@ export function TorchCuttingSprite() {
           transform-origin: left center;
           border-radius: 100%;
           box-shadow: 0 0 5px currentColor, 0 0 11px currentColor;
-          animation: sparkFly 1.05s cubic-bezier(.2,.8,.28,1) infinite;
+          animation-duration: 1.05s;
+          animation-timing-function: cubic-bezier(.2,.8,.28,1);
+          animation-iteration-count: infinite;
+        }
+
+        .spark--up {
+          animation-name: sparkFlyUp;
+        }
+
+        .spark--down {
+          animation-name: sparkFlyDown;
         }
 
         .drone {
@@ -596,10 +564,15 @@ export function TorchCuttingSprite() {
         @keyframes fusionWeld { from { opacity: .62; transform: scaleX(.78); } to { opacity: 1; transform: scaleX(1.1); } }
         @keyframes heatShimmer { from { opacity: .48; transform: translateX(-3px); } to { opacity: .9; transform: translateX(3px); } }
         @keyframes hazeFloat { 0%, 100% { transform: translate(0, 0) rotate(-14deg); opacity: .28; } 50% { transform: translate(8px, -8px) rotate(4deg); opacity: .68; } }
-        @keyframes sparkFly {
-          0% { opacity: 0; transform: translate(0, 0) scaleX(.45) rotate(var(--spark-angle)); }
+        @keyframes sparkFlyUp {
+          0% { opacity: 0; transform: translate(0, 0) scaleX(.45) rotate(-18deg); }
           18% { opacity: 1; }
-          100% { opacity: 0; transform: translate(-28px, 23px) scaleX(1) rotate(var(--spark-angle)); }
+          100% { opacity: 0; transform: translate(-18px, -31px) scaleX(1) rotate(-18deg); }
+        }
+        @keyframes sparkFlyDown {
+          0% { opacity: 0; transform: translate(0, 0) scaleX(.45) rotate(18deg); }
+          18% { opacity: 1; }
+          100% { opacity: 0; transform: translate(-23px, 31px) scaleX(1) rotate(18deg); }
         }
         @keyframes hotspot { 0%, 100% { opacity: .6; transform: translate(-50%, -50%) scaleX(.8); } 50% { opacity: 1; transform: translate(-50%, -50%) scaleX(1.2); } }
         @keyframes cooling { 0% { opacity: .8; transform: scaleX(1); } 100% { opacity: 0; transform: scaleX(.45); } }
