@@ -71,6 +71,7 @@ const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.
 const coreReactorSpriteSource = require('../assets/images/core-reactor-sprite-sheet.png');
 const sevenFireOrbSource = require('../assets/images/seven-fire-orb.png');
 const diamondSpriteSource = require('../assets/images/neon-diamond-fragment-sprite-sheet.png');
+const spiderWebSource = require('../assets/images/spider-web-destination.png');
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
@@ -209,13 +210,15 @@ const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
 const DRAGON_NOMINAL_SPEED = 40;
 const DRAGON_ATTACK_SPEED = 105;
-const SPIDER_THREAD_INITIAL_DELAY = 3.5;
-const SPIDER_THREAD_COOLDOWN = 6.5;
-const SPIDER_THREAD_SPEED = 260;
-const SPIDER_THREAD_EXTRA_LEAD_TIME = 0.34;
-const SPIDER_THREAD_ACTIVE_DURATION = 2.8;
+const SPIDER_THREAD_INITIAL_DELAY = 2.1;
+const SPIDER_THREAD_COOLDOWN = 4.2;
+const SPIDER_THREAD_SPEED = 420;
+const SPIDER_THREAD_EXTRA_LEAD_TIME = 0.2;
+const SPIDER_THREAD_ACTIVE_DURATION = 3.2;
 const SPIDER_THREAD_LENGTH_CELLS = 1.65;
-const SPIDER_THREAD_SLOW_FACTOR = 0.58;
+const SPIDER_THREAD_SLOW_FACTOR = 0.2;
+const SPIDER_WEB_SIZE_CELLS = 2.65;
+const SPIDER_WEB_RADIUS_CELLS = 1.08;
 
 type Game = {
   width: number;
@@ -1039,13 +1042,13 @@ const drawCuttingSpriteCanvas = (
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 2.25, height: cell * 2.25 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
-  if (kind === 'SPIDER') return { width: cell * 3.5, height: cell * 3.5 };
+  if (kind === 'SPIDER') return { width: cell * 2.2, height: cell * 2.2 };
   return { width: cell * 1.9, height: cell * 1.9 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
   if (enemy.kind === 'DRAGON') return cell * 0.78;
-  if (enemy.kind === 'SPIDER') return cell * 1.0;
+  if (enemy.kind === 'SPIDER') return cell * 0.88;
   if (enemy.kind === 'SEVEN') return cell * 1.32;
   return cell * 0.8;
 };
@@ -2245,6 +2248,7 @@ export default function GameScreen() {
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
   const sevenFireOrbImageRef = useRef<any>(null);
+  const spiderWebImageRef = useRef<any>(null);
   const diamondSpriteImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
@@ -2496,6 +2500,13 @@ export default function GameScreen() {
       if (!cancelled) sevenFireOrbImageRef.current = sevenFireOrbImage;
     };
     sevenFireOrbImage.src = resolvedSevenFireOrb?.uri ?? sevenFireOrbSource;
+    const resolvedSpiderWeb = (RNImage as any).resolveAssetSource?.(spiderWebSource);
+    const spiderWebImage = new (globalThis as any).Image();
+    spiderWebImage.decoding = 'async';
+    spiderWebImage.onload = () => {
+      if (!cancelled) spiderWebImageRef.current = spiderWebImage;
+    };
+    spiderWebImage.src = resolvedSpiderWeb?.uri ?? spiderWebSource;
     const resolvedPlayer = (RNImage as any).resolveAssetSource?.(playerSource);
     const playerImage = new (globalThis as any).Image();
     playerImage.decoding = 'async';
@@ -2533,6 +2544,7 @@ export default function GameScreen() {
       coreReactorImageRef.current = null;
       diamondSpriteImageRef.current = null;
       sevenFireOrbImageRef.current = null;
+      spiderWebImageRef.current = null;
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
       shipSmokeSpriteImageRef.current = null;
