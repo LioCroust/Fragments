@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="256" viewBox="0 0 1024 256">
+  <defs>
+    <linearGradient id="cyanFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6ffff"/>
+      <stop offset=".18" stop-color="#00f3ff"/>
+      <stop offset=".62" stop-color="#197bff"/>
+      <stop offset="1" stop-color="#071c9c"/>
+    </linearGradient>
+    <linearGradient id="pinkFace" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff7ff"/>
+      <stop offset=".2" stop-color="#ff2bb5"/>
+      <stop offset=".68" stop-color="#8d28ff"/>
+      <stop offset="1" stop-color="#36106d"/>
+    </linearGradient>
+    <linearGradient id="limeFace" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#21447d"/>
+      <stop offset=".38" stop-color="#b8ff4a"/>
+      <stop offset=".7" stop-color="#fff35c"/>
+      <stop offset="1" stop-color="#ff8a00"/>
+    </linearGradient>
+    <linearGradient id="violetFace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".3" stop-color="#7f5cff"/>
+      <stop offset=".75" stop-color="#ff2bb5"/>
+      <stop offset="1" stop-color="#32135d"/>
+    </linearGradient>
+    <linearGradient id="iceFace" x1=".2" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".28" stop-color="#a8ffff"/>
+      <stop offset=".68" stop-color="#00b8ff"/>
+      <stop offset="1" stop-color="#1649aa"/>
+    </linearGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="microGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+
+  <!-- Four full-width prism views. The silhouette never collapses to an edge. -->
+  <g transform="translate(0 0)">
+    <g opacity=".58" filter="url(#softGlow)" fill="#00f3ff">
+      <path d="M128 32 185 91 165 223 128 242 91 223 71 91Z"/>
+    </g>
+    <path d="M128 24 184 88 162 218 128 242 94 218 72 88Z" fill="url(#cyanFace)" stroke="#8fffff" stroke-width="2"/>
+    <path d="M128 24 184 88 128 115Z" fill="url(#pinkFace)" stroke="#ffb9f0" stroke-width="1.2"/>
+    <path d="M128 24 128 115 128 242 94 218 72 88Z" fill="url(#iceFace)" opacity=".86"/>
+    <path d="M128 115 184 88 162 218 128 242Z" fill="url(#pinkFace)" opacity=".84"/>
+    <path d="m128 24 9 76-9 15-12-15Z" fill="#ffffff" opacity=".85"/>
+    <path d="m94 218 34-103 34 103-34 24Z" fill="url(#violetFace)" opacity=".58"/>
+    <path d="M72 88 128 24 184 88 162 218 128 242 94 218Z" fill="none" stroke="#00f3ff" stroke-width="2.5"/>
+  </g>
+
+  <g transform="translate(256 0)">
+    <g opacity=".58" filter="url(#softGlow)" fill="#ff2bb5">
+      <path d="M128 30 195 82 174 222 128 242 82 218 61 87Z"/>
+    </g>
+    <path d="M128 22 194 80 173 218 128 242 84 216 62 86Z" fill="url(#pinkFace)" stroke="#ffb9f0" stroke-width="2"/>
+    <path d="M128 22 194 80 128 117 84 216 62 86Z" fill="url(#violetFace)" opacity=".86"/>
+    <path d="M128 22 128 117 128 242 173 218 194 80Z" fill="url(#cyanFace)" opacity=".88"/>
+    <path d="m128 22 22 67-22 28-15-28Z" fill="url(#limeFace)" opacity=".95"/>
+    <path d="m128 117 45 101-45 24-44-26Z" fill="url(#iceFace)" opacity=".76"/>
+    <path d="M62 86 128 22 194 80 173 218 128 242 84 216Z" fill="none" stroke="#ff2bb5" stroke-width="2.5"/>
+  </g>
+
+  <g transform="translate(512 0)">
+    <g opacity=".58" filter="url(#softGlow)" fill="#00f3ff">
+      <path d="M128 27 190 83 177 213 128 242 79 213 66 83Z"/>
+    </g>
+    <path d="M128 20 190 82 176 214 128 242 80 214 66 82Z" fill="url(#limeFace)" stroke="#fff35c" stroke-width="2"/>
+    <path d="M128 20 128 115 80 214 66 82Z" fill="url(#cyanFace)" opacity=".9"/>
+    <path d="M128 20 190 82 176 214 128 242 128 115Z" fill="url(#pinkFace)" opacity=".87"/>
+    <path d="m128 20 23 72-23 23-20-23Z" fill="url(#iceFace)" opacity=".95"/>
+    <path d="m128 115 48 99-48 28-48-28Z" fill="url(#violetFace)" opacity=".7"/>
+    <path d="M66 82 128 20 190 82 176 214 128 242 80 214Z" fill="none" stroke="#b8ff4a" stroke-width="2.5"/>
+  </g>
+
+  <g transform="translate(768 0)">
+    <g opacity=".58" filter="url(#softGlow)" fill="#7f5cff">
+      <path d="M128 28 198 88 174 216 128 242 80 216 58 89Z"/>
+    </g>
+    <path d="M128 21 198 87 174 216 128 242 81 216 58 87Z" fill="url(#violetFace)" stroke="#e0c8ff" stroke-width="2"/>
+    <path d="M128 21 198 87 128 116 81 216 58 87Z" fill="url(#cyanFace)" opacity=".88"/>
+    <path d="M128 21 128 116 128 242 174 216 198 87Z" fill="url(#pinkFace)" opacity=".88"/>
+    <path d="m128 21 19 68-19 27-23-27Z" fill="url(#limeFace)" opacity=".92"/>
+    <path d="m128 116 46 100-46 26-47-26Z" fill="url(#iceFace)" opacity=".72"/>
+    <path d="M58 87 128 21 198 87 174 216 128 242 81 216Z" fill="none" stroke="#8f75ff" stroke-width="2.5"/>
+  </g>
+</svg>
