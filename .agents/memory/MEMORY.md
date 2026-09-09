@@ -6,6 +6,7 @@
 - [Drone geometry states](drone-geometry-state.md) — Keep outside movement, perimeter crossing, interior play, and cutting as separate geometric states.
 - [Selected drone concept](selected-drone-concept.md) — Keep the Prism Arrow as the player drone until the user explicitly chooses a different concept.
 - [Enemy ship smoke](enemy-ship-smoke.md) — Decorative smoke belongs behind the enemy ship, not the player drone, and must remain non-functional.
+- [Enemy smoke sprite](enemy-smoke-sprite.md) — Use barely visible dark diffuse smoke; avoid neon colors and tubular shapes.
 - [Torch cut effect](torch-cut-effect.md) — The cutting tool must sit directly behind the drone with a narrow nozzle touching the red line; avoid dominant circular halos.
 - [Continuous cut geometry](continuous-cut-geometry.md) — Cyan keeps gameplay meaning, but the player's red cut must end at its continuous position rather than a cell boundary.
 - [Capture union geometry](capture-union-geometry.md) — Resolve exact orthogonal components before/after each cut; never reconstruct captures from sampled boundary loops.
