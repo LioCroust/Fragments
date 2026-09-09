@@ -194,6 +194,7 @@ type Snapshot = {
   height: number;
   cell: number;
   rows: number;
+  level: number;
   trail: Point[];
   protectedTrails: Point[][];
   player: Point;
@@ -1369,6 +1370,7 @@ type NativeArenaStaticProps = {
   height: number;
   cell: number;
   rows: number;
+  level: number;
   claimedPolygons: Point[][];
   protectedTrails: Point[][];
   claimedCount: number;
@@ -1380,11 +1382,13 @@ const NativeArenaStatic = React.memo(({
   height,
   cell,
   rows,
+  level,
   claimedPolygons,
   protectedTrails,
   claimedCount,
   protectedTrailCount,
 }: NativeArenaStaticProps) => {
+  const isSectorTwo = level === 2;
   const gridLines = [];
   for (let x = 0; x <= COLS; x += 1) {
     gridLines.push(
@@ -1417,7 +1421,18 @@ const NativeArenaStatic = React.memo(({
     const bounds = perimeterBounds(width, height, cell);
   return (
     <>
-      <Rect width={width} height={height} fill="#000000" />
+      {isSectorTwo ? (
+        <SvgImage
+          href={sector2SpaceBackgroundSource}
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          preserveAspectRatio="xMidYMid slice"
+        />
+      ) : (
+        <Rect width={width} height={height} fill="#000000" />
+      )}
       <Rect
         x={bounds.left}
         y={bounds.top}
@@ -1435,7 +1450,7 @@ const NativeArenaStatic = React.memo(({
           />
         ))}
       </G>
-      {gridLines}
+      {!isSectorTwo && gridLines}
       <Rect
         x={bounds.left}
         y={bounds.top}
@@ -1733,6 +1748,7 @@ export default function GameScreen() {
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
   const shipSmokeSpriteImageRef = useRef<any>(null);
+  const sector2SpaceBackgroundImageRef = useRef<any>(null);
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
   const recordBannerShownRef = useRef(false);
@@ -1963,6 +1979,13 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
+    const resolvedSector2Background = (RNImage as any).resolveAssetSource?.(sector2SpaceBackgroundSource);
+    const sector2BackgroundImage = new (globalThis as any).Image();
+    sector2BackgroundImage.decoding = 'async';
+    sector2BackgroundImage.onload = () => {
+      if (!cancelled) sector2SpaceBackgroundImageRef.current = sector2BackgroundImage;
+    };
+    sector2BackgroundImage.src = resolvedSector2Background?.uri ?? sector2SpaceBackgroundSource;
 
     return () => {
       cancelled = true;
@@ -1971,6 +1994,7 @@ export default function GameScreen() {
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
       shipSmokeSpriteImageRef.current = null;
+      sector2SpaceBackgroundImageRef.current = null;
     };
   }, []);
 
@@ -2999,8 +3023,25 @@ export default function GameScreen() {
       if (!context) return;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, g.width, g.height);
-      context.fillStyle = '#000000';
-      context.fillRect(0, 0, g.width, g.height);
+      context.globalAlpha = 1;
+      if (g.level === 2 && sector2SpaceBackgroundImageRef.current) {
+        const background = sector2SpaceBackgroundImageRef.current;
+        const sourceWidth = background.naturalWidth || background.width;
+        const sourceHeight = background.naturalHeight || background.height;
+        const scale = Math.max(g.width / sourceWidth, g.height / sourceHeight);
+        const drawWidth = sourceWidth * scale;
+        const drawHeight = sourceHeight * scale;
+        context.drawImage(
+          background,
+          (g.width - drawWidth) * 0.5,
+          (g.height - drawHeight) * 0.5,
+          drawWidth,
+          drawHeight,
+        );
+      } else {
+        context.fillStyle = '#000000';
+        context.fillRect(0, 0, g.width, g.height);
+      }
 
        context.globalCompositeOperation = 'source-over';
        context.globalAlpha = INITIAL_MAP_OPACITY;
@@ -3022,21 +3063,23 @@ export default function GameScreen() {
        });
        context.fill();
        context.globalAlpha = 1;
-      context.strokeStyle = 'rgba(0,243,255,0.11)';
-      context.lineWidth = 0.65;
-      const bounds = perimeterBounds(g.width, g.height, g.cell);
-       for (let x = 0; x <= COLS; x += 1) {
-        context.beginPath();
-         context.moveTo(x * g.cell, 0);
-         context.lineTo(x * g.cell, g.height);
-        context.stroke();
-      }
-       for (let y = 0; y <= g.rows; y += 1) {
-        context.beginPath();
-         context.moveTo(0, y * g.cell);
-         context.lineTo(g.width, y * g.cell);
-        context.stroke();
-      }
+       const bounds = perimeterBounds(g.width, g.height, g.cell);
+       if (g.level !== 2) {
+         context.strokeStyle = 'rgba(0,243,255,0.11)';
+         context.lineWidth = 0.65;
+          for (let x = 0; x <= COLS; x += 1) {
+           context.beginPath();
+            context.moveTo(x * g.cell, 0);
+            context.lineTo(x * g.cell, g.height);
+           context.stroke();
+         }
+          for (let y = 0; y <= g.rows; y += 1) {
+           context.beginPath();
+            context.moveTo(0, y * g.cell);
+            context.lineTo(g.width, y * g.cell);
+           context.stroke();
+         }
+       }
 
       context.globalCompositeOperation = 'lighter';
       context.strokeStyle = '#00f3ff';
@@ -3254,6 +3297,7 @@ export default function GameScreen() {
             height: g.height,
             cell: g.cell,
             rows: g.rows,
+            level: g.level,
             trail: g.trail,
              protectedTrails: g.protectedTrails,
             player: { ...g.player },
@@ -3309,6 +3353,7 @@ export default function GameScreen() {
           height={snapshot.height}
           cell={snapshot.cell}
           rows={snapshot.rows}
+          level={snapshot.level}
           claimedPolygons={snapshot.claimedPolygons}
           protectedTrails={snapshot.protectedTrails}
           claimedCount={snapshot.claimedPolygons.length}

@@ -192,3 +192,17 @@ mtime_ms = 1788970002585
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/67c38f74-334f-476f-930a-f0ab8961dbb5/a34bcf86-6beb-4522-844b-c70a3ac59328"
 storage_version_token = "1788970023275138"
 content_type = "audio/wav"
+
+[[outputs]]
+id = "fycyI39jgwkgVyCUB4-yn"
+uri = "file://artifacts/fragments-neon/assets/images/sector-2-space-background.png"
+type = "image"
+title = "Fond spatial — secteur 2"
+description = "Fond vertical très sombre, sans grille, avec nébuleuse indigo discrète et espace central dégagé pour le gameplay."
+logical_id = "6077be54-531f-467e-a310-431fb3722fd8"
+content_hash = "sha256:e4b0d35e22a486c4a13ee1069da9bd85045043bd143733646cedd65e2705cc89"
+size = 1226671
+mtime_ms = 1788974345637
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/6077be54-531f-467e-a310-431fb3722fd8/ccc0dbe2-4e11-489b-9d80-cb1582e2fc79"
+storage_version_token = "1788975259011192"
+content_type = "image/png"
