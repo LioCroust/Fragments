@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const sampleRate = 44100;
-const duration = 1.18;
+const duration = 2.56;
 const frameCount = Math.floor(sampleRate * duration);
 const left = new Float32Array(frameCount);
 const right = new Float32Array(frameCount);
 let seed = 0x51e1d;
+let filteredNoise = 0;
 
 const random = () => {
   seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -31,42 +32,66 @@ const expDecay = (time, start, decay) => (
 for (let index = 0; index < frameCount; index += 1) {
   const time = index / sampleRate;
 
-  // A compact sub impact gives the shield hit weight without swallowing the
-  // brighter capture sound already used by the game.
-  const impactTime = time;
-  const impactEnvelope = Math.exp(-impactTime * 13.5);
-  const impactFrequency = 104 - Math.min(58, impactTime * 105);
-  const impact = Math.sin(2 * Math.PI * impactFrequency * impactTime)
-    * (0.72 + 0.28 * Math.sin(2 * Math.PI * 6.5 * impactTime))
-    * impactEnvelope;
-  add(time, impact, 0, 0.48);
-
-  // Short distorted crack: a descending metallic edge over the impact.
-  if (time >= 0.012 && time < 0.28) {
-    const crackTime = time - 0.012;
-    const crackEnvelope = Math.exp(-crackTime * 18);
-    const crackFrequency = 920 - crackTime * 2450;
-    const crack = (
-      Math.sin(2 * Math.PI * crackFrequency * crackTime)
-      + Math.sin(2 * Math.PI * crackFrequency * 1.97 * crackTime) * 0.32
-      + Math.sin(2 * Math.PI * crackFrequency * 3.01 * crackTime) * 0.14
-    ) * crackEnvelope;
-    add(time, Math.tanh(crack * 1.4), -0.08, 0.26);
+  // A failing engine sputters before the actual hit, giving the destruction
+  // a readable approach instead of making it sound like a menu notification.
+  if (time < 0.38) {
+    const engineEnvelope = Math.pow(1 - time / 0.38, 0.72);
+    const sputter = 0.55 + 0.45 * Math.sin(2 * Math.PI * 9.5 * time);
+    const engineFrequency = 58 + Math.sin(2 * Math.PI * 2.7 * time) * 8;
+    const engine = Math.sin(2 * Math.PI * engineFrequency * time)
+      + Math.sin(2 * Math.PI * engineFrequency * 2.01 * time) * 0.28;
+    add(time, engine * sputter * engineEnvelope, 0, 0.16);
   }
 
-  // A very short noise burst sells the shield fracture instead of a clean UI beep.
-  if (time >= 0.018 && time < 0.11) {
-    const noiseEnvelope = Math.exp(-(time - 0.018) * 39);
-    const noise = (random() * 2 - 1) * noiseEnvelope;
-    add(time, noise, -0.28, 0.16);
-    add(time, noise, 0.28, 0.12);
+  // The shield collapses into a heavy hull impact at 0.38s.
+  if (time >= 0.34) {
+    const impactTime = time - 0.34;
+    const impactEnvelope = Math.exp(-impactTime * 6.8);
+    const impactFrequency = 112 - Math.min(76, impactTime * 88);
+    const impact = Math.sin(2 * Math.PI * impactFrequency * impactTime)
+      * (0.78 + 0.22 * Math.sin(2 * Math.PI * 7 * impactTime))
+      * impactEnvelope;
+    add(time, impact, 0, 0.62);
   }
 
-  // Bright fragments move from white-hot to orange and fall away in stereo.
+  // Low-passed debris noise supplies the broad body of the explosion.
+  const rawNoise = random() * 2 - 1;
+  filteredNoise = filteredNoise * 0.965 + rawNoise * 0.035;
+  if (time >= 0.35 && time < 1.42) {
+    const blastTime = time - 0.35;
+    const blastEnvelope = Math.exp(-blastTime * 3.8) * Math.min(1, blastTime * 34);
+    add(time, filteredNoise * blastEnvelope, -0.18, 0.22);
+    add(time, filteredNoise * blastEnvelope, 0.18, 0.2);
+  }
+
+  // A sequence of hull tears spreads across the stereo field.
+  const hullBreaks = [
+    { start: 0.37, length: 0.22, from: 1280, to: 180, pan: -0.8, gain: 0.25 },
+    { start: 0.49, length: 0.3, from: 980, to: 120, pan: 0.74, gain: 0.22 },
+    { start: 0.66, length: 0.38, from: 760, to: 82, pan: -0.42, gain: 0.2 },
+    { start: 0.84, length: 0.48, from: 610, to: 62, pan: 0.35, gain: 0.16 },
+  ];
+  hullBreaks.forEach(({ start, length, from, to, pan, gain }) => {
+    if (time < start || time >= start + length) return;
+    const tearTime = time - start;
+    const progress = tearTime / length;
+    const frequency = from + (to - from) * progress;
+    const envelope = Math.pow(1 - progress, 1.35);
+    const tear = (
+      Math.sin(2 * Math.PI * frequency * tearTime)
+      + Math.sin(2 * Math.PI * frequency * 1.71 * tearTime) * 0.32
+      + Math.sin(2 * Math.PI * frequency * 3.07 * tearTime) * 0.12
+    ) * envelope;
+    add(time, Math.tanh(tear * 1.6), pan, gain);
+  });
+
+  // Bright fragments are thrown outward and then cool down into dark metal.
   const shards = [
-    { start: 0.06, length: 0.34, from: 1820, to: 360, pan: -0.82, gain: 0.18 },
-    { start: 0.085, length: 0.28, from: 2380, to: 510, pan: 0.72, gain: 0.15 },
-    { start: 0.13, length: 0.42, from: 1480, to: 280, pan: -0.42, gain: 0.12 },
+    { start: 0.42, length: 0.58, from: 2280, to: 330, pan: -0.9, gain: 0.15 },
+    { start: 0.5, length: 0.46, from: 2680, to: 410, pan: 0.86, gain: 0.14 },
+    { start: 0.61, length: 0.72, from: 1840, to: 220, pan: -0.58, gain: 0.12 },
+    { start: 0.78, length: 0.64, from: 1520, to: 170, pan: 0.56, gain: 0.1 },
+    { start: 1.02, length: 0.78, from: 1180, to: 110, pan: -0.22, gain: 0.08 },
   ];
   shards.forEach(({ start, length, from, to, pan, gain }) => {
     if (time < start || time >= start + length) return;
@@ -79,18 +104,34 @@ for (let index = 0; index < frameCount; index += 1) {
     add(time, tone * envelope, pan, gain);
   });
 
-  // The tail keeps the sound in the same luminous, futuristic family as capture.
+  // The reactor whine continues after the hull has broken apart and powers down.
   [
-    { start: 0.16, frequency: 312, pan: -0.35, gain: 0.14, decay: 5.4 },
-    { start: 0.22, frequency: 468, pan: 0.3, gain: 0.11, decay: 6.1 },
-    { start: 0.29, frequency: 702, pan: 0.62, gain: 0.08, decay: 7.2 },
-  ].forEach(({ start, frequency, pan, gain, decay }) => {
+    { start: 0.62, from: 238, to: 76, pan: -0.3, gain: 0.2, decay: 2.9 },
+    { start: 0.74, from: 356, to: 104, pan: 0.26, gain: 0.14, decay: 3.7 },
+    { start: 0.9, from: 524, to: 148, pan: 0.62, gain: 0.1, decay: 4.5 },
+  ].forEach(({ start, from, to, pan, gain, decay }) => {
     if (time < start) return;
     const tailTime = time - start;
     const envelope = expDecay(time, start, decay) * Math.min(1, tailTime * 55);
+    const progress = Math.min(1, tailTime / 1.8);
+    const frequency = from + (to - from) * progress;
     const tone = Math.sin(2 * Math.PI * frequency * tailTime)
-      + Math.sin(2 * Math.PI * frequency * 1.5 * tailTime) * 0.12;
+      + Math.sin(2 * Math.PI * frequency * 1.49 * tailTime) * 0.16;
     add(time, tone * envelope, pan, gain);
+  });
+
+  // Small late electrical arcs mark the final loss of power.
+  [
+    { start: 1.18, length: 0.26, frequency: 1240, pan: -0.7, gain: 0.08 },
+    { start: 1.43, length: 0.31, frequency: 890, pan: 0.72, gain: 0.06 },
+    { start: 1.76, length: 0.22, frequency: 620, pan: -0.18, gain: 0.045 },
+  ].forEach(({ start, length, frequency, pan, gain }) => {
+    if (time < start || time >= start + length) return;
+    const arcTime = time - start;
+    const arcEnvelope = Math.pow(1 - arcTime / length, 2.2);
+    const arc = Math.sin(2 * Math.PI * frequency * arcTime)
+      + Math.sin(2 * Math.PI * frequency * 2.7 * arcTime) * 0.18;
+    add(time, arc * arcEnvelope, pan, gain);
   });
 }
 
