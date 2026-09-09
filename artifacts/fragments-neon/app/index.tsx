@@ -1288,12 +1288,20 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
 };
 
 const createBombs = (width: number, height: number, cell: number, level: number): Bomb[] => {
-  if (level !== 2) return [];
-  return [{
-    x: clamp(width * 0.52, cell * 3, width - cell * 3),
-    y: clamp(height * 0.46, cell * 4, height - cell * 4),
+  if (Math.random() >= 0.5) return [];
+
+  const bombCount = level >= 5 && Math.random() < 0.5 ? 2 : 1;
+  const bounds = perimeterBounds(width, height, cell);
+  const minX = bounds.left + bombVisualRadius(cell);
+  const maxX = bounds.right - bombVisualRadius(cell);
+  const minY = bounds.top + bombVisualRadius(cell);
+  const maxY = bounds.bottom - bombVisualRadius(cell);
+
+  return Array.from({ length: bombCount }, () => ({
+    x: minX + Math.random() * Math.max(0, maxX - minX),
+    y: minY + Math.random() * Math.max(0, maxY - minY),
     destroyed: false,
-  }];
+  }));
 };
 
 const enemyIsDestroyed = (enemy: Enemy) => enemy.respawnAt === Number.POSITIVE_INFINITY;
@@ -1436,6 +1444,7 @@ const placeBombsInOpenSurface = (
     { x: 0.7, y: 0.3 },
     { x: 0.3, y: 0.3 },
   ];
+  const placedBombs: Bomb[] = [];
   const protectedTrailTouches = (point: Point) => protectedTrails.some((trail) => (
     trail.slice(1).some((trailPoint, index) => (
       distanceToSegment(point, trail[index], trailPoint)
@@ -1472,12 +1481,21 @@ const placeBombsInOpenSurface = (
           Math.hypot(x - enemy.x, y - enemy.y)
             > bombVisualRadius(cell) + enemyVisualRadius(enemy, cell) * 0.8
         ));
-      return clearOfClaimed && clearOfProtected && clearOfActiveTrail && clearOfPlayer && clearOfEnemies;
+      const clearOfOtherBombs = placedBombs.every((otherBomb) => (
+        Math.hypot(x - otherBomb.x, y - otherBomb.y) > bombVisualRadius(cell) * 2
+      ));
+      return clearOfClaimed
+        && clearOfProtected
+        && clearOfActiveTrail
+        && clearOfPlayer
+        && clearOfEnemies
+        && clearOfOtherBombs;
     });
     if (candidate) {
       bomb.x = clamp(candidate.x, bounds.left + bombVisualRadius(cell), bounds.right - bombVisualRadius(cell));
       bomb.y = clamp(candidate.y, bounds.top + bombVisualRadius(cell), bounds.bottom - bombVisualRadius(cell));
     }
+    placedBombs.push(bomb);
   });
 };
 
