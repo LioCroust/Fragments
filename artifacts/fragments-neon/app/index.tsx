@@ -131,6 +131,8 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
 const DIAMOND_SCORE = 750;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
+const DRAGON_NOMINAL_SPEED = 40;
+const DRAGON_ATTACK_SPEED = 105;
 
 type Game = {
   width: number;
@@ -1208,7 +1210,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
   const enemies: Enemy[] = [
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 56 * levelSpeed, vy: 38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
-    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -31 * levelSpeed, vy: 37 * levelSpeed, speed: 48 * levelSpeed, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
+    { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -25.69, vy: 30.66, speed: DRAGON_NOMINAL_SPEED, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.3), vx: -49 * levelSpeed, vy: 32 * levelSpeed, speed: 62 * levelSpeed, agility: 0.9, phase: 1.6, spin: -0.22, routePhase: 1.1, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
@@ -2488,7 +2490,9 @@ export default function GameScreen() {
         const currentLength = Math.hypot(enemy.vx, enemy.vy) || enemy.speed;
         const isDragon = enemy.kind === 'DRAGON';
         const dragonIsCutting = isDragon && g.trail.length > 0;
-        let desiredSpeed = enemy.speed * (dragonIsCutting ? 2 : 1);
+        let desiredSpeed = isDragon
+          ? (dragonIsCutting ? DRAGON_ATTACK_SPEED : DRAGON_NOMINAL_SPEED)
+          : enemy.speed;
         let desiredVelocity: Point;
 
         if (enemy.behavior === 'PLANNED') {
