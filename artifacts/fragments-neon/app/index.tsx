@@ -1633,6 +1633,9 @@ export default function GameScreen() {
       ? g.protectedTrails.map((trail) => trail.map((point) => ({ ...point })))
       : [];
     const previousCapturedArea = preserveStats && !resetBoard ? g.capturedArea : 0;
+    const previousDiamond = preserveStats && !resetBoard
+      ? { ...g.diamond }
+      : createDiamond(width, height, width / COLS);
     if (!preserveStats) recordBannerShownRef.current = false;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
@@ -1655,7 +1658,7 @@ export default function GameScreen() {
       trail: [],
       protectedTrails: previousProtectedTrails,
       enemies,
-      diamond: createDiamond(width, height, cell),
+      diamond: previousDiamond,
       particles: [],
       smokePuffs: enemies
         .filter((enemy) => enemy.kind === 'SHIP')
