@@ -743,12 +743,18 @@ const playerOuterBounds = (
   bounds: ReturnType<typeof perimeterBounds>,
   cell: number,
 ) => {
-  const radius = playerBodyRadius(cell);
+  const arenaWidth = bounds.left + bounds.right;
+  const arenaHeight = bounds.top + bounds.bottom;
+  const spriteSize = playerSpriteSize(cell);
+  const halfSpriteWidth = spriteSize.width * 0.5;
+  const halfSpriteHeight = spriteSize.height * 0.5;
   return {
-    left: bounds.left - radius - OUTER_STOP_GAP,
-    right: bounds.right + radius + OUTER_STOP_GAP,
-    top: bounds.top - radius - OUTER_STOP_GAP,
-    bottom: bounds.bottom + radius + OUTER_STOP_GAP,
+    // The entire visible sprite stays inside the physical arena viewport
+    // while its center can travel through the safe band outside the blue line.
+    left: halfSpriteWidth + OUTER_STOP_GAP,
+    right: arenaWidth - halfSpriteWidth - OUTER_STOP_GAP,
+    top: halfSpriteHeight + OUTER_STOP_GAP,
+    bottom: arenaHeight - halfSpriteHeight - OUTER_STOP_GAP,
   };
 };
 
