@@ -33,6 +33,7 @@
   background:
     linear-gradient(90deg, transparent 49.8%, rgba(82, 245, 255, .045) 50%, transparent 50.2%),
     #05080d;
+  box-shadow: inset 0 0 0 1px rgba(82, 245, 255, .08), inset 0 0 42px rgba(0, 0, 0, .82);
 }
 
 .fragments-hud__phone::before,
@@ -203,40 +204,57 @@
   min-height: 77px;
   padding: 15px 14px 12px;
   overflow: hidden;
-  background: var(--hud-panel);
-  border: 1px solid rgba(116, 247, 255, .62);
+  background: #0b161d;
+  border: 2px solid rgba(116, 247, 255, .72);
   clip-path: polygon(0 10px, 10px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 14px 100%, 0 calc(100% - 14px));
-  box-shadow: inset 0 0 0 1px rgba(116, 247, 255, .07), 0 0 18px rgba(82, 245, 255, .08);
+  box-shadow:
+    inset 0 0 0 4px rgba(2, 7, 11, .82),
+    inset 0 0 0 5px rgba(116, 247, 255, .16),
+    inset 0 0 28px rgba(82, 245, 255, .1),
+    0 7px 0 rgba(1, 3, 6, .75),
+    0 0 24px rgba(82, 245, 255, .14);
 }
 
 .prism__module::before {
   content: "";
   position: absolute;
-  top: 7px;
-  right: 12px;
-  width: 11px;
-  height: 11px;
-  border: 1px solid var(--hud-pink);
-  transform: rotate(45deg);
-  opacity: .8;
+  inset: 7px;
+  border: 1px solid rgba(116, 247, 255, .26);
+  clip-path: polygon(0 7px, 7px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 9px 100%, 0 calc(100% - 9px));
+  pointer-events: none;
+  opacity: .85;
 }
 
 .prism__module::after {
   content: "";
   position: absolute;
-  right: -15px;
-  bottom: -19px;
-  width: 58px;
-  height: 44px;
-  border: 1px solid rgba(255, 150, 80, .43);
-  transform: rotate(-32deg);
+  right: 8px;
+  bottom: 7px;
+  width: 38px;
+  height: 14px;
+  border-right: 2px solid rgba(255, 150, 80, .74);
+  border-bottom: 2px solid rgba(255, 150, 80, .74);
+  transform: skewX(-35deg);
+  opacity: .9;
+}
+
+.prism__module > * {
+  position: relative;
+  z-index: 1;
 }
 
 .prism__module--score {
   grid-row: span 2;
   min-height: 164px;
   padding-top: 20px;
+  border-width: 3px;
   border-color: var(--hud-cyan);
+  box-shadow:
+    inset 0 0 0 5px rgba(2, 7, 11, .88),
+    inset 0 0 0 6px rgba(116, 247, 255, .18),
+    inset 0 0 34px rgba(82, 245, 255, .14),
+    0 8px 0 rgba(1, 3, 6, .8),
+    0 0 28px rgba(82, 245, 255, .2);
 }
 
 .prism__module--score .fragments-hud__value {
@@ -251,7 +269,14 @@
 }
 
 .prism__module--sector {
-  border-color: rgba(255, 150, 80, .8);
+  border-width: 2px;
+  border-color: rgba(255, 150, 80, .9);
+  box-shadow:
+    inset 0 0 0 4px rgba(18, 9, 6, .84),
+    inset 0 0 0 5px rgba(255, 150, 80, .2),
+    inset 0 0 24px rgba(255, 138, 61, .1),
+    0 6px 0 rgba(1, 3, 6, .8),
+    0 0 22px rgba(255, 138, 61, .15);
 }
 
 .prism__module--sector .fragments-hud__value {
@@ -259,7 +284,14 @@
 }
 
 .prism__module--zone {
-  border-color: rgba(255, 79, 159, .8);
+  border-width: 2px;
+  border-color: rgba(255, 79, 159, .9);
+  box-shadow:
+    inset 0 0 0 4px rgba(15, 5, 12, .84),
+    inset 0 0 0 5px rgba(255, 79, 159, .2),
+    inset 0 0 24px rgba(255, 79, 159, .1),
+    0 6px 0 rgba(1, 3, 6, .8),
+    0 0 22px rgba(255, 79, 159, .15);
 }
 
 .prism__module--zone .fragments-hud__value {
@@ -277,6 +309,13 @@
   justify-content: space-between;
   min-height: 68px;
   padding-block: 12px;
+  border-width: 2px;
+  box-shadow:
+    inset 0 0 0 4px rgba(2, 7, 11, .82),
+    inset 0 0 0 5px rgba(116, 247, 255, .16),
+    inset 0 0 24px rgba(82, 245, 255, .08),
+    0 6px 0 rgba(1, 3, 6, .8),
+    0 0 22px rgba(82, 245, 255, .14);
 }
 
 .prism__module--shields .fragments-hud__value {
@@ -376,14 +415,55 @@
   justify-content: space-between;
   padding: 11px 8px;
   background: #111018;
-  border: 1px solid rgba(98, 239, 247, .58);
+  border: 2px solid rgba(98, 239, 247, .72);
   clip-path: polygon(0 8px, 9px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 9px) 100%, 0 100%);
+  box-shadow:
+    inset 0 0 0 4px rgba(3, 8, 12, .82),
+    inset 0 0 0 5px rgba(98, 239, 247, .14),
+    inset 0 0 25px rgba(98, 239, 247, .08),
+    0 7px 0 rgba(1, 2, 5, .86),
+    0 0 20px rgba(98, 239, 247, .12);
 }
 
 .command__side--right {
-  border-color: rgba(255, 61, 146, .7);
+  border-width: 2px;
+  border-color: rgba(255, 61, 146, .85);
   clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 8px, 100% 100%, 9px 100%, 0 calc(100% - 8px));
   text-align: right;
+  box-shadow:
+    inset 0 0 0 4px rgba(11, 4, 12, .86),
+    inset 0 0 0 5px rgba(255, 61, 146, .16),
+    inset 0 0 25px rgba(255, 61, 146, .09),
+    0 7px 0 rgba(1, 2, 5, .86),
+    0 0 20px rgba(255, 61, 146, .16);
+}
+
+.command__side::before,
+.command__side::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.command__side::before {
+  top: 10px;
+  bottom: 10px;
+  left: 7px;
+  width: 3px;
+  background: var(--hud-cyan);
+  opacity: .65;
+  box-shadow: 0 0 7px rgba(98, 239, 247, .7);
+}
+
+.command__side::after {
+  right: 9px;
+  bottom: 9px;
+  width: 18px;
+  height: 18px;
+  border-right: 2px solid var(--hud-orange);
+  border-bottom: 2px solid var(--hud-orange);
+  transform: skewX(-28deg);
+  opacity: .8;
 }
 
 .command__side .fragments-hud__value {
@@ -416,9 +496,14 @@
   padding: 19px 10px 13px;
   text-align: center;
   background: #0d1518;
-  border: 1px solid var(--hud-orange);
+  border: 3px solid var(--hud-orange);
   clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 14px), 0 14px);
-  box-shadow: inset 0 0 24px rgba(255, 116, 58, .07), 0 0 17px rgba(255, 116, 58, .12);
+  box-shadow:
+    inset 0 0 0 5px rgba(20, 7, 4, .92),
+    inset 0 0 0 6px rgba(255, 116, 58, .2),
+    inset 0 0 34px rgba(255, 116, 58, .13),
+    0 8px 0 rgba(1, 2, 5, .92),
+    0 0 28px rgba(255, 116, 58, .2);
 }
 
 .command__core::before,
@@ -478,11 +563,21 @@
   min-height: 52px;
   padding: 11px 12px;
   background: #101118;
-  border-top: 1px solid rgba(98, 239, 247, .55);
-  border-bottom: 1px solid rgba(98, 239, 247, .25);
+  border-top: 2px solid rgba(98, 239, 247, .72);
+  border-bottom: 2px solid rgba(98, 239, 247, .32);
+  box-shadow:
+    inset 0 0 0 3px rgba(3, 7, 12, .82),
+    inset 0 0 18px rgba(98, 239, 247, .08),
+    0 5px 0 rgba(1, 2, 5, .76);
 }
 
-.command__lower-module:first-child { border-color: rgba(255, 61, 146, .65); }
+.command__lower-module:first-child {
+  border-color: rgba(255, 61, 146, .82);
+  box-shadow:
+    inset 0 0 0 3px rgba(11, 4, 12, .86),
+    inset 0 0 18px rgba(255, 61, 146, .09),
+    0 5px 0 rgba(1, 2, 5, .76);
+}
 
 .command__lower-module .fragments-hud__value {
   display: inline;
@@ -540,9 +635,15 @@
   grid-template-rows: 96px 67px;
   gap: 12px;
   padding: 12px 9px 10px;
-  border: 1px solid rgba(93, 243, 255, .45);
+  border: 3px solid rgba(93, 243, 255, .65);
   background: #071218;
   clip-path: polygon(0 12px, 12px 0, calc(100% - 38px) 0, 100% 38px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px));
+  box-shadow:
+    inset 0 0 0 5px rgba(2, 7, 11, .9),
+    inset 0 0 0 6px rgba(93, 243, 255, .14),
+    inset 0 0 40px rgba(93, 243, 255, .1),
+    0 9px 0 rgba(1, 3, 6, .86),
+    0 0 30px rgba(93, 243, 255, .15);
 }
 
 .circuit__board::before,
@@ -587,9 +688,15 @@
   z-index: 1;
   min-width: 0;
   padding: 14px 10px 9px;
-  background: #0b1a21;
-  border: 1px solid var(--hud-cyan);
+  background: #0c1c24;
+  border: 2px solid var(--hud-cyan);
   clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+  box-shadow:
+    inset 0 0 0 4px rgba(2, 7, 11, .82),
+    inset 0 0 0 5px rgba(93, 243, 255, .16),
+    inset 0 0 22px rgba(93, 243, 255, .11),
+    0 6px 0 rgba(1, 3, 6, .8),
+    0 0 18px rgba(93, 243, 255, .14);
 }
 
 .circuit__node::before {
@@ -608,8 +715,15 @@
 .circuit__node--score {
   grid-column: 1 / -1;
   text-align: center;
+  border-width: 3px;
   border-color: var(--hud-orange);
   background: #141317;
+  box-shadow:
+    inset 0 0 0 5px rgba(16, 6, 4, .9),
+    inset 0 0 0 6px rgba(255, 136, 71, .18),
+    inset 0 0 30px rgba(255, 136, 71, .12),
+    0 7px 0 rgba(1, 3, 6, .84),
+    0 0 25px rgba(255, 136, 71, .18);
 }
 
 .circuit__node--score::before { border-color: var(--hud-orange); }
