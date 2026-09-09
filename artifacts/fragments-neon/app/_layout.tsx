@@ -1,8 +1,11 @@
 import React, { useEffect } from 'react';
+import { Platform, StatusBar as NativeStatusBar } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationBar } from 'expo-navigation-bar';
+import * as SystemUI from 'expo-system-ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   Inter_400Regular,
@@ -41,10 +44,18 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    void SystemUI.setBackgroundColorAsync('#000000');
+    NavigationBar.setStyle('dark');
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
+      <NativeStatusBar barStyle="light-content" backgroundColor="#000000" translucent={false} />
+      <NavigationBar style="dark" />
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
