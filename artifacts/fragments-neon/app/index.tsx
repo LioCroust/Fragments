@@ -211,6 +211,15 @@ const distanceToSegment = (point: Point, a: Point, b: Point) => {
   return Math.hypot(point.x - closest.x, point.y - closest.y);
 };
 
+const distanceBetweenSegments = (firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point) => (
+  Math.min(
+    distanceToSegment(firstStart, secondStart, secondEnd),
+    distanceToSegment(firstEnd, secondStart, secondEnd),
+    distanceToSegment(secondStart, firstStart, firstEnd),
+    distanceToSegment(secondEnd, firstStart, firstEnd),
+  )
+);
+
 const pointTouchesOldTrail = (
   point: Point,
   trail: Point[],
@@ -910,6 +919,105 @@ const enemySpriteCorners = (enemy: Enemy, cell: number, x: number, y: number) =>
   ].map((point) => ({
     x: x + point.x * cos - point.y * sin,
     y: y + motion.offsetY + point.x * sin + point.y * cos,
+  }));
+};
+
+type CollisionCircle = {
+  center: Point;
+  radius: number;
+};
+
+// The PNGs have transparent space and very different silhouettes. These
+// normalized sample circles follow the visible body/limbs instead of treating
+// every sprite as a solid square.
+const enemyCollisionProfiles: Record<EnemyKind, Array<[number, number, number]>> = {
+  SHIP: [
+    [0, -0.76, 0.13],
+    [-0.48, -0.18, 0.1],
+    [0.48, -0.18, 0.1],
+    [0, 0, 0.2],
+    [0, 0.58, 0.13],
+  ],
+  DRAGON: [
+    [-0.72, -0.22, 0.15],
+    [-0.45, -0.56, 0.11],
+    [0, -0.7, 0.12],
+    [0.46, -0.52, 0.11],
+    [0.7, -0.14, 0.12],
+    [0.56, 0.35, 0.12],
+    [0.16, 0.61, 0.12],
+    [-0.24, 0.51, 0.11],
+    [-0.48, 0.24, 0.1],
+    [0.02, -0.23, 0.09],
+    [0.3, -0.14, 0.09],
+    [0.33, 0.12, 0.09],
+    [0.1, 0.27, 0.09],
+    [-0.12, 0.12, 0.08],
+  ],
+  SEVEN: [
+    [0, 0, 0.2],
+    [0, -0.42, 0.09],
+    [0, -0.78, 0.13],
+    [0.36, -0.22, 0.09],
+    [0.72, -0.42, 0.13],
+    [0.36, 0.22, 0.09],
+    [0.72, 0.42, 0.13],
+    [0, 0.42, 0.09],
+    [0, 0.78, 0.13],
+    [-0.36, 0.22, 0.09],
+    [-0.72, 0.42, 0.13],
+    [-0.36, -0.22, 0.09],
+    [-0.72, -0.42, 0.13],
+  ],
+  SPIDER: [
+    [0, 0, 0.22],
+    [-0.25, -0.3, 0.08],
+    [-0.5, -0.58, 0.07],
+    [-0.72, -0.78, 0.08],
+    [0.25, -0.3, 0.08],
+    [0.5, -0.58, 0.07],
+    [0.72, -0.78, 0.08],
+    [-0.4, -0.04, 0.08],
+    [-0.72, -0.2, 0.07],
+    [-0.82, -0.4, 0.08],
+    [0.4, -0.04, 0.08],
+    [0.72, -0.2, 0.07],
+    [0.82, -0.4, 0.08],
+    [-0.4, 0.18, 0.08],
+    [-0.72, 0.38, 0.07],
+    [-0.8, 0.62, 0.08],
+    [0.4, 0.18, 0.08],
+    [0.72, 0.38, 0.07],
+    [0.8, 0.62, 0.08],
+    [-0.24, 0.3, 0.08],
+    [-0.38, 0.55, 0.07],
+    [-0.5, 0.78, 0.08],
+    [0.24, 0.3, 0.08],
+    [0.38, 0.55, 0.07],
+    [0.5, 0.78, 0.08],
+  ],
+};
+
+const enemyCollisionCircles = (
+  enemy: Enemy,
+  cell: number,
+  x: number,
+  y: number,
+): CollisionCircle[] => {
+  const sprite = enemySpriteSize(enemy.kind, cell);
+  const motion = enemyAnimationTransform(enemy, cell);
+  const halfWidth = sprite.width * motion.scale * 0.5;
+  const halfHeight = sprite.height * motion.scale * 0.5;
+  const cos = Math.cos(motion.rotation);
+  const sin = Math.sin(motion.rotation);
+  const radiusScale = Math.min(sprite.width, sprite.height) * motion.scale * 0.5;
+
+  return enemyCollisionProfiles[enemy.kind].map(([localX, localY, radius]) => ({
+    center: {
+      x: x + localX * halfWidth * cos - localY * halfHeight * sin,
+      y: y + motion.offsetY + localX * halfWidth * sin + localY * halfHeight * cos,
+    },
+    radius: radius * radiusScale,
   }));
 };
 
@@ -1989,22 +2097,17 @@ export default function GameScreen() {
         };
         const enemyTouchesTrail = (x: number, y: number) => {
           if (g.trail.length < 2) return false;
-          const corners = enemySpriteCorners(enemy, g.cell, x, y);
-          const edges = corners.map((corner, index) => ({
-            start: corner,
-            end: corners[(index + 1) % corners.length],
-          }));
+          const collisionCircles = enemyCollisionCircles(enemy, g.cell, x, y);
           const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
-          return g.trail.slice(1).some((trailPoint, index) => {
-            const trailStart = g.trail[index];
-            const trailEnd = trailPoint;
-            if (pointInPolygon(trailStart, corners) || pointInPolygon(trailEnd, corners)) return true;
-            return edges.some((edge) => (
-              segmentsIntersect(edge.start, edge.end, trailStart, trailEnd)
-              || distanceToSegment(edge.start, trailStart, trailEnd) <= trailStrokeRadius
-              || distanceToSegment(edge.end, trailStart, trailEnd) <= trailStrokeRadius
-            ));
-          });
+          return collisionCircles.some(({ center, radius }) => (
+            g.trail.slice(1).some((trailPoint, index) => (
+              distanceToSegment(
+                center,
+                g.trail[index],
+                trailPoint,
+              ) <= radius + trailStrokeRadius
+            ))
+          ));
         };
         const enemySweepTouchesTrail = (
           fromX: number,
@@ -2013,19 +2116,19 @@ export default function GameScreen() {
           toY: number,
         ) => {
           if (g.trail.length < 2) return false;
-          const movementStart = { x: fromX, y: fromY };
-          const movementEnd = { x: toX, y: toY };
-          const collisionRadius = enemyRadius(enemy, g.cell) + PERIMETER_STROKE_WIDTH * 0.5;
-          return g.trail.slice(1).some((trailPoint, index) => {
-            const trailStart = g.trail[index];
-            const trailEnd = trailPoint;
-            if (segmentsIntersect(movementStart, movementEnd, trailStart, trailEnd)) return true;
-            return Math.min(
-              distanceToSegment(movementStart, trailStart, trailEnd),
-              distanceToSegment(movementEnd, trailStart, trailEnd),
-              distanceToSegment(trailStart, movementStart, movementEnd),
-              distanceToSegment(trailEnd, movementStart, movementEnd),
-            ) <= collisionRadius;
+          const fromCircles = enemyCollisionCircles(enemy, g.cell, fromX, fromY);
+          const toCircles = enemyCollisionCircles(enemy, g.cell, toX, toY);
+          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
+          return fromCircles.some((fromCircle, index) => {
+            const toCircle = toCircles[index];
+            return g.trail.slice(1).some((trailPoint, trailIndex) => (
+              distanceBetweenSegments(
+                fromCircle.center,
+                toCircle.center,
+                g.trail[trailIndex],
+                trailPoint,
+              ) <= fromCircle.radius + trailStrokeRadius
+            ));
           });
         };
         if (enemyTouchesTrail(enemy.x, enemy.y)) {
