@@ -16,16 +16,12 @@ const frameMarkup = Array.from({ length: frameCount }, (_, frame) => {
   const curl = Math.cos((frame / frameCount) * Math.PI * 2) * 4;
   return `
     <g transform="translate(${x} 0)">
-      <ellipse cx="${64 + drift}" cy="${74 + pulse * 2}" rx="${27 + pulse * 2}" ry="${17 - pulse}" fill="url(#smokeGrey)" opacity="0.26" filter="url(#softBlur)"/>
-      <ellipse cx="${57 + curl}" cy="${84 - pulse * 2}" rx="${20 - pulse}" ry="${12 + pulse * 2}" fill="#111a20" opacity="0.34" filter="url(#softBlur)"/>
-      <ellipse cx="${76 - curl}" cy="${63 + pulse}" rx="17" ry="11" fill="#29343b" opacity="0.23" filter="url(#softBlur)"/>
-      <path d="M ${67 + drift} 90 C ${48 + curl} 101, ${43 - curl} 78, ${29 + drift} 71 C ${43 + curl} 78, ${49 - curl} 94, ${36 + drift} 108" fill="none" stroke="#65727a" stroke-width="3.8" stroke-linecap="round" opacity="0.18" filter="url(#lineGlow)"/>
-      <path d="M ${59 - drift} 87 C ${78 - curl} 98, ${88 + curl} 77, ${103 - drift} 68 C ${88 - curl} 80, ${80 + curl} 96, ${94 - drift} 108" fill="none" stroke="#879198" stroke-width="3.1" stroke-linecap="round" opacity="0.13" filter="url(#lineGlow)"/>
-      <path d="M ${66 + pulse} 88 C ${58 + curl} 102, ${70 - curl} 110, ${64 + drift} 120" fill="none" stroke="#46535b" stroke-width="4.5" stroke-linecap="round" opacity="0.17" filter="url(#lineGlow)"/>
-      <path d="M ${54 + drift} 78 C ${47 - curl} 69, ${49 + pulse} 57, ${59 + drift} 49" fill="none" stroke="#a0a8ad" stroke-width="2.4" stroke-linecap="round" opacity="0.12" filter="url(#lineGlow)"/>
-      <circle cx="${47 + drift}" cy="${61 + pulse}" r="3.2" fill="#737e84" opacity="0.13" filter="url(#coreBlur)"/>
-      <circle cx="${84 - curl}" cy="${71 - pulse}" r="2.8" fill="#9aa2a6" opacity="0.1" filter="url(#coreBlur)"/>
-      <circle cx="${38 + drift}" cy="${94 + pulse}" r="2.2" fill="#556168" opacity="0.12" filter="url(#coreBlur)"/>
+      <path d="M ${60 + drift} 25 C ${47 + curl} 42, ${75 - curl} 51, ${54 + drift} 67 C ${37 + curl} 80, ${79 - curl} 89, ${51 + drift} 118 C ${67 + curl} 102, ${39 - curl} 91, ${68 + drift} 73 C ${87 - curl} 59, ${45 + curl} 43, ${60 + drift} 25 Z" fill="url(#smokeBody)" opacity="0.42" filter="url(#softBlur)"/>
+      <path d="M ${63 + drift} 30 C ${48 + curl} 47, ${74 - curl} 56, ${57 + drift} 73 C ${43 + curl} 87, ${73 - curl} 97, ${61 + drift} 116" fill="none" stroke="#9aa5aa" stroke-width="13" stroke-linecap="round" opacity="0.2" filter="url(#lineGlow)"/>
+      <path d="M ${56 - drift} 35 C ${70 - curl} 51, ${43 + curl} 62, ${57 - drift} 78 C ${70 + curl} 92, ${44 - curl} 103, ${51 - drift} 114" fill="none" stroke="#68757c" stroke-width="10" stroke-linecap="round" opacity="0.24" filter="url(#lineGlow)"/>
+      <path d="M ${66 + pulse} 28 C ${57 + curl} 46, ${78 - curl} 58, ${67 + drift} 75 C ${55 + curl} 94, ${78 - curl} 101, ${69 + drift} 120" fill="none" stroke="#bcc4c7" stroke-width="3.4" stroke-linecap="round" opacity="0.2" filter="url(#lineGlow)"/>
+      <path d="M ${45 + drift} 50 C ${35 - curl} 64, ${49 + pulse} 71, ${36 + drift} 87" fill="none" stroke="#879399" stroke-width="2.6" stroke-linecap="round" opacity="0.18" filter="url(#lineGlow)"/>
+      <path d="M ${80 - drift} 55 C ${91 + curl} 69, ${77 - pulse} 80, ${91 - drift} 96" fill="none" stroke="#6c7980" stroke-width="2.4" stroke-linecap="round" opacity="0.17" filter="url(#lineGlow)"/>
     </g>
   `;
 }).join('');
@@ -34,9 +30,14 @@ const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${frameSize * frameCount}" height="${frameSize}" viewBox="0 0 ${frameSize * frameCount} ${frameSize}">
   <defs>
     <radialGradient id="smokeGrey">
-      <stop offset="0" stop-color="#a7b0b5" stop-opacity="0.38"/>
-      <stop offset="0.42" stop-color="#657179" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#1b252b" stop-opacity="0"/>
+      <stop offset="0" stop-color="#b9c2c5" stop-opacity="0.42"/>
+      <stop offset="0.42" stop-color="#718087" stop-opacity="0.27"/>
+      <stop offset="1" stop-color="#253238" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="smokeBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c1c9cb" stop-opacity="0.42"/>
+      <stop offset="0.45" stop-color="#7d898e" stop-opacity="0.29"/>
+      <stop offset="1" stop-color="#26343a" stop-opacity="0"/>
     </radialGradient>
     <filter id="softBlur" x="-60%" y="-60%" width="220%" height="220%">
       <feGaussianBlur stdDeviation="8"/>
