@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const sampleRate = 44100;
-const duration = 4.1;
+const duration = 3.5;
 const frameCount = Math.floor(sampleRate * duration);
 const left = new Float32Array(frameCount);
 const right = new Float32Array(frameCount);
@@ -68,7 +68,7 @@ for (let index = 0; index < frameCount; index += 1) {
   });
 
   // The final major chord is held long enough to read as a completed level.
-  if (time >= 1.9 && time < 3.82) {
+  if (time >= 1.9 && time < 3.25) {
     const localTime = time - 1.9;
     const chordEnvelope = Math.exp(-localTime * 0.76) * Math.min(1, localTime * 30);
     const chord = (
@@ -102,7 +102,7 @@ for (let index = 0; index < frameCount; index += 1) {
 
   // Bright stereo glints sell the futuristic sector-complete moment.
   const glintStart = 0.72;
-  const glintLength = 1.95;
+  const glintLength = 1.65;
   if (time >= glintStart && time < glintStart + glintLength) {
     const localTime = time - glintStart;
     const progress = localTime / glintLength;
