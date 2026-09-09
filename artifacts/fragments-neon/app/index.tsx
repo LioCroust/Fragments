@@ -44,7 +44,7 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
 const LEVEL_CAPTURE_TARGET = 80;
-const MAX_LEVEL = 10;
+const MAX_LEVEL = 50;
 // Temporary QA control. __DEV__ hides it automatically from production builds.
 const DEBUG_SECTOR_SELECTOR_ENABLED = __DEV__;
 const CONTACT_FREEZE_DURATION = 1000;
@@ -82,6 +82,46 @@ const level7GridBackgroundSource = require('../assets/images/level-7-grid-backgr
 const level8SpaceBackgroundSource = require('../assets/images/level-8-space-background.png');
 const level9GridBackgroundSource = require('../assets/images/level-9-grid-background.png');
 const level10SpaceBackgroundSource = require('../assets/images/level-10-space-background.png');
+const sector11BackgroundSource = require('../assets/images/sector-11-zone.png');
+const sector12BackgroundSource = require('../assets/images/sector-12-zone.png');
+const sector13BackgroundSource = require('../assets/images/sector-13-zone.png');
+const sector14BackgroundSource = require('../assets/images/sector-14-zone.png');
+const sector15BackgroundSource = require('../assets/images/sector-15-zone.png');
+const sector16BackgroundSource = require('../assets/images/sector-16-zone.png');
+const sector17BackgroundSource = require('../assets/images/sector-17-zone.png');
+const sector18BackgroundSource = require('../assets/images/sector-18-zone.png');
+const sector19BackgroundSource = require('../assets/images/sector-19-zone.png');
+const sector20BackgroundSource = require('../assets/images/sector-20-zone.png');
+const sector21BackgroundSource = require('../assets/images/sector-21-zone.png');
+const sector22BackgroundSource = require('../assets/images/sector-22-zone.png');
+const sector23BackgroundSource = require('../assets/images/sector-23-zone.png');
+const sector24BackgroundSource = require('../assets/images/sector-24-zone.png');
+const sector25BackgroundSource = require('../assets/images/sector-25-zone.png');
+const sector26BackgroundSource = require('../assets/images/sector-26-zone.png');
+const sector27BackgroundSource = require('../assets/images/sector-27-zone.png');
+const sector28BackgroundSource = require('../assets/images/sector-28-zone.png');
+const sector29BackgroundSource = require('../assets/images/sector-29-zone.png');
+const sector30BackgroundSource = require('../assets/images/sector-30-zone.png');
+const sector31BackgroundSource = require('../assets/images/sector-31-zone.png');
+const sector32BackgroundSource = require('../assets/images/sector-32-zone.png');
+const sector33BackgroundSource = require('../assets/images/sector-33-zone.png');
+const sector34BackgroundSource = require('../assets/images/sector-34-zone.png');
+const sector35BackgroundSource = require('../assets/images/sector-35-zone.png');
+const sector36BackgroundSource = require('../assets/images/sector-36-zone.png');
+const sector37BackgroundSource = require('../assets/images/sector-37-zone.png');
+const sector38BackgroundSource = require('../assets/images/sector-38-zone.png');
+const sector39BackgroundSource = require('../assets/images/sector-39-zone.png');
+const sector40BackgroundSource = require('../assets/images/sector-40-zone.png');
+const sector41BackgroundSource = require('../assets/images/sector-41-zone.png');
+const sector42BackgroundSource = require('../assets/images/sector-42-zone.png');
+const sector43BackgroundSource = require('../assets/images/sector-43-zone.png');
+const sector44BackgroundSource = require('../assets/images/sector-44-zone.png');
+const sector45BackgroundSource = require('../assets/images/sector-45-zone.png');
+const sector46BackgroundSource = require('../assets/images/sector-46-zone.png');
+const sector47BackgroundSource = require('../assets/images/sector-47-zone.png');
+const sector48BackgroundSource = require('../assets/images/sector-48-zone.png');
+const sector49BackgroundSource = require('../assets/images/sector-49-zone.png');
+const sector50BackgroundSource = require('../assets/images/sector-50-zone.png');
 
 const LEVEL_BACKGROUND_SOURCES: Record<number, any> = {
   1: sector1SpaceBackgroundSource,
@@ -94,6 +134,46 @@ const LEVEL_BACKGROUND_SOURCES: Record<number, any> = {
   8: level8SpaceBackgroundSource,
   9: level9GridBackgroundSource,
   10: level10SpaceBackgroundSource,
+  11: sector11BackgroundSource,
+  12: sector12BackgroundSource,
+  13: sector13BackgroundSource,
+  14: sector14BackgroundSource,
+  15: sector15BackgroundSource,
+  16: sector16BackgroundSource,
+  17: sector17BackgroundSource,
+  18: sector18BackgroundSource,
+  19: sector19BackgroundSource,
+  20: sector20BackgroundSource,
+  21: sector21BackgroundSource,
+  22: sector22BackgroundSource,
+  23: sector23BackgroundSource,
+  24: sector24BackgroundSource,
+  25: sector25BackgroundSource,
+  26: sector26BackgroundSource,
+  27: sector27BackgroundSource,
+  28: sector28BackgroundSource,
+  29: sector29BackgroundSource,
+  30: sector30BackgroundSource,
+  31: sector31BackgroundSource,
+  32: sector32BackgroundSource,
+  33: sector33BackgroundSource,
+  34: sector34BackgroundSource,
+  35: sector35BackgroundSource,
+  36: sector36BackgroundSource,
+  37: sector37BackgroundSource,
+  38: sector38BackgroundSource,
+  39: sector39BackgroundSource,
+  40: sector40BackgroundSource,
+  41: sector41BackgroundSource,
+  42: sector42BackgroundSource,
+  43: sector43BackgroundSource,
+  44: sector44BackgroundSource,
+  45: sector45BackgroundSource,
+  46: sector46BackgroundSource,
+  47: sector47BackgroundSource,
+  48: sector48BackgroundSource,
+  49: sector49BackgroundSource,
+  50: sector50BackgroundSource,
 };
 
 const backgroundSourceForLevel = (level: number) => (
@@ -168,6 +248,9 @@ type Enemy = Point & {
   visualRotation?: number;
   sevenFireTimer?: number;
   spiderThreadTimer?: number;
+  spiderGrade?: number;
+  isBoss?: boolean;
+  bossTier?: number;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -210,15 +293,91 @@ const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
 const DRAGON_NOMINAL_SPEED = 40;
 const DRAGON_ATTACK_SPEED = 105;
-const SPIDER_THREAD_INITIAL_DELAY = 2.1;
-const SPIDER_THREAD_COOLDOWN = 4.2;
-const SPIDER_THREAD_SPEED = 420;
-const SPIDER_THREAD_EXTRA_LEAD_TIME = 0.2;
-const SPIDER_THREAD_ACTIVE_DURATION = 3.2;
-const SPIDER_THREAD_LENGTH_CELLS = 1.65;
-const SPIDER_THREAD_SLOW_FACTOR = 0.2;
-const SPIDER_WEB_SIZE_CELLS = 2.65;
-const SPIDER_WEB_RADIUS_CELLS = 1.08;
+type SpiderDifficulty = {
+  initialDelay: number;
+  cooldown: number;
+  projectileSpeed: number;
+  extraLeadTime: number;
+  activeDuration: number;
+  threadLengthCells: number;
+  slowFactor: number;
+  webSizeCells: number;
+  webRadiusCells: number;
+};
+
+const SPIDER_GRADE_CONFIG: Record<number, SpiderDifficulty> = {
+  1: {
+    initialDelay: 3.2,
+    cooldown: 7,
+    projectileSpeed: 300,
+    extraLeadTime: 0.1,
+    activeDuration: 2.4,
+    threadLengthCells: 1.45,
+    slowFactor: 0.45,
+    webSizeCells: 2.25,
+    webRadiusCells: 0.9,
+  },
+  2: {
+    initialDelay: 2.7,
+    cooldown: 6,
+    projectileSpeed: 350,
+    extraLeadTime: 0.13,
+    activeDuration: 2.8,
+    threadLengthCells: 1.55,
+    slowFactor: 0.35,
+    webSizeCells: 2.45,
+    webRadiusCells: 0.98,
+  },
+  3: {
+    initialDelay: 2.1,
+    cooldown: 4.8,
+    projectileSpeed: 420,
+    extraLeadTime: 0.18,
+    activeDuration: 3.2,
+    threadLengthCells: 1.65,
+    slowFactor: 0.25,
+    webSizeCells: 2.65,
+    webRadiusCells: 1.08,
+  },
+  4: {
+    initialDelay: 1.8,
+    cooldown: 4,
+    projectileSpeed: 500,
+    extraLeadTime: 0.22,
+    activeDuration: 3.7,
+    threadLengthCells: 1.75,
+    slowFactor: 0.18,
+    webSizeCells: 2.85,
+    webRadiusCells: 1.18,
+  },
+  5: {
+    initialDelay: 1.6,
+    cooldown: 3.3,
+    projectileSpeed: 570,
+    extraLeadTime: 0.25,
+    activeDuration: 4.1,
+    threadLengthCells: 1.85,
+    slowFactor: 0.12,
+    webSizeCells: 3,
+    webRadiusCells: 1.26,
+  },
+};
+
+const spiderDifficultyFor = (grade = 3, bossTier = 0): SpiderDifficulty => {
+  const base = SPIDER_GRADE_CONFIG[clamp(grade, 1, 5)] ?? SPIDER_GRADE_CONFIG[3];
+  if (bossTier <= 0) return base;
+  const bossPressure = 1 + Math.min(0.24, 0.06 + (bossTier - 1) * 0.045);
+  return {
+    ...base,
+    initialDelay: Math.max(1.1, base.initialDelay * 0.78),
+    cooldown: Math.max(2.5, base.cooldown / bossPressure),
+    projectileSpeed: base.projectileSpeed * bossPressure,
+    extraLeadTime: base.extraLeadTime + 0.035,
+    activeDuration: base.activeDuration + 0.25,
+    webSizeCells: base.webSizeCells + 0.14,
+    webRadiusCells: base.webRadiusCells + 0.06,
+  };
+};
 
 type Game = {
   width: number;
