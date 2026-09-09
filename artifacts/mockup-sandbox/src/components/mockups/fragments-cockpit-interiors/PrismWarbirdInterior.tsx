@@ -13,12 +13,25 @@ type ReadoutProps = {
 function Readout({ className, label, value, suffix, meta, ariaLabel }: ReadoutProps) {
   return (
     <article className={`prism-warbird__readout ${className}`} aria-label={ariaLabel}>
-      <span className="prism-warbird__label">{label}</span>
+      <div className="prism-warbird__readout-head">
+        <span className="prism-warbird__label">{label}</span>
+        <span className="prism-warbird__status-dot" aria-hidden="true" />
+      </div>
       <strong className="prism-warbird__value">
         {value}
         {suffix && <em>{suffix}</em>}
       </strong>
       <small className="prism-warbird__meta">{meta}</small>
+      <div className="prism-warbird__meter" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
     </article>
   );
 }
@@ -29,9 +42,34 @@ export default function PrismWarbirdInterior() {
       <section className="prism-warbird__stage" aria-label="Faceted pilot instrument panel">
         <img
           className="prism-warbird__shell"
-          src="/__mockup/images/prism-warbird-interior-goldframes.png?v=goldframes-01"
-          alt="Painted blackened steel and copper spacecraft cockpit interior viewed from the pilot seat"
+          src="/__mockup/images/prism-warbird-interior-neon-console.png?v=neon-console-01"
+          alt="Painted blackened steel and copper spacecraft cockpit interior with rectangular gauges, signal lamps and colorful instrument rails viewed from the pilot seat"
         />
+        <div className="prism-warbird__signal-bank prism-warbird__signal-bank--left" aria-label="Left instrument signal bank">
+          <span className="prism-warbird__signal-title">PORT / LIVE</span>
+          <i className="prism-warbird__signal prism-warbird__signal--cyan" />
+          <i className="prism-warbird__signal prism-warbird__signal--lime" />
+          <i className="prism-warbird__signal prism-warbird__signal--amber" />
+          <i className="prism-warbird__signal prism-warbird__signal--magenta" />
+          <i className="prism-warbird__signal prism-warbird__signal--cyan" />
+        </div>
+        <div className="prism-warbird__signal-bank prism-warbird__signal-bank--right" aria-label="Right instrument signal bank">
+          <span className="prism-warbird__signal-title">STARBOARD / LIVE</span>
+          <i className="prism-warbird__signal prism-warbird__signal--amber" />
+          <i className="prism-warbird__signal prism-warbird__signal--cyan" />
+          <i className="prism-warbird__signal prism-warbird__signal--lime" />
+          <i className="prism-warbird__signal prism-warbird__signal--amber" />
+          <i className="prism-warbird__signal prism-warbird__signal--magenta" />
+        </div>
+        <div className="prism-warbird__top-rail" aria-hidden="true">
+          <span>REACTOR</span>
+          <b />
+          <b />
+          <b />
+          <b />
+          <b />
+          <span>FLIGHT SYSTEMS</span>
+        </div>
         <Readout
           className="prism-warbird__readout--score"
           label="SCORE"

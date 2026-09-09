@@ -1,10 +1,13 @@
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=Share+Tech+Mono&display=swap");
+
 .prism-warbird {
   --iron: #17141a;
   --iron-deep: #0c0910;
   --copper: #b47c55;
-  --ruby: #ba5a68;
-  --magenta: #d28db4;
-  --gold: #e8b765;
+  --cyan: #69f4ee;
+  --lime: #b8f26a;
+  --amber: #ffbd62;
+  --magenta: #d48bcb;
   --paper: #ffe8d2;
   min-height: 100dvh;
   overflow: hidden;
@@ -14,7 +17,7 @@
     radial-gradient(ellipse at 50% 45%, rgba(104, 67, 37, .2), transparent 58%),
     #09070b;
   color: var(--paper);
-  font-family: "Space Mono", "Courier New", monospace;
+  font-family: "Share Tech Mono", "Space Mono", monospace;
 }
 
 .prism-warbird *,
@@ -49,75 +52,95 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  min-height: 74px;
-  padding: .58rem .82rem .52rem;
+  min-height: 92px;
+  padding: .72rem 1rem .65rem;
   overflow: hidden;
-  border: 2px solid rgba(232, 183, 101, .78);
+  border: 3px solid rgba(255, 189, 98, .9);
   background: rgba(18, 14, 15, .94);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 232, 210, .16),
-    inset 0 -11px 20px rgba(84, 52, 31, .32),
+    inset 0 0 0 1px rgba(255, 232, 210, .2),
+    inset 0 -14px 24px rgba(84, 52, 31, .36),
     0 0 0 1px rgba(12, 9, 10, .88),
-    0 6px 0 rgba(3, 2, 5, .74);
-  transform: skewX(-7deg);
+    0 7px 0 rgba(3, 2, 5, .74),
+    0 0 18px rgba(255, 189, 98, .12);
+  transform: skewX(-5deg);
 }
 
 .prism-warbird__readout::before {
   position: absolute;
-  top: .35rem;
-  right: .4rem;
-  left: .4rem;
+  top: .45rem;
+  right: .58rem;
+  left: .58rem;
   height: 2px;
-  background: linear-gradient(90deg, var(--copper), transparent 68%, var(--gold));
+  background: linear-gradient(90deg, var(--cyan), transparent 54%, var(--amber));
   content: "";
   opacity: .82;
 }
 
 .prism-warbird__readout > * {
-  transform: skewX(7deg);
+  transform: skewX(5deg);
 }
 
 .prism-warbird__readout::after {
   position: absolute;
   right: .4rem;
-  bottom: .38rem;
-  width: 5px;
-  height: 5px;
-  background: var(--gold);
-  box-shadow: 9px 0 var(--ruby), 18px 0 var(--magenta), 27px 0 var(--copper);
+  bottom: .52rem;
+  width: 6px;
+  height: 6px;
+  background: var(--cyan);
+  box-shadow: 11px 0 var(--lime), 22px 0 var(--amber), 33px 0 var(--magenta), 44px 0 var(--cyan);
   content: "";
+}
+
+.prism-warbird__readout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .prism-warbird__label {
   color: rgba(255, 232, 210, .63);
-  font-size: clamp(7px, .88vw, 11px);
+  font-family: "Orbitron", "Share Tech Mono", monospace;
+  font-size: clamp(8px, 1vw, 13px);
   font-weight: 700;
-  letter-spacing: .17em;
+  letter-spacing: .2em;
   line-height: 1;
   white-space: nowrap;
+}
+
+.prism-warbird__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
 }
 
 .prism-warbird__value {
   margin-top: .45rem;
   color: var(--paper);
-  font-size: clamp(17px, 2.55vw, 31px);
+  font-family: "Orbitron", "Share Tech Mono", monospace;
+  font-size: clamp(24px, 3.35vw, 42px);
   font-weight: 700;
-  letter-spacing: .06em;
+  letter-spacing: .08em;
   line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 232, 210, .24);
   white-space: nowrap;
 }
 
 .prism-warbird__value em {
-  color: var(--gold);
+  color: var(--amber);
   font-size: .48em;
   font-style: normal;
   letter-spacing: .05em;
+  text-shadow: 0 0 7px rgba(255, 189, 98, .54);
 }
 
 .prism-warbird__meta {
   display: block;
   margin-top: .34rem;
-  color: rgba(232, 183, 101, .68);
+  color: rgba(105, 244, 238, .78);
+  font-family: "Share Tech Mono", monospace;
   font-size: clamp(6px, .65vw, 8px);
   font-style: normal;
   font-weight: 700;
@@ -125,48 +148,182 @@
   white-space: nowrap;
 }
 
+.prism-warbird__meter {
+  display: flex;
+  gap: 4px;
+  height: 6px;
+  margin-top: .48rem;
+}
+
+.prism-warbird__meter i {
+  flex: 1;
+  min-width: 5px;
+  background: rgba(255, 232, 210, .14);
+  border: 1px solid rgba(255, 232, 210, .18);
+}
+
+.prism-warbird__meter i:nth-child(-n + 5) {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 7px rgba(105, 244, 238, .52);
+}
+
+.prism-warbird__readout--shields .prism-warbird__meter i:nth-child(-n + 3),
+.prism-warbird__readout--zone .prism-warbird__meter i:nth-child(-n + 6) {
+  background: var(--amber);
+  border-color: var(--amber);
+  box-shadow: 0 0 7px rgba(255, 189, 98, .52);
+}
+
+.prism-warbird__readout--sector .prism-warbird__meter i:nth-child(-n + 4) {
+  background: var(--magenta);
+  border-color: var(--magenta);
+  box-shadow: 0 0 7px rgba(212, 139, 203, .48);
+}
+
+.prism-warbird__signal-bank {
+  position: absolute;
+  z-index: 3;
+  top: 15%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(105, 244, 238, .42);
+  background: rgba(8, 15, 18, .74);
+  box-shadow: inset 0 0 0 1px rgba(255, 232, 210, .1), 0 0 12px rgba(105, 244, 238, .1);
+  transform: skewX(-7deg);
+}
+
+.prism-warbird__signal-bank--left {
+  left: 3%;
+}
+
+.prism-warbird__signal-bank--right {
+  right: 3%;
+  border-color: rgba(255, 189, 98, .42);
+}
+
+.prism-warbird__signal-title {
+  margin-right: 4px;
+  color: rgba(255, 232, 210, .64);
+  font-family: "Orbitron", "Share Tech Mono", monospace;
+  font-size: clamp(6px, .66vw, 9px);
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+
+.prism-warbird__signal {
+  width: 8px;
+  height: 14px;
+  border: 1px solid rgba(255, 232, 210, .4);
+  background: rgba(255, 232, 210, .14);
+}
+
+.prism-warbird__signal--cyan {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(105, 244, 238, .74);
+}
+
+.prism-warbird__signal--lime {
+  background: var(--lime);
+  border-color: var(--lime);
+  box-shadow: 0 0 8px rgba(184, 242, 106, .65);
+}
+
+.prism-warbird__signal--amber {
+  background: var(--amber);
+  border-color: var(--amber);
+  box-shadow: 0 0 8px rgba(255, 189, 98, .68);
+}
+
+.prism-warbird__signal--magenta {
+  background: var(--magenta);
+  border-color: var(--magenta);
+  box-shadow: 0 0 8px rgba(212, 139, 203, .62);
+}
+
+.prism-warbird__top-rail {
+  position: absolute;
+  z-index: 3;
+  top: 4%;
+  left: 25%;
+  right: 25%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(255, 232, 210, .54);
+  font-family: "Orbitron", "Share Tech Mono", monospace;
+  font-size: clamp(6px, .66vw, 9px);
+  letter-spacing: .14em;
+  white-space: nowrap;
+}
+
+.prism-warbird__top-rail::before,
+.prism-warbird__top-rail::after {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(105, 244, 238, .68));
+  content: "";
+}
+
+.prism-warbird__top-rail::after {
+  background: linear-gradient(90deg, rgba(255, 189, 98, .68), transparent);
+}
+
+.prism-warbird__top-rail b {
+  width: 9px;
+  height: 4px;
+  background: var(--cyan);
+  box-shadow: 13px 0 var(--lime), 26px 0 var(--amber);
+}
+
 .prism-warbird__readout--score {
-  top: 48%;
-  left: 29%;
-  width: 24%;
-  height: 24%;
-  border-color: rgba(255, 183, 72, .8);
+  top: 34%;
+  left: 33%;
+  width: 34%;
+  height: 30%;
+  border-color: rgba(255, 189, 98, .94);
 }
 
 .prism-warbird__readout--sector {
-  top: 68%;
-  left: 4%;
-  width: 19%;
-  height: 23%;
-  border-color: rgba(186, 90, 104, .84);
+  top: 65%;
+  left: 2%;
+  width: 25%;
+  height: 31%;
+  border-color: rgba(105, 244, 238, .9);
 }
 
 .prism-warbird__readout--sector .prism-warbird__value {
-  color: var(--magenta);
+  color: var(--cyan);
+  text-shadow: 0 0 12px rgba(105, 244, 238, .55);
 }
 
 .prism-warbird__readout--shields {
-  top: 68%;
-  right: 4%;
-  width: 19%;
-  height: 23%;
-  border-color: rgba(186, 90, 104, .84);
+  top: 65%;
+  right: 2%;
+  width: 25%;
+  height: 31%;
+  border-color: rgba(184, 242, 106, .88);
 }
 
 .prism-warbird__readout--shields .prism-warbird__value {
-  color: var(--ruby);
+  color: var(--lime);
+  text-shadow: 0 0 12px rgba(184, 242, 106, .46);
 }
 
 .prism-warbird__readout--zone {
-  top: 68%;
-  right: 29%;
+  top: 65%;
+  right: 28%;
   width: 24%;
-  height: 23%;
-  border-color: rgba(180, 124, 85, .92);
+  height: 31%;
+  border-color: rgba(255, 189, 98, .94);
 }
 
 .prism-warbird__readout--zone .prism-warbird__value {
-  color: var(--gold);
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(255, 189, 98, .5);
 }
 
 @media (max-width: 700px) {
@@ -184,6 +341,11 @@
   .prism-warbird__readout {
     min-height: 64px;
     padding-inline: .58rem;
+  }
+
+  .prism-warbird__signal-bank {
+    transform: scale(.84) skewX(-7deg);
+    transform-origin: center;
   }
 
   .prism-warbird__meta {
