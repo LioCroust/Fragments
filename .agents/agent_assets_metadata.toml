@@ -164,3 +164,17 @@ mtime_ms = 1788969840289
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/8cd8cfef-ff31-4301-bc3f-864b53241475/da753e1b-d03e-460a-a50f-60f650b79dfb"
 storage_version_token = "1788969850838264"
 content_type = "audio/wav"
+
+[[outputs]]
+id = "F3hNvVY2OoHnDyAOaJ4ZR"
+uri = "file://artifacts/fragments-neon/assets/audio/sector-transition-victory-grand.wav"
+type = "audio"
+title = "Alternative longue — grande victoire de secteur"
+description = "Version plus longue de 4,1 secondes avec davantage de notes, une seconde montée mélodique et un accord final maintenu."
+logical_id = "cb861acf-8160-4c89-932d-957eb8e72f26"
+content_hash = "sha256:5a10e2b71e00e330f6e74bd90865ea1a1a385723946f0a38c024129828ba493b"
+size = 723280
+mtime_ms = 1788969909181
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/cb861acf-8160-4c89-932d-957eb8e72f26/4532bcaa-8689-4421-a85d-43937cfdc39c"
+storage_version_token = "1788969917972559"
+content_type = "audio/wav"

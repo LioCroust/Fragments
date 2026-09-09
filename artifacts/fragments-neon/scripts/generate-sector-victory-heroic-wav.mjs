@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const sampleRate = 44100;
-const duration = 2.25;
+const duration = 4.1;
 const frameCount = Math.floor(sampleRate * duration);
 const left = new Float32Array(frameCount);
 const right = new Float32Array(frameCount);
@@ -37,6 +37,10 @@ const notes = [
   { time: 0.32, frequency: 392.0, length: 0.38, pan: 0.14 },
   { time: 0.47, frequency: 523.25, length: 0.52, pan: 0.42 },
   { time: 0.65, frequency: 659.25, length: 0.72, pan: -0.15 },
+  { time: 0.84, frequency: 783.99, length: 0.68, pan: 0.22 },
+  { time: 1.03, frequency: 1046.5, length: 0.78, pan: -0.3 },
+  { time: 1.25, frequency: 1174.66, length: 0.9, pan: 0.36 },
+  { time: 1.5, frequency: 1318.51, length: 1.05, pan: 0.05 },
 ];
 
 for (let index = 0; index < frameCount; index += 1) {
@@ -64,9 +68,9 @@ for (let index = 0; index < frameCount; index += 1) {
   });
 
   // The final major chord is held long enough to read as a completed level.
-  if (time >= 0.82 && time < 2.08) {
-    const localTime = time - 0.82;
-    const chordEnvelope = Math.exp(-localTime * 1.65) * Math.min(1, localTime * 35);
+  if (time >= 1.72 && time < 3.78) {
+    const localTime = time - 1.72;
+    const chordEnvelope = Math.exp(-localTime * 0.92) * Math.min(1, localTime * 28);
     const chord = (
       Math.sin(2 * Math.PI * 523.25 * localTime)
       + Math.sin(2 * Math.PI * 659.25 * localTime) * 0.76
@@ -78,12 +82,12 @@ for (let index = 0; index < frameCount; index += 1) {
   }
 
   // Bright stereo glints sell the futuristic sector-complete moment.
-  const glintStart = 0.64;
-  const glintLength = 0.9;
+  const glintStart = 0.9;
+  const glintLength = 1.8;
   if (time >= glintStart && time < glintStart + glintLength) {
     const localTime = time - glintStart;
     const progress = localTime / glintLength;
-    const frequency = 1200 + progress * 3100;
+    const frequency = 1200 + progress * 4200;
     const glintEnvelope = Math.pow(1 - progress, 1.7) * Math.min(1, localTime * 65);
     const glint = Math.sin(2 * Math.PI * frequency * localTime)
       + Math.sin(2 * Math.PI * frequency * 2.01 * localTime) * 0.22;
@@ -93,8 +97,8 @@ for (let index = 0; index < frameCount; index += 1) {
 
   // Very quiet filtered air gives the tail a little scale without masking the tones.
   filteredNoise = filteredNoise * 0.95 + (random() * 2 - 1) * 0.05;
-  if (time >= 0.84) {
-    const tailEnvelope = Math.exp(-(time - 0.84) * 2.8);
+  if (time >= 1.72) {
+    const tailEnvelope = Math.exp(-(time - 1.72) * 1.65);
     add(index, filteredNoise * tailEnvelope, -0.35, 0.025);
     add(index, filteredNoise * tailEnvelope, 0.35, 0.024);
   }
@@ -130,7 +134,7 @@ for (let index = 0; index < frameCount; index += 1) {
 }
 
 const outputPath = path.resolve(
-  new URL('../assets/audio/sector-transition-victory-heroic.wav', import.meta.url).pathname,
+  new URL('../assets/audio/sector-transition-victory-grand.wav', import.meta.url).pathname,
 );
 fs.writeFileSync(outputPath, output);
 console.log(`Created ${outputPath} (${duration.toFixed(2)}s, ${sampleRate}Hz stereo)`);
