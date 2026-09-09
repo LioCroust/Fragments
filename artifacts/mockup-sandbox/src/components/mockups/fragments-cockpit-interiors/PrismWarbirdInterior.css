@@ -102,6 +102,8 @@
   font-weight: 700;
   letter-spacing: .08em;
   line-height: 1;
+  font-variant-numeric: slashed-zero tabular-nums;
+  font-feature-settings: "zero" 1, "tnum" 1;
   text-shadow: 0 0 10px rgba(255, 232, 210, .24);
   white-space: nowrap;
 }
@@ -250,10 +252,10 @@
 }
 
 .prism-warbird__readout--score {
-  top: 26%;
+  top: 39%;
   left: 24%;
   width: 52%;
-  height: 42%;
+  height: 38%;
   border-color: rgba(255, 189, 98, .94);
   z-index: 6;
   transform: skewX(-6deg) rotate(-1deg);
