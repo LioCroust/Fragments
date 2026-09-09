@@ -1857,7 +1857,17 @@ export default function GameScreen() {
             PERIMETER_STROKE_WIDTH * 0.5,
           )
         ));
-        if (!outsideClaimedSurface || !noClaimedPolygonOverlap || !noProtectedBoundaryContact) return null;
+        const noActiveTrailContact = g.trail.length < 2
+          || !pathTouchesPolygon(g.trail, spriteCorners, PERIMETER_STROKE_WIDTH * 0.5);
+        const awayFromPlayer = Math.hypot(x - g.player.x, y - g.player.y)
+          > visualRadius + playerBodyRadius(g.cell) * 1.5;
+        if (
+          !outsideClaimedSurface
+          || !noClaimedPolygonOverlap
+          || !noProtectedBoundaryContact
+          || !noActiveTrailContact
+          || !awayFromPlayer
+        ) return null;
         return { x, y };
       };
 
@@ -2100,7 +2110,9 @@ export default function GameScreen() {
         const maxDistance = Math.hypot(g.width, g.height) * 0.56;
         const farSlowdown = clamp(1 - distanceToPlayer / maxDistance, 0.42, 1);
         const currentLength = Math.hypot(enemy.vx, enemy.vy) || enemy.speed;
-        let desiredSpeed = enemy.speed;
+        const isDragon = enemy.kind === 'DRAGON';
+        const dragonIsCutting = isDragon && g.trail.length > 0;
+        let desiredSpeed = enemy.speed * (dragonIsCutting ? 2 : 1);
         let desiredVelocity: Point;
 
         if (enemy.behavior === 'PLANNED') {
@@ -2109,7 +2121,6 @@ export default function GameScreen() {
             const playerDirection = g.trail.length > 0
               ? g.cutDir
               : (g.inputDir.x !== 0 || g.inputDir.y !== 0 ? g.inputDir : g.facingDir);
-            const isDragon = enemy.kind === 'DRAGON';
             const predictionTime = isDragon
               ? (g.trail.length > 0 ? 0.42 : 0.68)
               : 0;
@@ -2172,7 +2183,9 @@ export default function GameScreen() {
             x: (enemy.vx / currentLength) * (1 - planningBias) + (targetVector.x / targetLength) * planningBias,
             y: (enemy.vy / currentLength) * (1 - planningBias) + (targetVector.y / targetLength) * planningBias,
           };
-          desiredSpeed *= farSlowdown;
+          // The Dragon keeps its normal speed while the drone is cruising and
+          // uses a deliberate 2x burst only while a red cut is active.
+          if (!isDragon) desiredSpeed *= farSlowdown;
         } else {
           const currentHeading = Math.atan2(enemy.vy, enemy.vx);
           const routeBend = enemy.pattern === 'SWEEP'
@@ -3249,15 +3262,15 @@ const styles = StyleSheet.create({
   },
   recordBanner: {
     borderColor: HUD_COLORS.amber,
-    backgroundColor: 'rgba(38, 15, 4, 0.70)',
+    backgroundColor: 'rgba(38, 15, 4, 0.54)',
   },
   diamondBanner: {
     borderColor: HUD_COLORS.cyan,
-    backgroundColor: 'rgba(0, 24, 34, 0.72)',
+    backgroundColor: 'rgba(0, 24, 34, 0.56)',
   },
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
-    backgroundColor: 'rgba(24, 4, 24, 0.72)',
+    backgroundColor: 'rgba(24, 4, 24, 0.56)',
   },
   bannerGloss: {
     position: 'absolute',
