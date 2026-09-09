@@ -1,0 +1,239 @@
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap");
+
+.ember-bridge {
+  --ember-ink: #f6e4cf;
+  --ember-dim: #9e7968;
+  --ember-line: rgba(255, 205, 147, 0.42);
+  --ember-gold: #ffc567;
+  --ember-orange: #ff7137;
+  --ember-ruby: #dd3856;
+  --ember-magenta: #ed4c9b;
+  min-height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 32%, rgba(126, 25, 24, 0.27), transparent 55%),
+    #100b0d;
+  color: var(--ember-ink);
+  font-family: "Barlow Condensed", sans-serif;
+}
+
+.ember-bridge *,
+.ember-bridge *::before,
+.ember-bridge *::after {
+  box-sizing: border-box;
+}
+
+.ember-bridge__preview {
+  position: relative;
+  width: min(100vw, 1120px);
+  height: min(30vw, 336px);
+  min-height: 220px;
+  margin: 0 auto;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(90deg, rgba(7, 5, 8, 0.6), transparent 13%, transparent 87%, rgba(7, 5, 8, 0.6)),
+    radial-gradient(ellipse at 50% 40%, #31151a 0%, #150b0f 64%, #09070a 100%);
+}
+
+.ember-bridge__shell {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 12px 13px rgba(0, 0, 0, 0.8));
+  user-select: none;
+  pointer-events: none;
+}
+
+.ember-bridge__telemetry {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ember-readout {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr;
+  align-items: end;
+  min-width: 92px;
+  min-height: 38px;
+  padding: 5px 8px 4px;
+  overflow: hidden;
+  color: var(--ember-ink);
+  background: rgba(22, 12, 15, 0.9);
+  border: 1px solid var(--ember-line);
+  border-top-color: rgba(255, 226, 183, 0.68);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 -8px 15px rgba(116, 18, 21, 0.21),
+    0 4px 0 rgba(0, 0, 0, 0.42);
+}
+
+.ember-readout::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 17px;
+  height: 2px;
+  background: currentColor;
+  content: "";
+  opacity: 0.75;
+}
+
+.ember-readout__label {
+  grid-column: 1 / -1;
+  color: var(--ember-dim);
+  font-size: clamp(8px, 0.9vw, 11px);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1;
+}
+
+.ember-readout strong {
+  margin-top: 4px;
+  font-family: "Space Mono", monospace;
+  font-size: clamp(15px, 2vw, 24px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 0.9;
+}
+
+.ember-readout small {
+  align-self: end;
+  margin-left: 6px;
+  color: var(--ember-dim);
+  font-family: "Space Mono", monospace;
+  font-size: clamp(7px, 0.82vw, 10px);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ember-readout--gold {
+  color: var(--ember-gold);
+}
+
+.ember-readout--ruby {
+  color: var(--ember-ruby);
+}
+
+.ember-readout--orange {
+  color: var(--ember-orange);
+}
+
+.ember-readout--magenta {
+  color: var(--ember-magenta);
+}
+
+.ember-readout--score {
+  top: 51.5%;
+  left: 26.6%;
+  width: 17.1%;
+}
+
+.ember-readout--sector {
+  top: 59%;
+  left: 12.9%;
+  width: 13.2%;
+}
+
+.ember-readout--shields {
+  top: 59%;
+  right: 12.9%;
+  width: 13.2%;
+}
+
+.ember-readout--zone {
+  top: 68.5%;
+  left: 50%;
+  width: 13.8%;
+  transform: translateX(-50%);
+}
+
+.ember-readout--zone strong {
+  font-size: clamp(16px, 2.3vw, 27px);
+}
+
+.ember-bridge__scanline {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 178, 87, 0.18);
+  box-shadow: 0 0 16px rgba(255, 84, 35, 0.24);
+  pointer-events: none;
+  animation: ember-scan 6s ease-in-out infinite;
+}
+
+.ember-bridge__caption {
+  position: absolute;
+  z-index: 5;
+  right: 2.8%;
+  bottom: 5.5%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 214, 177, 0.66);
+  font-family: "Space Mono", monospace;
+  font-size: clamp(7px, 0.7vw, 9px);
+  letter-spacing: 0.11em;
+  pointer-events: none;
+}
+
+.ember-bridge__caption i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ember-orange);
+  box-shadow: 0 0 7px var(--ember-orange);
+}
+
+@keyframes ember-scan {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(30%);
+  }
+}
+
+@media (max-width: 680px) {
+  .ember-bridge {
+    display: grid;
+    place-items: center;
+  }
+
+  .ember-bridge__preview {
+    width: 100vw;
+    height: 30vw;
+    min-height: 190px;
+  }
+
+  .ember-readout {
+    min-width: 65px;
+    padding: 4px 5px 3px;
+  }
+
+  .ember-readout__label {
+    letter-spacing: 0.1em;
+  }
+
+  .ember-readout small {
+    display: none;
+  }
+
+  .ember-bridge__caption {
+    display: none;
+  }
+}

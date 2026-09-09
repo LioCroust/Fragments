@@ -1,0 +1,170 @@
+.furnace-cockpit {
+  --furnace-ink: #f7dfc0;
+  --furnace-muted: #b78d72;
+  --furnace-ember: #ff6a2d;
+  --furnace-ruby: #d62f58;
+  --furnace-gold: #ffc15a;
+  --furnace-cyan: #7dd8d2;
+  min-height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: clamp(14px, 3vw, 32px);
+  color: var(--furnace-ink);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(105, 31, 25, .25), transparent 58%),
+    linear-gradient(180deg, #130f10 0%, #09090b 100%);
+  font-family: "Space Mono", "Courier New", monospace;
+}
+
+.furnace-cockpit *,
+.furnace-cockpit *::before,
+.furnace-cockpit *::after {
+  box-sizing: border-box;
+}
+
+.furnace-cockpit__stage {
+  position: relative;
+  width: min(100%, 1100px);
+  aspect-ratio: 10 / 3;
+  isolation: isolate;
+}
+
+.furnace-cockpit__shell {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: url("/__mockup/images/furnace-carrier-interior.png?v=furnace-interior-v2");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  filter: drop-shadow(0 18px 20px rgba(0, 0, 0, .66));
+}
+
+.furnace-readouts {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.furnace-readout {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 104px;
+  min-height: 52px;
+  padding: 7px 10px 6px;
+  color: var(--furnace-ink);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .9);
+  background: rgba(24, 11, 10, .74);
+  border: 1px solid rgba(255, 122, 54, .4);
+  border-left: 3px solid var(--readout-accent);
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, .45),
+    0 3px 5px rgba(0, 0, 0, .35);
+}
+
+.furnace-readout--gold { --readout-accent: var(--furnace-gold); }
+.furnace-readout--ruby { --readout-accent: var(--furnace-ruby); }
+.furnace-readout--ember { --readout-accent: var(--furnace-ember); }
+.furnace-readout--cyan { --readout-accent: var(--furnace-cyan); }
+
+.furnace-readout__label {
+  color: var(--furnace-muted);
+  font-size: clamp(7px, .8vw, 10px);
+  font-weight: 700;
+  letter-spacing: .18em;
+  line-height: 1;
+}
+
+.furnace-readout__value {
+  margin-top: 5px;
+  color: var(--readout-accent);
+  font-size: clamp(15px, 2.25vw, 28px);
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: .92;
+}
+
+.furnace-readout__value small {
+  color: var(--furnace-ink);
+  font-size: .42em;
+  letter-spacing: .04em;
+}
+
+.furnace-readout__detail {
+  margin-top: 4px;
+  color: rgba(247, 223, 192, .58);
+  font-size: clamp(6px, .62vw, 8px);
+  letter-spacing: .1em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The artwork's recessed windows are intentionally used as the four bays. */
+.furnace-readout--score {
+  top: 53%;
+  left: 29.5%;
+  width: 15.4%;
+}
+
+.furnace-readout--sector {
+  top: 62%;
+  left: 11.7%;
+  width: 13.6%;
+}
+
+.furnace-readout--shields {
+  top: 53%;
+  right: 29.3%;
+  width: 15.4%;
+}
+
+.furnace-readout--zone {
+  bottom: 5%;
+  left: 42.5%;
+  width: 15%;
+  text-align: center;
+  border-right: 3px solid var(--readout-accent);
+  border-left: 1px solid rgba(255, 122, 54, .4);
+}
+
+.furnace-readout--zone .furnace-readout__label,
+.furnace-readout--zone .furnace-readout__detail {
+  align-self: center;
+}
+
+.furnace-cockpit__caption {
+  margin: 0;
+  color: rgba(183, 141, 114, .62);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .25em;
+  text-align: center;
+}
+
+@media (max-width: 620px) {
+  .furnace-cockpit {
+    gap: 8px;
+    padding: 12px 4px;
+  }
+
+  .furnace-cockpit__stage {
+    width: 100%;
+    min-width: 440px;
+    transform: scale(.96);
+    transform-origin: center;
+  }
+
+  .furnace-cockpit__caption {
+    font-size: 7px;
+    letter-spacing: .14em;
+  }
+}

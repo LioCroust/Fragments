@@ -1,0 +1,158 @@
+.prism-warbird {
+  --iron: #17141a;
+  --iron-deep: #0c0910;
+  --copper: #c46643;
+  --ruby: #e01961;
+  --magenta: #ff3bb5;
+  --gold: #ffb748;
+  --paper: #ffe8d2;
+  min-height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(123, 19, 57, .2), transparent 58%),
+    #09070b;
+  color: var(--paper);
+  font-family: "Space Mono", "Courier New", monospace;
+}
+
+.prism-warbird *,
+.prism-warbird *::before,
+.prism-warbird *::after {
+  box-sizing: border-box;
+}
+
+.prism-warbird__stage {
+  position: relative;
+  width: min(100vw, 1000px);
+  aspect-ratio: 10 / 3;
+  isolation: isolate;
+}
+
+.prism-warbird__shell {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: contrast(1.06) saturate(1.08) drop-shadow(0 18px 15px rgba(0, 0, 0, .7));
+}
+
+.prism-warbird__readout {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: .45rem .62rem .4rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 183, 72, .68);
+  background: rgba(19, 11, 19, .9);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 232, 210, .1),
+    inset 0 -8px 18px rgba(111, 9, 50, .34),
+    0 5px 0 rgba(3, 2, 5, .74);
+  transform: skewX(-7deg);
+}
+
+.prism-warbird__readout > * {
+  transform: skewX(7deg);
+}
+
+.prism-warbird__readout::after {
+  position: absolute;
+  right: .4rem;
+  bottom: .38rem;
+  width: 3px;
+  height: 3px;
+  background: var(--gold);
+  box-shadow: 7px 0 var(--ruby), 14px 0 var(--magenta);
+  content: "";
+}
+
+.prism-warbird__label {
+  color: rgba(255, 232, 210, .63);
+  font-size: clamp(6px, .8vw, 9px);
+  font-weight: 700;
+  letter-spacing: .17em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.prism-warbird__value {
+  margin-top: .24rem;
+  color: var(--paper);
+  font-size: clamp(13px, 2.1vw, 25px);
+  font-weight: 700;
+  letter-spacing: .06em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.prism-warbird__value em {
+  color: var(--gold);
+  font-size: .48em;
+  font-style: normal;
+  letter-spacing: .05em;
+}
+
+.prism-warbird__readout--score {
+  top: 49.5%;
+  left: 18.5%;
+  width: 17.5%;
+  height: 18%;
+  border-color: rgba(255, 183, 72, .8);
+}
+
+.prism-warbird__readout--sector {
+  top: 59%;
+  left: 7.8%;
+  width: 11.2%;
+  height: 17%;
+  border-color: rgba(255, 59, 181, .82);
+}
+
+.prism-warbird__readout--sector .prism-warbird__value {
+  color: var(--magenta);
+}
+
+.prism-warbird__readout--shields {
+  top: 59%;
+  right: 7.8%;
+  width: 11.2%;
+  height: 17%;
+  border-color: rgba(255, 59, 181, .82);
+}
+
+.prism-warbird__readout--shields .prism-warbird__value {
+  color: var(--ruby);
+}
+
+.prism-warbird__readout--zone {
+  top: 70%;
+  right: 18.5%;
+  width: 17.5%;
+  height: 18%;
+  border-color: rgba(196, 102, 67, .9);
+}
+
+.prism-warbird__readout--zone .prism-warbird__value {
+  color: var(--gold);
+}
+
+@media (max-width: 700px) {
+  .prism-warbird {
+    min-height: 100dvh;
+  }
+
+  .prism-warbird__stage {
+    width: 100vw;
+    min-width: 640px;
+    transform: scale(.62);
+    transform-origin: center center;
+  }
+}

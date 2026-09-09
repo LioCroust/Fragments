@@ -12,3 +12,4 @@
 - [Claimed-surface exit contact](claimed-exit-contact.md) — Start cuts leaving captured areas at the exact boundary intersection, never at an interior animation frame.
 - [Fill chime device validation](fill-chime-device-validation.md) — Confirmed on Android Expo Go; iOS silent-mode behavior still needs a real-device check.
 - [Mockup PNG cache](mockup-png-cache.md) — Restart the mockup preview workflow after replacing a public PNG when screenshots still show the previous asset.
+- [Cockpit interior viewpoint](cockpit-interior-viewpoint.md) — Cockpit concepts must be pilot-facing interiors with canopy framing and instrumentation, never exterior ship silhouettes.
