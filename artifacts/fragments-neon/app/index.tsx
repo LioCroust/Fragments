@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Text,
   View,
+  Animated,
+  Easing,
 } from 'react-native';
 import Svg, {
   Circle,
@@ -51,6 +53,7 @@ const HUD_COLORS = {
 } as const;
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
+const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
@@ -162,6 +165,12 @@ type Hud = {
   level: number;
   mode: Mode;
   feedback: string;
+};
+
+type Banner = {
+  kind: 'RECORD' | 'DIAMOND';
+  score?: number;
+  points?: number;
 };
 
 type Snapshot = {
@@ -1399,6 +1408,7 @@ export default function GameScreen() {
     mode: 'SLOW',
     feedback: '',
   });
+  const [banner, setBanner] = useState<Banner | null>(null);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const diamondImageRef = useRef<any>(null);
@@ -1406,11 +1416,78 @@ export default function GameScreen() {
   const cuttingSpriteImageRef = useRef<any>(null);
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
+  const recordBannerShownRef = useRef(false);
+  const bannerQueueRef = useRef<Banner[]>([]);
+  const bannerAnimatingRef = useRef(false);
+  const bannerSequenceRef = useRef(0);
+  const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
+  const shieldLossExplosionPlayer = useAudioPlayer(shieldLossExplosionSource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
   const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
+
+  const playShieldLossExplosion = useCallback(() => {
+    void audioSessionReadyRef.current.then(async () => {
+      shieldLossExplosionPlayer.muted = false;
+      shieldLossExplosionPlayer.volume = 0.92;
+      try {
+        await shieldLossExplosionPlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      shieldLossExplosionPlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play shield loss explosion', error);
+    });
+  }, [shieldLossExplosionPlayer]);
+
+  const enqueueBanner = useCallback((nextBanner: Banner) => {
+    bannerQueueRef.current.push(nextBanner);
+    if (bannerAnimatingRef.current) return;
+
+    const playNextBanner = () => {
+      const next = bannerQueueRef.current.shift();
+      if (!next) {
+        bannerAnimatingRef.current = false;
+        setBanner(null);
+        return;
+      }
+
+      bannerAnimatingRef.current = true;
+      const sequence = bannerSequenceRef.current + 1;
+      bannerSequenceRef.current = sequence;
+      setBanner(next);
+      bannerTranslateX.stopAnimation();
+      bannerTranslateX.setValue(-(Math.max(sizeRef.current.width, 360) + 120));
+
+      Animated.sequence([
+        Animated.timing(bannerTranslateX, {
+          toValue: 0,
+          duration: 170,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.delay(1500),
+        Animated.timing(bannerTranslateX, {
+          toValue: Math.max(sizeRef.current.width, 360) + 120,
+          duration: 170,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished || bannerSequenceRef.current !== sequence) return;
+        setBanner(null);
+        playNextBanner();
+      });
+    };
+
+    playNextBanner();
+  }, [bannerTranslateX]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1435,6 +1512,8 @@ export default function GameScreen() {
   useEffect(() => {
     pickupChimePlayer.muted = false;
     pickupChimePlayer.volume = 0.78;
+    shieldLossExplosionPlayer.muted = false;
+    shieldLossExplosionPlayer.volume = 0.92;
     audioSessionReadyRef.current = setAudioModeAsync({
       allowsRecording: false,
       playsInSilentMode: true,
@@ -1446,7 +1525,7 @@ export default function GameScreen() {
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Unable to initialize native audio session', error);
       });
-  }, [pickupChimePlayer]);
+  }, [pickupChimePlayer, shieldLossExplosionPlayer]);
 
   const playPickupChime = useCallback(() => {
     void audioSessionReadyRef.current.then(async () => {
@@ -1525,6 +1604,7 @@ export default function GameScreen() {
       ? g.protectedTrails.map((trail) => trail.map((point) => ({ ...point })))
       : [];
     const previousCapturedArea = preserveStats && !resetBoard ? g.capturedArea : 0;
+    if (!preserveStats) recordBannerShownRef.current = false;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
@@ -1670,6 +1750,7 @@ export default function GameScreen() {
       g.shields -= 1;
       g.status = 'RESPAWN';
       g.respawnAt = now + (g.shields > 0 ? 520 : 1050);
+      playShieldLossExplosion();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     };
 
@@ -2295,6 +2376,7 @@ export default function GameScreen() {
             ) {
               g.diamond.collected = true;
               g.score += DIAMOND_SCORE;
+              enqueueBanner({ kind: 'DIAMOND', points: DIAMOND_SCORE });
               for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 35 + Math.random() * 180;
@@ -2676,7 +2758,13 @@ export default function GameScreen() {
       if (!g.initialized && sizeRef.current.width > 0) resetGame(false);
       if (g.initialized) {
         update(g, dt, now);
-        if (bestScoreHydratedRef.current && g.score > bestScoreRef.current) {
+        if (
+          bestScoreHydratedRef.current
+          && !recordBannerShownRef.current
+          && g.score > bestScoreRef.current
+        ) {
+          recordBannerShownRef.current = true;
+          enqueueBanner({ kind: 'RECORD', score: g.score });
           bestScoreRef.current = g.score;
           void AsyncStorage.setItem(BEST_SCORE_STORAGE_KEY, String(g.score)).catch((error: unknown) => {
             if (__DEV__) console.warn('Unable to save best score', error);
@@ -2725,7 +2813,7 @@ export default function GameScreen() {
 
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
-  }, [resetGame, playPickupChime]);
+  }, [enqueueBanner, playPickupChime, playShieldLossExplosion, resetGame]);
 
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
@@ -2779,6 +2867,33 @@ export default function GameScreen() {
               style: { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' },
             })
           : renderNativeArena()}
+        {banner && (
+          <View style={styles.arcadeBannerLayer} pointerEvents="none">
+            <Animated.View
+              style={[
+                styles.arcadeBanner,
+                banner.kind === 'RECORD' ? styles.recordBanner : styles.diamondBanner,
+                { transform: [{ translateX: bannerTranslateX }] },
+              ]}
+            >
+              <View style={styles.bannerGloss} />
+              <View style={styles.bannerAccent} />
+              <Text
+                style={styles.bannerTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.62}
+              >
+                {banner.kind === 'RECORD' ? 'NOUVEAU RECORD !' : 'BONUS DIAMANT CAPTURÉ'}
+              </Text>
+              <Text style={styles.bannerScore} numberOfLines={1}>
+                {banner.kind === 'RECORD'
+                  ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
+                  : `+${banner.points ?? DIAMOND_SCORE} POINTS`}
+              </Text>
+            </Animated.View>
+          </View>
+        )}
       </View>
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
@@ -3060,6 +3175,80 @@ const styles = StyleSheet.create({
     width: 1,
     height: '100%',
     backgroundColor: 'rgba(255, 255, 255, 0.42)',
+  },
+  arcadeBannerLayer: {
+    position: 'absolute',
+    top: '41%',
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    alignItems: 'center',
+  },
+  arcadeBanner: {
+    width: '92%',
+    minHeight: 96,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderRadius: 4,
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.9,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
+  recordBanner: {
+    borderColor: HUD_COLORS.amber,
+    backgroundColor: 'rgba(38, 15, 4, 0.94)',
+  },
+  diamondBanner: {
+    borderColor: HUD_COLORS.cyan,
+    backgroundColor: 'rgba(0, 24, 34, 0.95)',
+  },
+  bannerGloss: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    opacity: 0.78,
+  },
+  bannerAccent: {
+    width: 72,
+    height: 3,
+    marginBottom: 7,
+    backgroundColor: HUD_COLORS.magenta,
+    shadowColor: HUD_COLORS.magenta,
+    shadowOpacity: 1,
+    shadowRadius: 9,
+  },
+  bannerTitle: {
+    maxWidth: '100%',
+    color: HUD_COLORS.warmWhite,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 22,
+    lineHeight: 26,
+    letterSpacing: 1.4,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 12,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  bannerScore: {
+    marginTop: 4,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: 1.1,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 0 },
   },
   feedback: {
     alignSelf: 'center',
