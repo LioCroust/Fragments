@@ -117,6 +117,7 @@ const SEVEN_PROJECTILE_SPEED = 42;
 const SEVEN_PROJECTILE_MAX_LIFE = 9;
 const SEVEN_PROJECTILE_RADIUS_CELLS = 0.16;
 const SEVEN_PROJECTILE_SIZE_CELLS = 0.82;
+const SHIP_ROTATION_SPEED = 8.5;
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -158,6 +159,7 @@ type Enemy = Point & {
   edgeTurnTimer: number;
   edgeDirectionX: number;
   edgeDirectionY: number;
+  visualRotation?: number;
   sevenFireTimer?: number;
   lastSafeX?: number;
   lastSafeY?: number;
@@ -819,10 +821,17 @@ const diamondCountForLevel = (level: number) => {
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
 
+const shortestAngleDelta = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
+
+const rotateAngleTowards = (current: number, target: number, maxDelta: number) => {
+  const delta = shortestAngleDelta(target - current);
+  return current + clamp(delta, -maxDelta, maxDelta);
+};
+
 const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
   const phase = enemy.phase;
   const directionRotation = enemy.kind === 'SHIP'
-    ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2
+    ? (enemy.visualRotation ?? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2)
     : enemy.kind === 'DRAGON'
       ? enemy.spin + Math.sin(phase * 0.45) * 0.035
     : enemy.kind === 'SEVEN'
