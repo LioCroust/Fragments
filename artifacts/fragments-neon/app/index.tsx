@@ -1390,42 +1390,103 @@ const NativeArenaStatic = React.memo(({
   claimedCount,
   protectedTrailCount,
 }: NativeArenaStaticProps) => {
-  const isSectorTwo = level === 2;
   const backgroundSource = level === 1
     ? sector1SpaceBackgroundSource
     : level === 2
       ? sector2SpaceBackgroundSource
       : sector3SpaceBackgroundSource;
-  const gridOpacity = level === 1 ? 0.11 : 0.055;
-  const gridColor = level === 1 ? '#00f3ff' : '#746bff';
   const gridLines = [];
-  for (let x = 0; x <= COLS; x += 1) {
-    gridLines.push(
-      <Line
-        key={`v${x}`}
-        x1={x * cell}
-        y1={0}
-        x2={x * cell}
-        y2={height}
-        stroke={gridColor}
-        opacity={isSectorTwo ? 0 : gridOpacity}
-        strokeWidth={0.6}
-      />,
-    );
-  }
-  for (let y = 0; y <= rows; y += 1) {
-    gridLines.push(
-      <Line
-        key={`h${y}`}
-        x1={0}
-        y1={y * cell}
-        x2={width}
-        y2={y * cell}
-        stroke={gridColor}
-        opacity={isSectorTwo ? 0 : gridOpacity}
-        strokeWidth={0.6}
-      />,
-    );
+  if (level === 1) {
+    for (let x = 0; x <= COLS; x += 1) {
+      gridLines.push(
+        <Line
+          key={`v${x}`}
+          x1={x * cell}
+          y1={0}
+          x2={x * cell}
+          y2={height}
+          stroke="#00f3ff"
+          opacity={0.11}
+          strokeWidth={0.6}
+        />,
+      );
+    }
+    for (let y = 0; y <= rows; y += 1) {
+      gridLines.push(
+        <Line
+          key={`h${y}`}
+          x1={0}
+          y1={y * cell}
+          x2={width}
+          y2={y * cell}
+          stroke="#00f3ff"
+          opacity={0.11}
+          strokeWidth={0.6}
+        />,
+      );
+    }
+  } else if (level === 2) {
+    const centerX = width * 0.5;
+    const centerY = height * 0.5;
+    const radiusX = width * 0.48;
+    const radiusY = height * 0.46;
+    for (let ring = 1; ring <= 7; ring += 1) {
+      gridLines.push(
+        <Circle
+          key={`orbit-ring-${ring}`}
+          cx={centerX}
+          cy={centerY}
+          r={Math.min(radiusX, radiusY) * (ring / 7)}
+          fill="none"
+          stroke="#2bb9cf"
+          opacity={0.035 + ring * 0.004}
+          strokeWidth={0.65}
+        />,
+      );
+    }
+    for (let ray = 0; ray < 16; ray += 1) {
+      const angle = (Math.PI * 2 * ray) / 16;
+      gridLines.push(
+        <Line
+          key={`orbit-ray-${ray}`}
+          x1={centerX}
+          y1={centerY}
+          x2={centerX + Math.cos(angle) * radiusX}
+          y2={centerY + Math.sin(angle) * radiusY}
+          stroke="#2bb9cf"
+          opacity={0.045}
+          strokeWidth={0.55}
+        />,
+      );
+    }
+  } else {
+    const spacing = cell * 2.4;
+    for (let offset = -height; offset < width + height; offset += spacing) {
+      gridLines.push(
+        <Line
+          key={`fractured-a-${offset}`}
+          x1={offset}
+          y1={0}
+          x2={offset + height}
+          y2={height}
+          stroke="#746bff"
+          opacity={0.045}
+          strokeWidth={0.65}
+        />,
+      );
+      gridLines.push(
+        <Line
+          key={`fractured-b-${offset}`}
+          x1={offset}
+          y1={height}
+          x2={offset + height}
+          y2={0}
+          stroke="#746bff"
+          opacity={0.03}
+          strokeWidth={0.65}
+        />,
+      );
+    }
   }
     const bounds = perimeterBounds(width, height, cell);
   return (
@@ -1455,7 +1516,7 @@ const NativeArenaStatic = React.memo(({
           />
         ))}
       </G>
-      {!isSectorTwo && gridLines}
+      {gridLines}
       <Rect
         x={bounds.left}
         y={bounds.top}
@@ -3075,10 +3136,8 @@ export default function GameScreen() {
        context.fill();
        context.globalAlpha = 1;
        const bounds = perimeterBounds(g.width, g.height, g.cell);
-       if (g.level !== 2) {
-         context.strokeStyle = g.level === 1
-           ? 'rgba(0,243,255,0.11)'
-           : 'rgba(116,107,255,0.055)';
+        if (g.level === 1) {
+          context.strokeStyle = 'rgba(0,243,255,0.11)';
          context.lineWidth = 0.65;
           for (let x = 0; x <= COLS; x += 1) {
            context.beginPath();
@@ -3092,6 +3151,50 @@ export default function GameScreen() {
             context.lineTo(g.width, y * g.cell);
            context.stroke();
          }
+        } else if (g.level === 2) {
+          const centerX = g.width * 0.5;
+          const centerY = g.height * 0.5;
+          const radiusX = g.width * 0.48;
+          const radiusY = g.height * 0.46;
+          context.strokeStyle = 'rgba(43,185,207,0.055)';
+          context.lineWidth = 0.65;
+          for (let ring = 1; ring <= 7; ring += 1) {
+            context.beginPath();
+            context.ellipse(
+              centerX,
+              centerY,
+              Math.min(radiusX, radiusY) * (ring / 7),
+              Math.min(radiusX, radiusY) * (ring / 7),
+              0,
+              0,
+              Math.PI * 2,
+            );
+            context.stroke();
+          }
+          for (let ray = 0; ray < 16; ray += 1) {
+            const angle = (Math.PI * 2 * ray) / 16;
+            context.beginPath();
+            context.moveTo(centerX, centerY);
+            context.lineTo(
+              centerX + Math.cos(angle) * radiusX,
+              centerY + Math.sin(angle) * radiusY,
+            );
+            context.stroke();
+          }
+        } else {
+          const spacing = g.cell * 2.4;
+          context.strokeStyle = 'rgba(116,107,255,0.04)';
+          context.lineWidth = 0.65;
+          for (let offset = -g.height; offset < g.width + g.height; offset += spacing) {
+            context.beginPath();
+            context.moveTo(offset, 0);
+            context.lineTo(offset + g.height, g.height);
+            context.stroke();
+            context.beginPath();
+            context.moveTo(offset, g.height);
+            context.lineTo(offset + g.height, 0);
+            context.stroke();
+          }
        }
 
       context.globalCompositeOperation = 'lighter';
