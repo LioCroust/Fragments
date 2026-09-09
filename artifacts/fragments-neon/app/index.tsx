@@ -2355,7 +2355,7 @@ export default function GameScreen() {
             ),
             level: g.level,
             mode: g.mode,
-            feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : g.fillQueue.length > 0 ? 'SECTEUR EN SYNCHRONISATION' : '',
+             feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : '',
           });
         }
       }
