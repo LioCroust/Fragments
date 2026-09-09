@@ -60,6 +60,7 @@ const sectorTransitionVictorySource = require('../assets/audio/sector-transition
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
+const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
