@@ -166,7 +166,7 @@ type Enemy = Point & {
   edgeDirectionY: number;
   visualRotation?: number;
   sevenFireTimer?: number;
-  spiderWebTimer?: number;
+  spiderThreadTimer?: number;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -187,12 +187,15 @@ type SevenProjectile = Point & {
   radius: number;
 };
 
-type SpiderWeb = {
+type SpiderThread = {
   start: Point;
   end: Point;
+  target: Point;
+  vx: number;
+  vy: number;
   ownerIndex: number;
-  warningRemaining: number;
-  activeRemaining: number;
+  remaining: number;
+  anchored: boolean;
 };
 
 const ENEMY_SCORE: Record<EnemyKind, number> = {
@@ -206,12 +209,12 @@ const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
 const DRAGON_NOMINAL_SPEED = 40;
 const DRAGON_ATTACK_SPEED = 105;
-const SPIDER_WEB_INITIAL_DELAY = 4.5;
-const SPIDER_WEB_COOLDOWN = 7.5;
-const SPIDER_WEB_WARNING_DURATION = 0.95;
-const SPIDER_WEB_ACTIVE_DURATION = 3.8;
-const SPIDER_WEB_LENGTH_CELLS = 2.2;
-const SPIDER_WEB_SLOW_FACTOR = 0.58;
+const SPIDER_THREAD_INITIAL_DELAY = 3.5;
+const SPIDER_THREAD_COOLDOWN = 6.5;
+const SPIDER_THREAD_SPEED = 260;
+const SPIDER_THREAD_ACTIVE_DURATION = 2.8;
+const SPIDER_THREAD_LENGTH_CELLS = 1.65;
+const SPIDER_THREAD_SLOW_FACTOR = 0.58;
 
 type Game = {
   width: number;
@@ -230,7 +233,7 @@ type Game = {
   diamonds: Diamond[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
-  spiderWebs: SpiderWeb[];
+  spiderThreads: SpiderThread[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
@@ -285,7 +288,7 @@ type Snapshot = {
   diamonds: Diamond[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
-  spiderWebs: SpiderWeb[];
+  spiderThreads: SpiderThread[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
@@ -318,8 +321,8 @@ const distanceBetweenSegments = (firstStart: Point, firstEnd: Point, secondStart
   )
 );
 
-const spiderWebIsActive = (web: SpiderWeb) => (
-  web.warningRemaining <= 0 && web.activeRemaining > 0
+const spiderThreadIsActive = (thread: SpiderThread) => (
+  thread.anchored && thread.remaining > 0
 );
 
 const pointTouchesOldTrail = (
@@ -1394,7 +1397,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -25.69, vy: 30.66, speed: DRAGON_NOMINAL_SPEED, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.3), vx: -49 * levelSpeed, vy: 32 * levelSpeed, speed: 62 * levelSpeed, agility: 0.9, phase: 1.6, spin: -0.22, routePhase: 1.1, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, sevenFireTimer: SEVEN_PROJECTILE_INTERVAL },
-    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, spiderWebTimer: SPIDER_WEB_INITIAL_DELAY },
+    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, spiderThreadTimer: SPIDER_THREAD_INITIAL_DELAY },
   ];
   const rosterByLevel: Record<number, number[]> = {
     1: [0, 4],
@@ -2000,38 +2003,36 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         )
       ))}
-      {snapshot.spiderWebs.map((web, index) => {
-        const active = spiderWebIsActive(web);
+      {snapshot.spiderThreads.map((thread, index) => {
+        const active = spiderThreadIsActive(thread);
         const warningOpacity = clamp(
-          0.3 + (SPIDER_WEB_WARNING_DURATION - Math.max(0, web.warningRemaining)) * 0.45,
+          0.3 + Math.min(0.48, thread.remaining * 0.12),
           0.3,
           0.78,
         );
         return (
-          <G key={`spider-web-${index}`} opacity={active ? 0.82 : warningOpacity}>
+          <G key={`spider-thread-${index}`} opacity={active ? 0.82 : 0.92}>
             <Line
-              x1={web.start.x}
-              y1={web.start.y}
-              x2={web.end.x}
-              y2={web.end.y}
-              stroke={active ? '#ff2bb5' : '#ffb02e'}
-              strokeWidth={active ? 3.2 : 2.2}
+              x1={thread.start.x}
+              y1={thread.start.y}
+              x2={thread.end.x}
+              y2={thread.end.y}
+              stroke={active ? '#ff2bb5' : '#fff3d6'}
+              strokeWidth={active ? 3.2 : 2.6}
               strokeLinecap="round"
-              strokeDasharray={active ? undefined : '4 8'}
             />
             {active && (
               <Line
-                x1={web.start.x}
-                y1={web.start.y}
-                x2={web.end.x}
-                y2={web.end.y}
+                x1={thread.start.x}
+                y1={thread.start.y}
+                x2={thread.end.x}
+                y2={thread.end.y}
                 stroke="#00f3ff"
                 strokeWidth={0.9}
                 strokeLinecap="round"
               />
             )}
-            <Circle cx={web.start.x} cy={web.start.y} r={2.4} fill="#fff3d6" />
-            <Circle cx={web.end.x} cy={web.end.y} r={2.4} fill="#fff3d6" />
+            <Circle cx={thread.end.x} cy={thread.end.y} r={active ? 2.4 : 3.1} fill={active ? '#fff3d6' : '#ff2bb5'} />
           </G>
         );
       })}
@@ -2206,7 +2207,7 @@ export default function GameScreen() {
     diamonds: [],
     bombs: [],
     projectiles: [],
-    spiderWebs: [],
+    spiderThreads: [],
     particles: [],
     smokePuffs: [],
     smokeAccumulator: 0,
@@ -2619,7 +2620,7 @@ export default function GameScreen() {
       diamonds: previousDiamonds,
       bombs,
       projectiles: [],
-      spiderWebs: [],
+      spiderThreads: [],
       particles: [],
       smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
         ? enemies
@@ -2985,26 +2986,54 @@ export default function GameScreen() {
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
-      let activeWebCount = 0;
-      for (let index = 0; index < g.spiderWebs.length; index += 1) {
-        const web = g.spiderWebs[index];
-        if (web.warningRemaining > 0) {
-          web.warningRemaining -= dt;
-        } else {
-          web.activeRemaining -= dt;
-        }
-        const owner = g.enemies[web.ownerIndex];
-        if (
-          web.warningRemaining > 0
-          || web.activeRemaining > 0
-        ) {
-          if (!owner || !enemyIsDestroyed(owner)) {
-            g.spiderWebs[activeWebCount] = web;
-            activeWebCount += 1;
+      g.spiderThreads ??= [];
+      let activeThreadCount = 0;
+      for (let index = 0; index < g.spiderThreads.length; index += 1) {
+        const thread = g.spiderThreads[index];
+        const owner = g.enemies[thread.ownerIndex];
+        if (!thread.anchored) {
+          const travelDistance = SPIDER_THREAD_SPEED * dt;
+          const distanceToTarget = Math.hypot(
+            thread.target.x - thread.end.x,
+            thread.target.y - thread.end.y,
+          );
+          if (distanceToTarget <= travelDistance) {
+            const directionLength = Math.hypot(thread.vx, thread.vy) || 1;
+            const perpendicularX = -thread.vy / directionLength;
+            const perpendicularY = thread.vx / directionLength;
+            const halfLength = g.cell * SPIDER_THREAD_LENGTH_CELLS * 0.5;
+            const clampThreadPoint = (point: Point): Point => ({
+              x: clamp(point.x, bounds.left + g.cell * 0.16, bounds.right - g.cell * 0.16),
+              y: clamp(point.y, bounds.top + g.cell * 0.16, bounds.bottom - g.cell * 0.16),
+            });
+            thread.start = clampThreadPoint({
+              x: thread.target.x - perpendicularX * halfLength,
+              y: thread.target.y - perpendicularY * halfLength,
+            });
+            thread.end = clampThreadPoint({
+              x: thread.target.x + perpendicularX * halfLength,
+              y: thread.target.y + perpendicularY * halfLength,
+            });
+            thread.anchored = true;
+            thread.remaining = SPIDER_THREAD_ACTIVE_DURATION;
+          } else {
+            thread.end = {
+              x: thread.end.x + thread.vx * dt,
+              y: thread.end.y + thread.vy * dt,
+            };
           }
+        } else {
+          thread.remaining -= dt;
+        }
+        if (
+          thread.remaining > 0
+          && (!owner || !enemyIsDestroyed(owner))
+        ) {
+          g.spiderThreads[activeThreadCount] = thread;
+          activeThreadCount += 1;
         }
       }
-      g.spiderWebs.length = activeWebCount;
+      g.spiderThreads.length = activeThreadCount;
       if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES') {
         let activeSmokeCount = 0;
         for (let index = 0; index < g.smokePuffs.length; index += 1) {
@@ -3036,7 +3065,7 @@ export default function GameScreen() {
           enemy.vx = enemy.kind === 'DRAGON' ? -enemy.speed * 0.55 : enemy.speed * 0.55;
           enemy.vy = enemy.kind === 'SPIDER' ? -enemy.speed * 0.45 : enemy.speed * 0.45;
           if (enemy.kind === 'SPIDER') {
-            enemy.spiderWebTimer = SPIDER_WEB_INITIAL_DELAY;
+            enemy.spiderThreadTimer = SPIDER_THREAD_INITIAL_DELAY;
           }
           enemy.targetX = enemy.x;
           enemy.targetY = enemy.y;
@@ -3053,7 +3082,7 @@ export default function GameScreen() {
           enemy.sevenFireTimer = (enemy.sevenFireTimer ?? SEVEN_PROJECTILE_INTERVAL) - dt;
         }
         if (enemy.kind === 'SPIDER') {
-          enemy.spiderWebTimer = (enemy.spiderWebTimer ?? SPIDER_WEB_INITIAL_DELAY) - dt;
+          enemy.spiderThreadTimer = (enemy.spiderThreadTimer ?? SPIDER_THREAD_INITIAL_DELAY) - dt;
         }
         enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
 
@@ -3452,37 +3481,43 @@ export default function GameScreen() {
         }
         if (
           enemy.kind === 'SPIDER'
-          && (enemy.spiderWebTimer ?? 0) <= 0
-          && !g.spiderWebs.some((web) => web.ownerIndex === enemyIndex)
+          && (enemy.spiderThreadTimer ?? 0) <= 0
+          && !g.spiderThreads.some((thread) => thread.ownerIndex === enemyIndex)
         ) {
-          const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
-          const forwardX = enemy.vx / velocityLength;
-          const forwardY = enemy.vy / velocityLength;
-          const center = {
-            x: enemy.x + forwardX * g.cell * 1.35,
-            y: enemy.y + forwardY * g.cell * 1.35,
+          const droneDirection = g.trail.length > 0
+            ? g.cutDir
+            : (g.inputDir.x !== 0 || g.inputDir.y !== 0)
+              ? g.inputDir
+              : g.hasMoveCommand
+                ? g.facingDir
+                : ZERO;
+          const distanceToDrone = Math.hypot(g.player.x - enemy.x, g.player.y - enemy.y);
+          const flightTime = clamp(distanceToDrone / SPIDER_THREAD_SPEED, 0.18, 0.7);
+          const target = {
+            x: g.player.x + droneDirection.x * 118 * flightTime * 0.92,
+            y: g.player.y + droneDirection.y * 118 * flightTime * 0.92,
           };
-          const perpendicularX = -forwardY;
-          const perpendicularY = forwardX;
-          const halfLength = g.cell * SPIDER_WEB_LENGTH_CELLS * 0.5;
-          const clampWebPoint = (point: Point): Point => ({
+          const clampThreadPoint = (point: Point): Point => ({
             x: clamp(point.x, bounds.left + g.cell * 0.16, bounds.right - g.cell * 0.16),
             y: clamp(point.y, bounds.top + g.cell * 0.16, bounds.bottom - g.cell * 0.16),
           });
-          g.spiderWebs.push({
-            start: clampWebPoint({
-              x: center.x - perpendicularX * halfLength,
-              y: center.y - perpendicularY * halfLength,
-            }),
-            end: clampWebPoint({
-              x: center.x + perpendicularX * halfLength,
-              y: center.y + perpendicularY * halfLength,
-            }),
+          const clampedTarget = clampThreadPoint(target);
+          const launchX = clampedTarget.x - enemy.x;
+          const launchY = clampedTarget.y - enemy.y;
+          const launchLength = Math.hypot(launchX, launchY) || 1;
+          const launchVx = (launchX / launchLength) * SPIDER_THREAD_SPEED;
+          const launchVy = (launchY / launchLength) * SPIDER_THREAD_SPEED;
+          g.spiderThreads.push({
+            start: { x: enemy.x, y: enemy.y },
+            end: { x: enemy.x, y: enemy.y },
+            target: clampedTarget,
+            vx: launchVx,
+            vy: launchVy,
             ownerIndex: enemyIndex,
-            warningRemaining: SPIDER_WEB_WARNING_DURATION,
-            activeRemaining: SPIDER_WEB_ACTIVE_DURATION,
+            remaining: SPIDER_THREAD_ACTIVE_DURATION + flightTime,
+            anchored: false,
           });
-          enemy.spiderWebTimer = SPIDER_WEB_COOLDOWN;
+          enemy.spiderThreadTimer = SPIDER_THREAD_COOLDOWN;
         }
 
         if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
@@ -3535,7 +3570,7 @@ export default function GameScreen() {
     const update = (g: Game, dt: number, now: number) => {
       g.frame += 1;
       // Keep hot-reloaded sessions compatible with the new web state.
-      g.spiderWebs ??= [];
+      g.spiderThreads ??= [];
       let activeParticleCount = 0;
       for (let index = 0; index < g.particles.length; index += 1) {
         const particle = g.particles[index];
@@ -3672,17 +3707,17 @@ export default function GameScreen() {
             x: g.player.x + direction.x * (baseDistance / steps),
             y: g.player.y + direction.y * (baseDistance / steps),
           };
-          const caughtInSpiderWeb = g.spiderWebs.some((web) => (
-            spiderWebIsActive(web)
+          const caughtInSpiderWeb = g.spiderThreads.some((thread) => (
+            spiderThreadIsActive(thread)
             && distanceBetweenSegments(
               g.player,
               probe,
-              web.start,
-              web.end,
+              thread.start,
+              thread.end,
             ) <= playerBodyRadius(g.cell) + g.cell * 0.12
           ));
           const movementDistance = (
-            (caughtInSpiderWeb ? baseSpeed * SPIDER_WEB_SLOW_FACTOR : baseSpeed) * dt
+            (caughtInSpiderWeb ? baseSpeed * SPIDER_THREAD_SLOW_FACTOR : baseSpeed) * dt
           ) / steps;
           const stepX = direction.x * movementDistance;
           const stepY = direction.y * movementDistance;
@@ -4042,24 +4077,19 @@ export default function GameScreen() {
        }
 
         context.globalCompositeOperation = 'lighter';
-        g.spiderWebs.forEach((web) => {
-          const active = spiderWebIsActive(web);
-          const warningOpacity = clamp(
-            0.3 + (SPIDER_WEB_WARNING_DURATION - Math.max(0, web.warningRemaining)) * 0.45,
-            0.3,
-            0.78,
-          );
+         g.spiderThreads.forEach((thread) => {
+           const active = spiderThreadIsActive(thread);
           context.save();
-          context.globalAlpha = active ? 0.82 : warningOpacity;
+           context.globalAlpha = active ? 0.82 : 0.94;
           context.lineCap = 'round';
-          context.setLineDash(active ? [] : [4, 8]);
-          context.strokeStyle = active ? '#ff2bb5' : '#ffb02e';
-          context.shadowColor = active ? '#ff2bb5' : '#ffb02e';
-          context.shadowBlur = active ? 12 : 6;
-          context.lineWidth = active ? 3.2 : 2.2;
+           context.setLineDash([]);
+           context.strokeStyle = active ? '#ff2bb5' : '#fff3d6';
+           context.shadowColor = active ? '#ff2bb5' : '#00f3ff';
+           context.shadowBlur = active ? 12 : 9;
+           context.lineWidth = active ? 3.2 : 2.6;
           context.beginPath();
-          context.moveTo(web.start.x, web.start.y);
-          context.lineTo(web.end.x, web.end.y);
+           context.moveTo(thread.start.x, thread.start.y);
+           context.lineTo(thread.end.x, thread.end.y);
           context.stroke();
           if (active) {
             context.setLineDash([]);
@@ -4068,17 +4098,15 @@ export default function GameScreen() {
             context.strokeStyle = '#00f3ff';
             context.lineWidth = 0.9;
             context.beginPath();
-            context.moveTo(web.start.x, web.start.y);
-            context.lineTo(web.end.x, web.end.y);
+             context.moveTo(thread.start.x, thread.start.y);
+             context.lineTo(thread.end.x, thread.end.y);
             context.stroke();
           }
-          context.setLineDash([]);
           context.shadowColor = '#fff3d6';
           context.shadowBlur = 7;
           context.fillStyle = '#fff3d6';
           context.beginPath();
-          context.arc(web.start.x, web.start.y, 2.4, 0, Math.PI * 2);
-          context.arc(web.end.x, web.end.y, 2.4, 0, Math.PI * 2);
+           context.arc(thread.end.x, thread.end.y, active ? 2.4 : 3.1, 0, Math.PI * 2);
           context.fill();
           context.restore();
         });
@@ -4240,10 +4268,11 @@ export default function GameScreen() {
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
                projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
-              spiderWebs: g.spiderWebs.map((web) => ({
-                ...web,
-                start: { ...web.start },
-                end: { ...web.end },
+              spiderThreads: g.spiderThreads.map((thread) => ({
+                ...thread,
+                start: { ...thread.start },
+                end: { ...thread.end },
+                target: { ...thread.target },
               })),
               particles: g.particles.slice(-200),
              // Keep native SVG state immutable between frames. The game loop
