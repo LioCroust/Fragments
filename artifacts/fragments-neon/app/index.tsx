@@ -1511,7 +1511,14 @@ export default function GameScreen() {
         const noClaimedPolygonOverlap = g.claimedPolygons.every((polygon) => (
           !polygonsIntersect(spriteCorners, polygon)
         ));
-        if (!outsideClaimedSurface || !noClaimedPolygonOverlap) return null;
+        const noProtectedBoundaryContact = g.protectedTrails.every((protectedTrail) => (
+          !pathTouchesPolygon(
+            protectedTrail,
+            spriteCorners,
+            PERIMETER_STROKE_WIDTH * 0.5,
+          )
+        ));
+        if (!outsideClaimedSurface || !noClaimedPolygonOverlap || !noProtectedBoundaryContact) return null;
         return { x, y };
       };
 
