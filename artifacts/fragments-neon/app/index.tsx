@@ -45,7 +45,7 @@ const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 10;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
-const BOMB_RADIUS_CELLS = 0.86;
+const BOMB_RADIUS_CELLS = 0.5;
 const HUD_COLORS = {
   cyan: '#00f3ff',
   lime: '#b8ff4a',
@@ -1103,7 +1103,7 @@ const enemyCollisionCircles = (
 };
 
 const bombRadius = (cell: number) => cell * BOMB_RADIUS_CELLS;
-const bombVisualRadius = (cell: number) => cell * 1.28;
+const bombVisualRadius = (cell: number) => cell * 0.72;
 
 const bombTouchesSegment = (
   bomb: Bomb,
@@ -1838,7 +1838,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
         if (bomb.destroyed) return null;
         const frame = Math.floor(snapshot.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
           % CORE_REACTOR_SPRITE_FRAME_COUNT;
-        const spriteSize = snapshot.cell * 2.9;
+        const spriteSize = snapshot.cell * 1.45;
         return (
           <G key={`bomb-${bombIndex}`} transform={`translate(${bomb.x} ${bomb.y})`}>
             <Defs>
@@ -3582,7 +3582,7 @@ export default function GameScreen() {
        if (coreReactorImage) {
          const bombFrame = Math.floor(g.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
            % CORE_REACTOR_SPRITE_FRAME_COUNT;
-         const bombSize = g.cell * 2.9;
+         const bombSize = g.cell * 1.45;
          g.bombs.forEach((bomb) => {
            if (bomb.destroyed) return;
            context.save();
