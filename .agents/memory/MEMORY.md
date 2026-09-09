@@ -16,3 +16,4 @@
 - [Mockup PNG cache](mockup-png-cache.md) — Restart the mockup preview workflow after replacing a public PNG when screenshots still show the previous asset.
 - [Cockpit interior viewpoint](cockpit-interior-viewpoint.md) — Cockpit concepts must be pilot-facing interiors with canopy framing and instrumentation, never exterior ship silhouettes.
 - [Published app billing suspension](published-app-billing-suspension.md) — A completed build can still show “This app isn’t live yet” when Replit suspends the live service for usage-based billing.
+- [Expo audio format](expo-audio-format.md) — Convert newly generated short effects to MP3 before passing them to useAudioPlayer; raw WAV can fail during Web loading.
