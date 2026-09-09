@@ -56,6 +56,7 @@ const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
 const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
+const sectorTransitionVictorySource = require('../assets/audio/sector-transition-victory.wav');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
@@ -1748,6 +1749,10 @@ export default function GameScreen() {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
+  const sectorTransitionVictoryPlayer = useAudioPlayer(sectorTransitionVictorySource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
   const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
   const audioUnlockedRef = useRef(Platform.OS !== 'web');
 
@@ -1766,6 +1771,22 @@ export default function GameScreen() {
       if (__DEV__) console.warn('Unable to play shield loss explosion', error);
     });
   }, [shieldLossExplosionPlayer]);
+
+  const playSectorTransition = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    void audioSessionReadyRef.current.then(async () => {
+      sectorTransitionVictoryPlayer.muted = false;
+      sectorTransitionVictoryPlayer.volume = 0.9;
+      try {
+        await sectorTransitionVictoryPlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      sectorTransitionVictoryPlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play sector transition sound', error);
+    });
+  }, [sectorTransitionVictoryPlayer]);
 
   const playDiamondCapture = useCallback(() => {
     if (!audioUnlockedRef.current) return;
@@ -1853,6 +1874,8 @@ export default function GameScreen() {
     diamondCapturePlayer.volume = 0.88;
     shieldLossExplosionPlayer.muted = false;
     shieldLossExplosionPlayer.volume = 0.92;
+    sectorTransitionVictoryPlayer.muted = false;
+    sectorTransitionVictoryPlayer.volume = 0.9;
     audioSessionReadyRef.current = setAudioModeAsync({
       allowsRecording: false,
       playsInSilentMode: true,
@@ -1864,7 +1887,12 @@ export default function GameScreen() {
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Unable to initialize native audio session', error);
       });
-  }, [diamondCapturePlayer, pickupChimePlayer, shieldLossExplosionPlayer]);
+  }, [
+    diamondCapturePlayer,
+    pickupChimePlayer,
+    sectorTransitionVictoryPlayer,
+    shieldLossExplosionPlayer,
+  ]);
 
   const playPickupChime = useCallback(() => {
     if (!audioUnlockedRef.current) return;
@@ -2801,8 +2829,10 @@ export default function GameScreen() {
             });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (g.level < 3 && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
-              enqueueBanner({ kind: 'SECTOR', level: g.level + 1 });
-              g.level = 2;
+              const nextLevel = Math.min(3, g.level + 1);
+              enqueueBanner({ kind: 'SECTOR', level: nextLevel });
+              playSectorTransition();
+              g.level = nextLevel;
               resetGame(true, true);
               return;
             }
@@ -3242,7 +3272,14 @@ export default function GameScreen() {
 
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
-  }, [enqueueBanner, playDiamondCapture, playPickupChime, playShieldLossExplosion, resetGame]);
+  }, [
+    enqueueBanner,
+    playDiamondCapture,
+    playPickupChime,
+    playSectorTransition,
+    playShieldLossExplosion,
+    resetGame,
+  ]);
 
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
