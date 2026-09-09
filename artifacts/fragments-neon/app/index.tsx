@@ -19,8 +19,8 @@ import {
 } from '../components/captureGeometry';
 
 const COLS = 12;
-const PERIMETER_INSET_CELLS = 2;
-const SAFE_BAND_CELLS = Math.round(PERIMETER_INSET_CELLS);
+const PERIMETER_HORIZONTAL_INSET_CELLS = 1.6;
+const PERIMETER_VERTICAL_INSET_CELLS = 2;
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
@@ -197,10 +197,10 @@ const pointTouchesOldTrail = (
 const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${point.y}`).join(' ');
 
 const perimeterBounds = (width: number, height: number, cell: number) => ({
-  left: cell * PERIMETER_INSET_CELLS,
-  top: cell * PERIMETER_INSET_CELLS,
-  right: width - cell * PERIMETER_INSET_CELLS,
-  bottom: height - cell * PERIMETER_INSET_CELLS,
+  left: cell * PERIMETER_HORIZONTAL_INSET_CELLS,
+  top: cell * PERIMETER_VERTICAL_INSET_CELLS,
+  right: width - cell * PERIMETER_HORIZONTAL_INSET_CELLS,
+  bottom: height - cell * PERIMETER_VERTICAL_INSET_CELLS,
 });
 
 const perimeterPointAt = (bounds: ReturnType<typeof perimeterBounds>, progress: number): Point => {
@@ -1256,7 +1256,7 @@ export default function GameScreen() {
       height,
       cell,
       rows,
-      player: { x: (SAFE_BAND_CELLS + 1) * cell, y: bounds.bottom + cell * PLAYER_RADIUS_CELLS },
+      player: { x: bounds.left + cell, y: bounds.bottom + cell * PLAYER_RADIUS_CELLS },
       inputDir: ZERO,
       facingDir: { x: 0, y: -1 },
       hasMoveCommand: false,
@@ -2125,10 +2125,10 @@ export default function GameScreen() {
        context.globalAlpha = INITIAL_MAP_OPACITY;
        context.fillStyle = ZONE_COLOR;
        context.fillRect(
-         g.cell * PERIMETER_INSET_CELLS,
-         g.cell * PERIMETER_INSET_CELLS,
-         g.width - g.cell * PERIMETER_INSET_CELLS * 2,
-         g.height - g.cell * PERIMETER_INSET_CELLS * 2,
+         g.cell * PERIMETER_HORIZONTAL_INSET_CELLS,
+         g.cell * PERIMETER_VERTICAL_INSET_CELLS,
+         g.width - g.cell * PERIMETER_HORIZONTAL_INSET_CELLS * 2,
+         g.height - g.cell * PERIMETER_VERTICAL_INSET_CELLS * 2,
        );
        context.globalAlpha = CAPTURED_ZONE_LAYER_OPACITY;
        context.fillStyle = ZONE_COLOR;
@@ -2162,7 +2162,12 @@ export default function GameScreen() {
       context.shadowColor = '#00f3ff';
       context.shadowBlur = 15;
       context.lineWidth = PERIMETER_STROKE_WIDTH;
-      context.strokeRect(g.cell * PERIMETER_INSET_CELLS, g.cell * PERIMETER_INSET_CELLS, g.width - g.cell * PERIMETER_INSET_CELLS * 2, g.height - g.cell * PERIMETER_INSET_CELLS * 2);
+      context.strokeRect(
+        bounds.left,
+        bounds.top,
+        bounds.right - bounds.left,
+        bounds.bottom - bounds.top,
+      );
       context.shadowBlur = 0;
 
        if (g.protectedTrails.length > 0 || g.trail.length > 1) {
