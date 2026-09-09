@@ -58,12 +58,19 @@ const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
 const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
+const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
 const CUTTING_SPRITE_FRAME_WIDTH = 160;
 const CUTTING_SPRITE_FRAME_HEIGHT = 96;
 const CUTTING_SPRITE_FRAME_DURATION = 3;
+type SmokeRenderMode = 'SPRITE' | 'PARTICLES';
+let SHIP_SMOKE_RENDER_MODE: SmokeRenderMode = 'SPRITE';
+const isParticleSmokeMode = (mode: SmokeRenderMode) => mode === 'PARTICLES';
+const SHIP_SMOKE_SPRITE_FRAME_COUNT = 8;
+const SHIP_SMOKE_SPRITE_FRAME_SIZE = 128;
+const SHIP_SMOKE_SPRITE_FRAME_DURATION = 4;
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
@@ -766,6 +773,14 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
     rotation: directionRotation + sway,
     scale: 1 + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
     offsetY: Math.sin(phase * 1.05) * cell * 0.08,
+  };
+};
+
+const shipSmokePosition = (enemy: Enemy, cell: number): Point => {
+  const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
+  return {
+    x: enemy.x - (enemy.vx / velocityLength) * cell * 0.92,
+    y: enemy.y - (enemy.vy / velocityLength) * cell * 0.92,
   };
 };
 
@@ -1473,6 +1488,45 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         )
       ))}
+      {SHIP_SMOKE_RENDER_MODE === 'SPRITE' && (
+        <>
+          <Defs>
+            <ClipPath id="ship-smoke-sprite-frame-clip">
+              <Rect
+                x={-snapshot.cell * 0.9}
+                y={-snapshot.cell * 0.9}
+                width={snapshot.cell * 1.8}
+                height={snapshot.cell * 1.8}
+              />
+            </ClipPath>
+          </Defs>
+          {snapshot.enemies
+            .filter((enemy) => enemy.kind === 'SHIP' && enemy.respawnAt <= Date.now())
+            .map((enemy, index) => {
+              const smokePosition = shipSmokePosition(enemy, snapshot.cell);
+              const motion = enemyAnimationTransform(enemy, snapshot.cell);
+              const smokeSize = snapshot.cell * 1.8;
+              const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
+              return (
+                <G
+                  key={`ship-smoke-sprite-${index}`}
+                  transform={`translate(${smokePosition.x} ${smokePosition.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
+                  opacity={0.82}
+                >
+                  <G clipPath="url(#ship-smoke-sprite-frame-clip)">
+                    <SvgImage
+                      href={shipSmokeSpriteSource}
+                      x={-smokeSize / 2 - frame * smokeSize}
+                      y={-smokeSize / 2}
+                      width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
+                      height={smokeSize}
+                    />
+                  </G>
+                </G>
+              );
+            })}
+        </>
+      )}
       {CUTTING_SPRITE_ENABLED && activeCut && (
         <>
           <Defs>
@@ -1595,7 +1649,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           strokeWidth={2}
         />
       ))}
-      {snapshot.smokePuffs.map((puff, index) => {
+      {isParticleSmokeMode(SHIP_SMOKE_RENDER_MODE) && snapshot.smokePuffs.map((puff, index) => {
         const opacity = clamp(puff.life / puff.maxLife, 0, 1);
         return (
           <G key={`smoke-${index}`} opacity={opacity * 0.22}>
@@ -1674,6 +1728,7 @@ export default function GameScreen() {
   const diamondImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
+  const shipSmokeSpriteImageRef = useRef<any>(null);
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
   const recordBannerShownRef = useRef(false);
@@ -1864,6 +1919,13 @@ export default function GameScreen() {
       if (!cancelled) cuttingSpriteImageRef.current = cuttingSpriteImage;
     };
     cuttingSpriteImage.src = resolvedCuttingSprite?.uri ?? cuttingSpriteSource;
+    const resolvedShipSmokeSprite = (RNImage as any).resolveAssetSource?.(shipSmokeSpriteSource);
+    const shipSmokeSpriteImage = new (globalThis as any).Image();
+    shipSmokeSpriteImage.decoding = 'async';
+    shipSmokeSpriteImage.onload = () => {
+      if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
+    };
+    shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
 
     return () => {
       cancelled = true;
@@ -1871,6 +1933,7 @@ export default function GameScreen() {
       diamondImageRef.current = null;
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
+      shipSmokeSpriteImageRef.current = null;
     };
   }, []);
 
@@ -1932,9 +1995,11 @@ export default function GameScreen() {
       enemies,
       diamonds: previousDiamonds,
       particles: [],
-      smokePuffs: enemies
-        .filter((enemy) => enemy.kind === 'SHIP' && !enemyIsDestroyed(enemy))
-        .flatMap((enemy) => createShipSmokePuffs(enemy, cell, 2)),
+      smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
+        ? enemies
+          .filter((enemy) => enemy.kind === 'SHIP' && !enemyIsDestroyed(enemy))
+          .flatMap((enemy) => createShipSmokePuffs(enemy, cell, 2))
+        : [],
       smokeAccumulator: 0,
       claimedPolygons: previousClaimedPolygons,
       pendingCapturePolygons: [],
@@ -2187,19 +2252,21 @@ export default function GameScreen() {
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
-      let activeSmokeCount = 0;
-      for (let index = 0; index < g.smokePuffs.length; index += 1) {
-        const puff = g.smokePuffs[index];
-        puff.x += puff.driftX * dt;
-        puff.y += puff.driftY * dt;
-        puff.life -= dt;
-        puff.size += g.cell * dt * 0.08;
-        if (puff.life > 0) {
-          g.smokePuffs[activeSmokeCount] = puff;
-          activeSmokeCount += 1;
+      if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES') {
+        let activeSmokeCount = 0;
+        for (let index = 0; index < g.smokePuffs.length; index += 1) {
+          const puff = g.smokePuffs[index];
+          puff.x += puff.driftX * dt;
+          puff.y += puff.driftY * dt;
+          puff.life -= dt;
+          puff.size += g.cell * dt * 0.08;
+          if (puff.life > 0) {
+            g.smokePuffs[activeSmokeCount] = puff;
+            activeSmokeCount += 1;
+          }
         }
+        g.smokePuffs.length = activeSmokeCount;
       }
-      g.smokePuffs.length = activeSmokeCount;
       g.enemies.forEach((enemy) => {
         if (g.status !== 'PLAYING') return;
         if (enemy.respawnAt > now) return;
@@ -2218,7 +2285,7 @@ export default function GameScreen() {
           enemy.targetX = enemy.x;
           enemy.targetY = enemy.y;
           enemy.thinkTimer = 0;
-          if (enemy.kind === 'SHIP') {
+          if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
             g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 5));
           }
         }
@@ -2600,7 +2667,7 @@ export default function GameScreen() {
           return;
         }
 
-        if (enemy.kind === 'SHIP') {
+        if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
           const velocityLength = Math.hypot(enemy.vx, enemy.vy);
           if (velocityLength > 8) {
             g.smokeAccumulator += dt;
@@ -2996,19 +3063,49 @@ export default function GameScreen() {
       context.lineCap = 'butt';
       context.globalAlpha = 1;
 
-      context.globalCompositeOperation = 'lighter';
-       g.smokePuffs.forEach((puff) => {
-         const lifeRatio = clamp(puff.life / puff.maxLife, 0, 1);
-         const gradient = context.createRadialGradient(puff.x, puff.y, 0, puff.x, puff.y, puff.size);
-         gradient.addColorStop(0, `rgba(255,255,255,${lifeRatio * 0.2})`);
-         gradient.addColorStop(0.3, `rgba(0,243,255,${lifeRatio * 0.16})`);
-         gradient.addColorStop(0.72, `rgba(255,43,181,${lifeRatio * 0.08})`);
-         gradient.addColorStop(1, 'rgba(0,243,255,0)');
-         context.fillStyle = gradient;
-         context.beginPath();
-         context.arc(puff.x, puff.y, puff.size, 0, Math.PI * 2);
-         context.fill();
-       });
+       context.globalCompositeOperation = 'lighter';
+       if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES') {
+         g.smokePuffs.forEach((puff) => {
+           const lifeRatio = clamp(puff.life / puff.maxLife, 0, 1);
+           const gradient = context.createRadialGradient(puff.x, puff.y, 0, puff.x, puff.y, puff.size);
+           gradient.addColorStop(0, `rgba(255,255,255,${lifeRatio * 0.2})`);
+           gradient.addColorStop(0.3, `rgba(0,243,255,${lifeRatio * 0.16})`);
+           gradient.addColorStop(0.72, `rgba(255,43,181,${lifeRatio * 0.08})`);
+           gradient.addColorStop(1, 'rgba(0,243,255,0)');
+           context.fillStyle = gradient;
+           context.beginPath();
+           context.arc(puff.x, puff.y, puff.size, 0, Math.PI * 2);
+           context.fill();
+         });
+       } else {
+         const smokeImage = shipSmokeSpriteImageRef.current;
+         if (smokeImage) {
+           const smokeFrame = Math.floor(g.frame / SHIP_SMOKE_SPRITE_FRAME_DURATION)
+             % SHIP_SMOKE_SPRITE_FRAME_COUNT;
+           g.enemies.forEach((enemy) => {
+             if (enemy.kind !== 'SHIP' || enemy.respawnAt > now) return;
+             const smokePosition = shipSmokePosition(enemy, g.cell);
+             const motion = enemyAnimationTransform(enemy, g.cell);
+             const smokeSize = g.cell * 1.8;
+             context.save();
+             context.globalAlpha = 0.82;
+             context.translate(smokePosition.x, smokePosition.y + motion.offsetY);
+             context.rotate(motion.rotation);
+             context.drawImage(
+               smokeImage,
+               smokeFrame * SHIP_SMOKE_SPRITE_FRAME_SIZE,
+               0,
+               SHIP_SMOKE_SPRITE_FRAME_SIZE,
+               SHIP_SMOKE_SPRITE_FRAME_SIZE,
+               -smokeSize / 2,
+               -smokeSize / 2,
+               smokeSize,
+               smokeSize,
+             );
+             context.restore();
+           });
+         }
+       }
 
        context.globalCompositeOperation = 'lighter';
       const diamondImage = diamondImageRef.current;
