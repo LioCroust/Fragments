@@ -122,6 +122,7 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
 };
 const DIAMOND_SCORE = 750;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
+const MAX_SMOKE_PUFFS = 28;
 
 type Game = {
   width: number;
@@ -1201,6 +1202,125 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   return [enemies[0]];
 };
 
+const enemyIsDestroyed = (enemy: Enemy) => enemy.respawnAt === Number.POSITIVE_INFINITY;
+
+const preserveDestroyedEnemies = (enemies: Enemy[], previousEnemies: Enemy[]) => {
+  const destroyedByKind: Record<EnemyKind, boolean[]> = {
+    SHIP: [],
+    DRAGON: [],
+    SEVEN: [],
+    SPIDER: [],
+  };
+  previousEnemies.forEach((enemy) => {
+    destroyedByKind[enemy.kind].push(enemyIsDestroyed(enemy));
+  });
+
+  const occurrenceByKind: Record<EnemyKind, number> = {
+    SHIP: 0,
+    DRAGON: 0,
+    SEVEN: 0,
+    SPIDER: 0,
+  };
+  enemies.forEach((enemy) => {
+    const occurrence = occurrenceByKind[enemy.kind];
+    if (destroyedByKind[enemy.kind][occurrence]) {
+      enemy.respawnAt = Number.POSITIVE_INFINITY;
+      enemy.vx = 0;
+      enemy.vy = 0;
+    }
+    occurrenceByKind[enemy.kind] += 1;
+  });
+};
+
+const placeEnemiesInOpenSurface = (
+  enemies: Enemy[],
+  width: number,
+  height: number,
+  cell: number,
+  claimedPolygons: Point[][],
+  protectedTrails: Point[][],
+  activeTrail: Point[],
+  player: Point,
+) => {
+  const bounds = perimeterBounds(width, height, cell);
+  const occupiedSprites: Point[][] = [];
+  const preferredSeeds = [
+    { x: 0.5, y: 0.28 },
+    { x: 0.25, y: 0.28 },
+    { x: 0.75, y: 0.28 },
+    { x: 0.5, y: 0.52 },
+    { x: 0.25, y: 0.52 },
+    { x: 0.75, y: 0.52 },
+    { x: 0.5, y: 0.76 },
+    { x: 0.25, y: 0.76 },
+    { x: 0.75, y: 0.76 },
+  ];
+  const gridSeeds = Array.from({ length: 11 }, (_, row) => (
+    Array.from({ length: 11 }, (_, column) => ({
+      x: (column + 0.5) / 11,
+      y: (row + 0.5) / 11,
+    }))
+  )).flat();
+
+  enemies.forEach((enemy) => {
+    if (enemyIsDestroyed(enemy)) return;
+    const visualRadius = enemyVisualRadius(enemy, cell);
+    const currentPosition = { x: enemy.x, y: enemy.y };
+    const candidates = [
+      currentPosition,
+      ...preferredSeeds.map((seed) => ({
+        x: bounds.left + (bounds.right - bounds.left) * seed.x,
+        y: bounds.top + (bounds.bottom - bounds.top) * seed.y,
+      })),
+      ...gridSeeds.map((seed) => ({
+        x: bounds.left + (bounds.right - bounds.left) * seed.x,
+        y: bounds.top + (bounds.bottom - bounds.top) * seed.y,
+      })),
+    ];
+    const candidate = candidates.find((point) => {
+      const x = clamp(point.x, bounds.left + visualRadius, bounds.right - visualRadius);
+      const y = clamp(point.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
+      const spriteCorners = enemySpriteCorners(enemy, cell, x, y);
+      const spriteFootprint = enemySpriteFootprint(enemy, cell, x, y);
+      const inDarkSurface = spriteFootprint.every((spritePoint) => (
+        !pointInsideClaimedSurface(spritePoint, claimedPolygons, cell * 0.08)
+      ));
+      const clearOfClaimedPolygons = claimedPolygons.every((polygon) => (
+        !polygonsIntersect(spriteCorners, polygon)
+      ));
+      const clearOfProtectedTrails = protectedTrails.every((protectedTrail) => (
+        !pathTouchesPolygon(protectedTrail, spriteCorners, PERIMETER_STROKE_WIDTH * 0.5)
+      ));
+      const clearOfActiveTrail = activeTrail.length < 2
+        || !pathTouchesPolygon(activeTrail, spriteCorners, PERIMETER_STROKE_WIDTH * 0.5);
+      const clearOfPlayer = Math.hypot(x - player.x, y - player.y)
+        > visualRadius + playerBodyRadius(cell) * 1.5;
+      const clearOfOtherEnemies = occupiedSprites.every((occupiedSprite) => (
+        !polygonsIntersect(spriteCorners, occupiedSprite)
+      ));
+      return (
+        inDarkSurface
+        && clearOfClaimedPolygons
+        && clearOfProtectedTrails
+        && clearOfActiveTrail
+        && clearOfPlayer
+        && clearOfOtherEnemies
+      );
+    });
+
+    if (!candidate) {
+      // Never place an enemy in a captured surface as a fallback.
+      enemy.respawnAt = Number.POSITIVE_INFINITY;
+      enemy.vx = 0;
+      enemy.vy = 0;
+      return;
+    }
+    enemy.x = clamp(candidate.x, bounds.left + visualRadius, bounds.right - visualRadius);
+    enemy.y = clamp(candidate.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
+    occupiedSprites.push(enemySpriteCorners(enemy, cell, enemy.x, enemy.y));
+  });
+};
+
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
   const backwardX = -enemy.vx / velocityLength;
@@ -1772,12 +1892,28 @@ export default function GameScreen() {
     const previousDiamonds = preserveStats && !resetBoard
       ? g.diamonds.map((diamond) => ({ ...diamond }))
       : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
+    const previousEnemies = preserveStats && !resetBoard ? g.enemies : [];
     if (!preserveStats) recordBannerShownRef.current = false;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
     const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
     const enemies = createEnemies(width, height, cell, previousLevel);
+    preserveDestroyedEnemies(enemies, previousEnemies);
+    const respawnPlayer = {
+      x: bounds.left + cell,
+      y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
+    };
+    placeEnemiesInOpenSurface(
+      enemies,
+      width,
+      height,
+      cell,
+      previousClaimedPolygons,
+      previousProtectedTrails,
+      [],
+      respawnPlayer,
+    );
 
     gameRef.current = {
       ...g,
@@ -1785,7 +1921,7 @@ export default function GameScreen() {
       height,
       cell,
       rows,
-      player: { x: bounds.left + cell, y: bounds.bottom + cell * PLAYER_RADIUS_CELLS },
+      player: respawnPlayer,
       inputDir: ZERO,
       facingDir: { x: 0, y: -1 },
       hasMoveCommand: false,
@@ -1797,8 +1933,8 @@ export default function GameScreen() {
       diamonds: previousDiamonds,
       particles: [],
       smokePuffs: enemies
-        .filter((enemy) => enemy.kind === 'SHIP')
-        .flatMap((enemy) => createShipSmokePuffs(enemy, cell)),
+        .filter((enemy) => enemy.kind === 'SHIP' && !enemyIsDestroyed(enemy))
+        .flatMap((enemy) => createShipSmokePuffs(enemy, cell, 2)),
       smokeAccumulator: 0,
       claimedPolygons: previousClaimedPolygons,
       pendingCapturePolygons: [],
@@ -2468,8 +2604,10 @@ export default function GameScreen() {
           const velocityLength = Math.hypot(enemy.vx, enemy.vy);
           if (velocityLength > 8) {
             g.smokeAccumulator += dt;
-            if (g.smokeAccumulator >= 0.04) {
-              g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 1));
+            if (g.smokeAccumulator >= 0.07) {
+              if (g.smokePuffs.length < MAX_SMOKE_PUFFS) {
+                g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 1));
+              }
               g.smokeAccumulator = 0;
             }
           }
