@@ -171,7 +171,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'SECTOR';
+  kind: 'RECORD' | 'DIAMOND' | 'SECTOR' | 'ENEMY';
   score?: number;
   points?: number;
   level?: number;
@@ -1895,6 +1895,7 @@ export default function GameScreen() {
         });
       }
       g.score += ENEMY_SCORE[enemy.kind];
+      enqueueBanner({ kind: 'ENEMY', points: ENEMY_SCORE[enemy.kind] });
       enemy.blockedTime = 0;
       enemy.respawnAt = now + 900;
       enemy.vx = 0;
@@ -2927,7 +2928,9 @@ export default function GameScreen() {
                   ? styles.recordBanner
                   : banner.kind === 'DIAMOND'
                     ? styles.diamondBanner
-                    : styles.sectorBanner,
+                    : banner.kind === 'SECTOR'
+                      ? styles.sectorBanner
+                      : styles.enemyBanner,
                 { transform: [{ translateX: bannerTranslateX }] },
               ]}
             >
@@ -2943,14 +2946,18 @@ export default function GameScreen() {
                   ? 'NOUVEAU RECORD !'
                   : banner.kind === 'DIAMOND'
                     ? 'BONUS DIAMANT CAPTURÉ'
-                    : 'SECTEUR TERMINÉ'}
+                    : banner.kind === 'SECTOR'
+                      ? 'SECTEUR TERMINÉ'
+                      : 'ENNEMI DÉTRUIT'}
               </Text>
               <Text style={styles.bannerScore} numberOfLines={1}>
                 {banner.kind === 'RECORD'
                   ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
                   : banner.kind === 'DIAMOND'
                     ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
-                    : `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`}
+                    : banner.kind === 'SECTOR'
+                      ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
+                      : `+${banner.points ?? 0} POINTS`}
               </Text>
             </Animated.View>
           </View>
@@ -3272,6 +3279,10 @@ const styles = StyleSheet.create({
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
     backgroundColor: 'rgba(24, 4, 24, 0.56)',
+  },
+  enemyBanner: {
+    borderColor: HUD_COLORS.lime,
+    backgroundColor: 'rgba(18, 34, 8, 0.56)',
   },
   bannerGloss: {
     position: 'absolute',
