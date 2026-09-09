@@ -1,0 +1,410 @@
+:root {
+  --prism-ink: #070a13;
+  --prism-panel: rgba(11, 16, 28, 0.92);
+  --prism-line: rgba(116, 151, 190, 0.2);
+  --prism-muted: #8290a8;
+  --prism-text: #edf3ff;
+  --prism-red: #ff3d42;
+  --prism-orange: #ff7c36;
+  --prism-cyan: #6ff5ef;
+  --prism-violet: #a68cff;
+}
+
+.prism-mine-concept {
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+  color: var(--prism-text);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(102, 56, 117, 0.16), transparent 29%),
+    radial-gradient(circle at 13% 84%, rgba(255, 57, 66, 0.07), transparent 27%),
+    #070a13;
+  font-family: "Space Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.prism-mine-concept::before,
+.prism-mine-concept::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  inset: 0;
+  z-index: -1;
+}
+
+.prism-mine-concept::before {
+  opacity: 0.66;
+  background-image:
+    radial-gradient(circle at 9% 18%, rgba(233, 244, 255, 0.6) 0 0.8px, transparent 1px),
+    radial-gradient(circle at 80% 22%, rgba(111, 245, 239, 0.5) 0 0.7px, transparent 1px),
+    radial-gradient(circle at 67% 72%, rgba(166, 140, 255, 0.45) 0 0.75px, transparent 1px),
+    radial-gradient(circle at 25% 63%, rgba(255, 124, 54, 0.42) 0 0.65px, transparent 1px),
+    radial-gradient(circle at 92% 91%, rgba(233, 244, 255, 0.5) 0 0.6px, transparent 1px);
+  background-size: 163px 191px, 227px 263px, 311px 179px, 209px 223px, 281px 239px;
+}
+
+.prism-mine-concept::after {
+  background: linear-gradient(105deg, transparent 0 45%, rgba(111, 245, 239, 0.025) 50%, transparent 55%);
+  transform: translateX(-20%);
+  animation: prism-scan 7s ease-in-out infinite;
+}
+
+.prism-mine-concept__shell {
+  width: min(100%, 920px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 26px 22px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.prism-mine-concept__masthead,
+.prism-mine-concept__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.prism-mine-concept__masthead {
+  border-bottom: 1px solid var(--prism-line);
+  padding-bottom: 17px;
+}
+
+.prism-mine-concept__kicker,
+.prism-mine-concept__index {
+  margin: 0;
+  color: var(--prism-muted);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.prism-mine-concept__index {
+  color: var(--prism-cyan);
+  text-align: right;
+}
+
+.prism-mine-concept__index strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--prism-text);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.prism-mine-concept__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(235px, 0.95fr);
+  align-items: center;
+  gap: clamp(16px, 5vw, 56px);
+  padding: 20px 0 25px;
+}
+
+.prism-mine-concept__visual {
+  position: relative;
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+}
+
+.prism-mine-concept__visual::before {
+  content: "";
+  position: absolute;
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 61, 66, 0.16), rgba(255, 61, 66, 0.045) 37%, transparent 70%);
+  filter: blur(11px);
+  animation: prism-breathe 2.8s ease-in-out infinite;
+}
+
+.prism-mine-concept__visual::after {
+  content: "LOCK / 07";
+  position: absolute;
+  left: 8%;
+  bottom: 8%;
+  padding: 8px 10px;
+  border-left: 2px solid var(--prism-red);
+  color: rgba(255, 179, 158, 0.8);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  transform: rotate(-90deg);
+  transform-origin: left bottom;
+}
+
+.prism-mine__svg {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 530px);
+  height: auto;
+  overflow: visible;
+}
+
+.prism-mine__orbit,
+.prism-mine__blade,
+.prism-mine__charge,
+.prism-mine__core,
+.prism-mine__target {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.prism-mine__orbit--slow {
+  animation: prism-orbit 10s linear infinite;
+}
+
+.prism-mine__orbit--counter {
+  animation: prism-orbit-reverse 7s linear infinite;
+}
+
+.prism-mine__blade {
+  animation: prism-blade-lock 3.9s cubic-bezier(0.65, 0.02, 0.38, 1) infinite;
+}
+
+.prism-mine__blade:nth-of-type(2) {
+  animation-delay: -0.42s;
+}
+
+.prism-mine__blade:nth-of-type(3) {
+  animation-delay: -0.84s;
+}
+
+.prism-mine__blade:nth-of-type(4) {
+  animation-delay: -1.26s;
+}
+
+.prism-mine__core {
+  animation: prism-core-surge 2.2s ease-in-out infinite;
+}
+
+.prism-mine__target {
+  animation: prism-target-flash 2.2s steps(1, end) infinite;
+}
+
+.prism-mine__charge {
+  stroke-dasharray: 18 12;
+  animation: prism-charge 2.2s steps(5, end) infinite;
+}
+
+.prism-mine__charge--b {
+  animation-delay: -1.1s;
+}
+
+.prism-mine__fragment {
+  animation: prism-fragment-flicker 1.8s ease-in-out infinite;
+}
+
+.prism-mine__fragment:nth-child(2) { animation-delay: -0.3s; }
+.prism-mine__fragment:nth-child(3) { animation-delay: -0.6s; }
+.prism-mine__fragment:nth-child(4) { animation-delay: -0.9s; }
+
+.prism-mine-concept__details {
+  position: relative;
+}
+
+.prism-mine-concept__danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 61, 66, 0.45);
+  background: rgba(77, 15, 25, 0.32);
+  color: #ff9a81;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.prism-mine-concept__danger i {
+  width: 7px;
+  height: 7px;
+  display: block;
+  border-radius: 50%;
+  background: var(--prism-red);
+  box-shadow: 0 0 0 4px rgba(255, 61, 66, 0.14);
+  animation: prism-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.prism-mine-concept__title {
+  margin: 0;
+  color: var(--prism-text);
+  font-family: "Rajdhani", "Arial Narrow", sans-serif;
+  font-size: clamp(46px, 8vw, 82px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 0.82;
+  text-transform: uppercase;
+}
+
+.prism-mine-concept__title em {
+  display: block;
+  color: var(--prism-orange);
+  font-size: 0.38em;
+  font-style: normal;
+  letter-spacing: 0.29em;
+  line-height: 1.7;
+}
+
+.prism-mine-concept__lede {
+  max-width: 34ch;
+  margin: 24px 0 28px;
+  color: #b0bbcd;
+  font-family: "DM Sans", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.prism-mine-concept__signal {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 13px 18px;
+  border-top: 1px solid var(--prism-line);
+  border-bottom: 1px solid var(--prism-line);
+  padding: 15px 0;
+}
+
+.prism-mine-concept__signal-label,
+.prism-mine-concept__signal-status {
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.prism-mine-concept__signal-label { color: var(--prism-muted); }
+.prism-mine-concept__signal-status { color: #ff9a81; }
+
+.prism-mine-concept__signal-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+}
+
+.prism-mine-concept__signal-bar i {
+  display: block;
+  height: 5px;
+  flex: 1;
+  background: rgba(255, 61, 66, 0.17);
+  transform-origin: left;
+  animation: prism-segment-charge 2.2s steps(5, end) infinite;
+}
+
+.prism-mine-concept__signal-bar i:nth-child(2) { animation-delay: 0.16s; }
+.prism-mine-concept__signal-bar i:nth-child(3) { animation-delay: 0.32s; }
+.prism-mine-concept__signal-bar i:nth-child(4) { animation-delay: 0.48s; }
+.prism-mine-concept__signal-bar i:nth-child(5) { animation-delay: 0.64s; }
+.prism-mine-concept__signal-bar i:nth-child(6) { animation-delay: 0.8s; }
+.prism-mine-concept__signal-bar i:nth-child(7) { animation-delay: 0.96s; }
+
+.prism-mine-concept__footer {
+  padding-top: 17px;
+  border-top: 1px solid var(--prism-line);
+}
+
+.prism-mine-concept__footer p {
+  margin: 0;
+  color: #6f7d93;
+  font-size: 8px;
+  letter-spacing: 0.11em;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+.prism-mine-concept__footer p:last-child {
+  color: var(--prism-violet);
+  text-align: right;
+}
+
+@keyframes prism-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes prism-orbit-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes prism-blade-lock {
+  0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.78; }
+  43% { transform: rotate(26deg) scale(1.04); opacity: 1; }
+  48% { transform: rotate(26deg) scale(1.16); opacity: 1; }
+  51% { transform: rotate(26deg) scale(0.98); opacity: 0.6; }
+  62% { transform: rotate(20deg) scale(1); opacity: 0.84; }
+}
+
+@keyframes prism-core-surge {
+  0%, 37%, 100% { transform: scale(0.86); opacity: 0.77; }
+  44% { transform: scale(1.13); opacity: 1; }
+  49% { transform: scale(0.92); opacity: 0.86; }
+  55% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes prism-target-flash {
+  0%, 38%, 100% { opacity: 0.26; }
+  43%, 48% { opacity: 1; }
+  52% { opacity: 0.2; }
+}
+
+@keyframes prism-charge {
+  0%, 35% { stroke-dashoffset: 0; opacity: 0.55; }
+  47%, 53% { stroke-dashoffset: -38; opacity: 1; }
+  60%, 100% { stroke-dashoffset: -90; opacity: 0.34; }
+}
+
+@keyframes prism-segment-charge {
+  0%, 35% { background: rgba(255, 61, 66, 0.17); transform: scaleX(0.35); }
+  46%, 58% { background: var(--prism-red); transform: scaleX(1); }
+  70%, 100% { background: rgba(255, 124, 54, 0.32); transform: scaleX(0.65); }
+}
+
+@keyframes prism-fragment-flicker {
+  0%, 100% { opacity: 0.28; transform: translateY(0); }
+  45% { opacity: 0.86; transform: translateY(-3px); }
+  52% { opacity: 0.4; transform: translateY(1px); }
+}
+
+@keyframes prism-breathe {
+  0%, 100% { transform: scale(0.88); opacity: 0.7; }
+  46% { transform: scale(1.06); opacity: 1; }
+  52% { transform: scale(0.93); opacity: 0.82; }
+}
+
+@keyframes prism-dot-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes prism-scan {
+  0%, 100% { opacity: 0; transform: translateX(-20%); }
+  45% { opacity: 0.85; }
+  65% { opacity: 0; transform: translateX(20%); }
+}
+
+@media (max-width: 680px) {
+  .prism-mine-concept__shell { padding: 20px 16px 18px; }
+  .prism-mine-concept__body {
+    grid-template-columns: 1fr;
+    gap: 2px;
+    padding-top: 15px;
+  }
+  .prism-mine-concept__visual { min-height: 305px; }
+  .prism-mine__svg { width: min(94%, 400px); }
+  .prism-mine-concept__details { padding: 0 5px; }
+  .prism-mine-concept__lede { margin: 17px 0 21px; }
+  .prism-mine-concept__title { font-size: clamp(51px, 15vw, 72px); }
+  .prism-mine-concept__footer p { font-size: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prism-mine-concept *,
+  .prism-mine-concept::after,
+  .prism-mine-concept::before {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
