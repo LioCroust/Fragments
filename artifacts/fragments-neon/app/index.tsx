@@ -949,6 +949,29 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   return enemies.slice(0, clamp(Math.floor(level), 1, enemies.length));
 };
 
+const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
+  const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
+  const backwardX = -enemy.vx / velocityLength;
+  const backwardY = -enemy.vy / velocityLength;
+  const sideX = -backwardY;
+  const sideY = backwardX;
+
+  return Array.from({ length: count }, (_, index) => {
+    const sideOffset = (Math.random() - 0.5) * cell * 0.34;
+    const trailOffset = cell * (0.92 + index * 0.2);
+    const maxLife = 0.43 + Math.random() * 0.17;
+    return {
+      x: enemy.x + backwardX * trailOffset + sideX * sideOffset,
+      y: enemy.y + backwardY * trailOffset + sideY * sideOffset,
+      life: maxLife,
+      maxLife,
+      size: cell * (0.13 + Math.random() * 0.1),
+      driftX: backwardX * (10 + Math.random() * 22) + sideX * (Math.random() - 0.5) * 13,
+      driftY: backwardY * (10 + Math.random() * 22) + sideY * (Math.random() - 0.5) * 13,
+    };
+  });
+};
+
 type NativeArenaStaticProps = {
   width: number;
   height: number;
@@ -1282,6 +1305,7 @@ export default function GameScreen() {
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
     const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
+    const enemies = createEnemies(width, height, cell, previousLevel);
 
     gameRef.current = {
       ...g,
@@ -1297,10 +1321,12 @@ export default function GameScreen() {
       cutCoordinate: 0,
       trail: [],
       protectedTrails: previousProtectedTrails,
-      enemies: createEnemies(width, height, cell, previousLevel),
+      enemies,
       diamond: createDiamond(width, height, cell),
       particles: [],
-      smokePuffs: [],
+      smokePuffs: enemies
+        .filter((enemy) => enemy.kind === 'SHIP')
+        .flatMap((enemy) => createShipSmokePuffs(enemy, cell)),
       smokeAccumulator: 0,
       claimedPolygons: previousClaimedPolygons,
       pendingCapturePolygons: [],
@@ -1552,6 +1578,9 @@ export default function GameScreen() {
           enemy.targetX = enemy.x;
           enemy.targetY = enemy.y;
           enemy.thinkTimer = 0;
+          if (enemy.kind === 'SHIP') {
+            g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 5));
+          }
         }
 
         enemy.phase += dt * (enemy.kind === 'DRAGON' ? 2.3 : enemy.kind === 'SPIDER' ? 3.1 : 1.7);
@@ -1880,17 +1909,7 @@ export default function GameScreen() {
               const backwardY = -enemy.vy / velocityLength;
               const sideX = -backwardY;
               const sideY = backwardX;
-              const sideOffset = (Math.random() - 0.5) * g.cell * 0.34;
-              const maxLife = 0.43 + Math.random() * 0.17;
-              g.smokePuffs.push({
-                x: enemy.x + backwardX * g.cell * 0.98 + sideX * sideOffset,
-                y: enemy.y + backwardY * g.cell * 0.98 + sideY * sideOffset,
-                life: maxLife,
-                maxLife,
-                size: g.cell * (0.13 + Math.random() * 0.1),
-                driftX: backwardX * (10 + Math.random() * 22) + sideX * (Math.random() - 0.5) * 13,
-                driftY: backwardY * (10 + Math.random() * 22) + sideY * (Math.random() - 0.5) * 13,
-              });
+              g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 1));
               g.smokeAccumulator = 0;
             }
           }
