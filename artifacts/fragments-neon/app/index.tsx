@@ -219,6 +219,25 @@ const distanceToPerimeter = (point: Point, bounds: ReturnType<typeof perimeterBo
   Math.abs(point.y - bounds.bottom),
 );
 
+const polygonHasSelfIntersection = (polygon: Point[]) => {
+  if (polygon.length < 4) return false;
+  for (let firstIndex = 0; firstIndex < polygon.length; firstIndex += 1) {
+    const firstStart = polygon[firstIndex];
+    const firstEnd = polygon[(firstIndex + 1) % polygon.length];
+    for (let secondIndex = firstIndex + 1; secondIndex < polygon.length; secondIndex += 1) {
+      if (
+        secondIndex === firstIndex
+        || secondIndex === (firstIndex + 1) % polygon.length
+        || firstIndex === (secondIndex + 1) % polygon.length
+      ) continue;
+      const secondStart = polygon[secondIndex];
+      const secondEnd = polygon[(secondIndex + 1) % polygon.length];
+      if (segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)) return true;
+    }
+  }
+  return false;
+};
+
 const polygonArea = (polygon: Point[]) => Math.abs(polygon.reduce((area, point, index) => {
   const next = polygon[(index + 1) % polygon.length];
   return area + point.x * next.y - next.x * point.y;
@@ -396,8 +415,8 @@ const buildContinuousCapturePolygon = (
         nonPerimeterLoop[junctionIndex],
       );
       const junctionPoint = {
-        x: (nonPerimeterLoop[junctionIndex].x + perimeterLoop[junctionPerimeterIndex].x) * 0.5,
-        y: (nonPerimeterLoop[junctionIndex].y + perimeterLoop[junctionPerimeterIndex].y) * 0.5,
+        x: perimeterLoop[junctionPerimeterIndex].x,
+        y: perimeterLoop[junctionPerimeterIndex].y,
       };
       if (startIsPerimeter) {
         boundaryArcs(
@@ -491,7 +510,25 @@ const buildContinuousCapturePolygon = (
   }
   if (candidates.length === 0) return null;
 
-  return candidates.reduce((smallest, polygon) => (
+  const normalizedCandidates = candidates.map((polygon) => {
+    const normalized: Point[] = [];
+    polygon.forEach((point) => {
+      const previous = normalized[normalized.length - 1];
+      if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) > cell * 0.03) {
+        normalized.push(point);
+      }
+    });
+    if (
+      normalized.length > 1
+      && Math.hypot(normalized[0].x - normalized[normalized.length - 1].x, normalized[0].y - normalized[normalized.length - 1].y) <= cell * 0.03
+    ) {
+      normalized.pop();
+    }
+    return normalized;
+  }).filter((polygon) => polygon.length >= 3 && !polygonHasSelfIntersection(polygon));
+  if (normalizedCandidates.length === 0) return null;
+
+  return normalizedCandidates.reduce((smallest, polygon) => (
     polygonArea(polygon) < polygonArea(smallest) ? polygon : smallest
   ));
 };
