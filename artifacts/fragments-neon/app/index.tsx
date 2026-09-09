@@ -14,6 +14,7 @@ import Svg, {
   Circle,
   ClipPath,
   Defs,
+  Ellipse,
   G,
   Image as SvgImage,
   Line,
@@ -44,6 +45,8 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 10;
 const CONTACT_FREEZE_DURATION = 1000;
+const BOMB_SCORE = 1200;
+const BOMB_RADIUS_CELLS = 0.86;
 const HUD_COLORS = {
   cyan: '#00f3ff',
   lime: '#b8ff4a',
@@ -150,6 +153,12 @@ type Diamond = Point & {
   collected: boolean;
 };
 
+type Bomb = Point & {
+  phase: number;
+  spin: number;
+  destroyed: boolean;
+};
+
 const ENEMY_SCORE: Record<EnemyKind, number> = {
   SHIP: 180,
   DRAGON: 420,
@@ -177,6 +186,7 @@ type Game = {
   protectedTrails: Point[][];
   enemies: Enemy[];
   diamonds: Diamond[];
+  bombs: Bomb[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
@@ -210,7 +220,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'SECTOR' | 'ENEMY' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'ENEMY' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -228,6 +238,7 @@ type Snapshot = {
   direction: Direction;
   enemies: Enemy[];
   diamonds: Diamond[];
+  bombs: Bomb[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
@@ -852,6 +863,103 @@ const drawEnemySpriteWithGlow = (
   context.restore();
 };
 
+const drawCoreReactorCanvas = (
+  context: CanvasRenderingContext2D,
+  bomb: Bomb,
+  cell: number,
+  frame: number,
+) => {
+  const radius = cell * 1.08;
+  const pulse = 1 + Math.sin(bomb.phase) * 0.055;
+  const charge = (Math.sin(bomb.phase * 0.56) + 1) * 0.5;
+
+  context.save();
+  context.translate(bomb.x, bomb.y);
+  context.globalCompositeOperation = 'lighter';
+  context.globalAlpha = 0.1;
+  context.shadowColor = '#f03d36';
+  context.shadowBlur = radius * 0.8;
+  context.fillStyle = '#f03d36';
+  context.beginPath();
+  context.arc(0, 0, radius * (1.2 + charge * 0.12), 0, Math.PI * 2);
+  context.fill();
+
+  context.globalAlpha = 0.72;
+  context.shadowBlur = 7;
+  context.strokeStyle = '#4fd6d4';
+  context.lineWidth = Math.max(1, cell * 0.035);
+  context.beginPath();
+  context.ellipse(0, 0, radius * 1.48, radius * 0.72, bomb.spin + frame * 0.012, 0, Math.PI * 2);
+  context.stroke();
+  context.strokeStyle = '#e66b48';
+  context.beginPath();
+  context.ellipse(0, 0, radius * 0.72, radius * 1.48, -bomb.spin - frame * 0.017, 0, Math.PI * 2);
+  context.stroke();
+
+  context.globalCompositeOperation = 'source-over';
+  context.globalAlpha = 1;
+  context.shadowColor = 'transparent';
+  context.shadowBlur = 0;
+  context.fillStyle = '#080e18';
+  context.strokeStyle = '#5d7180';
+  context.lineWidth = Math.max(1.5, cell * 0.09);
+  context.beginPath();
+  context.arc(0, 0, radius, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  context.save();
+  context.rotate(bomb.spin + frame * 0.012);
+  context.strokeStyle = '#bd5140';
+  context.lineWidth = Math.max(1.5, cell * 0.065);
+  context.setLineDash([radius * 0.52, radius * 0.12, radius * 0.08, radius * 0.1]);
+  context.beginPath();
+  context.arc(0, 0, radius * 0.86, 0, Math.PI * 2);
+  context.stroke();
+  context.setLineDash([]);
+  context.strokeStyle = '#f07c4c';
+  context.lineWidth = Math.max(1.5, cell * 0.055);
+  for (let index = 0; index < 16; index += 1) {
+    const angle = (Math.PI * 2 * index) / 16;
+    const length = radius * (0.16 + charge * 0.04);
+    context.beginPath();
+    context.moveTo(Math.cos(angle) * (radius * 1.12), Math.sin(angle) * (radius * 1.12));
+    context.lineTo(Math.cos(angle) * (radius * 1.12 + length), Math.sin(angle) * (radius * 1.12 + length));
+    context.stroke();
+  }
+  context.restore();
+
+  const coreRadius = radius * 0.36 * pulse;
+  const gradient = context.createRadialGradient(
+    -coreRadius * 0.35,
+    -coreRadius * 0.4,
+    coreRadius * 0.1,
+    0,
+    0,
+    coreRadius,
+  );
+  gradient.addColorStop(0, '#ffe4a6');
+  gradient.addColorStop(0.24, '#ff994c');
+  gradient.addColorStop(0.62, '#f13a2f');
+  gradient.addColorStop(1, '#641322');
+  context.globalCompositeOperation = 'lighter';
+  context.globalAlpha = 0.92;
+  context.shadowColor = '#f03d36';
+  context.shadowBlur = radius * 0.32;
+  context.fillStyle = gradient;
+  context.beginPath();
+  context.arc(0, 0, coreRadius, 0, Math.PI * 2);
+  context.fill();
+  context.globalAlpha = 0.75;
+  context.shadowBlur = 4;
+  context.strokeStyle = '#ffd07b';
+  context.lineWidth = Math.max(1, cell * 0.035);
+  context.beginPath();
+  context.arc(0, 0, coreRadius * 0.68, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+};
+
 const cuttingPoint = (player: Point, direction: Direction, cell: number) => ({
   x: player.x - direction.x * cell * 0.78,
   y: player.y - direction.y * cell * 0.78,
@@ -1089,6 +1197,22 @@ const enemyCollisionCircles = (
   }));
 };
 
+const bombRadius = (cell: number) => cell * BOMB_RADIUS_CELLS;
+const bombVisualRadius = (cell: number) => cell * 1.28;
+
+const bombTouchesSegment = (
+  bomb: Bomb,
+  cell: number,
+  start: Point,
+  end: Point,
+) => distanceToSegment(bomb, start, end) <= bombRadius(cell) + PERIMETER_STROKE_WIDTH * 0.5;
+
+const bombTouchesTrail = (bomb: Bomb, cell: number, trail: Point[]) => (
+  trail.slice(1).some((trailPoint, index) => (
+    bombTouchesSegment(bomb, cell, trail[index], trailPoint)
+  ))
+);
+
 const pointInPolygon = (point: Point, polygon: Point[]) => {
   let inside = false;
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
@@ -1258,6 +1382,17 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     .map((enemyIndex) => enemies[enemyIndex]);
 };
 
+const createBombs = (width: number, height: number, cell: number, level: number): Bomb[] => {
+  if (level !== 2) return [];
+  return [{
+    x: clamp(width * 0.52, cell * 3, width - cell * 3),
+    y: clamp(height * 0.46, cell * 4, height - cell * 4),
+    phase: 0.8,
+    spin: -0.12,
+    destroyed: false,
+  }];
+};
+
 const enemyIsDestroyed = (enemy: Enemy) => enemy.respawnAt === Number.POSITIVE_INFINITY;
 
 const preserveDestroyedEnemies = (enemies: Enemy[], previousEnemies: Enemy[]) => {
@@ -1374,6 +1509,72 @@ const placeEnemiesInOpenSurface = (
     enemy.x = clamp(candidate.x, bounds.left + visualRadius, bounds.right - visualRadius);
     enemy.y = clamp(candidate.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
     occupiedSprites.push(enemySpriteCorners(enemy, cell, enemy.x, enemy.y));
+  });
+};
+
+const placeBombsInOpenSurface = (
+  bombs: Bomb[],
+  enemies: Enemy[],
+  width: number,
+  height: number,
+  cell: number,
+  claimedPolygons: Point[][],
+  protectedTrails: Point[][],
+  activeTrail: Point[],
+  player: Point,
+) => {
+  const bounds = perimeterBounds(width, height, cell);
+  const seeds = [
+    { x: 0.52, y: 0.46 },
+    { x: 0.46, y: 0.34 },
+    { x: 0.66, y: 0.52 },
+    { x: 0.34, y: 0.52 },
+    { x: 0.52, y: 0.68 },
+    { x: 0.7, y: 0.3 },
+    { x: 0.3, y: 0.3 },
+  ];
+  const protectedTrailTouches = (point: Point) => protectedTrails.some((trail) => (
+    trail.slice(1).some((trailPoint, index) => (
+      distanceToSegment(point, trail[index], trailPoint)
+        <= bombRadius(cell) + PERIMETER_STROKE_WIDTH * 0.5
+    ))
+  ));
+
+  bombs.forEach((bomb) => {
+    if (bomb.destroyed) return;
+    const candidates = [
+      { x: bomb.x, y: bomb.y },
+      ...seeds.map((seed) => ({
+        x: bounds.left + (bounds.right - bounds.left) * seed.x,
+        y: bounds.top + (bounds.bottom - bounds.top) * seed.y,
+      })),
+    ];
+    const candidate = candidates.find((point) => {
+      const x = clamp(point.x, bounds.left + bombVisualRadius(cell), bounds.right - bombVisualRadius(cell));
+      const y = clamp(point.y, bounds.top + bombVisualRadius(cell), bounds.bottom - bombVisualRadius(cell));
+      const candidatePoint = { x, y };
+      const clearOfClaimed = !pointInsideClaimedSurface(candidatePoint, claimedPolygons, cell * 0.12);
+      const clearOfProtected = !protectedTrailTouches(candidatePoint);
+      const clearOfActiveTrail = activeTrail.length < 2 || !bombTouchesSegment(
+        { ...bomb, x, y },
+        cell,
+        activeTrail[0],
+        activeTrail[activeTrail.length - 1],
+      );
+      const clearOfPlayer = Math.hypot(x - player.x, y - player.y)
+        > bombVisualRadius(cell) + playerBodyRadius(cell) * 1.8;
+      const clearOfEnemies = enemies
+        .filter((enemy) => !enemyIsDestroyed(enemy))
+        .every((enemy) => (
+          Math.hypot(x - enemy.x, y - enemy.y)
+            > bombVisualRadius(cell) + enemyVisualRadius(enemy, cell) * 0.8
+        ));
+      return clearOfClaimed && clearOfProtected && clearOfActiveTrail && clearOfPlayer && clearOfEnemies;
+    });
+    if (candidate) {
+      bomb.x = clamp(candidate.x, bounds.left + bombVisualRadius(cell), bounds.right - bombVisualRadius(cell));
+      bomb.y = clamp(candidate.y, bounds.top + bombVisualRadius(cell), bounds.bottom - bombVisualRadius(cell));
+    }
   });
 };
 
@@ -1730,6 +1931,99 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         )
       ))}
+      {snapshot.bombs.map((bomb, bombIndex) => {
+        if (bomb.destroyed) return null;
+        const bombRadiusValue = snapshot.cell * 1.08;
+        const pulse = 1 + Math.sin(bomb.phase) * 0.055;
+        const charge = (Math.sin(bomb.phase * 0.56) + 1) * 0.5;
+        const ringRotation = bomb.spin + Date.now() * 0.000012;
+        return (
+          <G key={`bomb-${bombIndex}`} transform={`translate(${bomb.x} ${bomb.y})`}>
+            <Circle
+              cx={0}
+              cy={0}
+              r={bombRadiusValue * (1.2 + charge * 0.12)}
+              fill="#f03d36"
+              opacity={0.08}
+            />
+            <Ellipse
+              cx={0}
+              cy={0}
+              rx={bombRadiusValue * 1.48}
+              ry={bombRadiusValue * 0.72}
+              fill="none"
+              stroke="#4fd6d4"
+              strokeWidth={Math.max(1, snapshot.cell * 0.035)}
+              opacity={0.75}
+              transform={`rotate(${ringRotation * (180 / Math.PI)})`}
+            />
+            <Ellipse
+              cx={0}
+              cy={0}
+              rx={bombRadiusValue * 0.72}
+              ry={bombRadiusValue * 1.48}
+              fill="none"
+              stroke="#e66b48"
+              strokeWidth={Math.max(1, snapshot.cell * 0.035)}
+              opacity={0.75}
+              transform={`rotate(${-ringRotation * (180 / Math.PI)})`}
+            />
+            <Circle
+              cx={0}
+              cy={0}
+              r={bombRadiusValue}
+              fill="#080e18"
+              stroke="#5d7180"
+              strokeWidth={Math.max(1.5, snapshot.cell * 0.09)}
+            />
+            <Circle
+              cx={0}
+              cy={0}
+              r={bombRadiusValue * 0.86}
+              fill="none"
+              stroke="#bd5140"
+              strokeWidth={Math.max(1.5, snapshot.cell * 0.065)}
+              strokeDasharray={`${bombRadiusValue * 0.52} ${bombRadiusValue * 0.12} ${bombRadiusValue * 0.08} ${bombRadiusValue * 0.1}`}
+              transform={`rotate(${ringRotation * (180 / Math.PI)})`}
+            />
+            {Array.from({ length: 16 }, (_, index) => {
+              const angle = (Math.PI * 2 * index) / 16;
+              const innerRadius = bombRadiusValue * 1.12;
+              const outerRadius = innerRadius + bombRadiusValue * (0.16 + charge * 0.04);
+              return (
+                <Line
+                  key={`bomb-charge-${bombIndex}-${index}`}
+                  x1={Math.cos(angle) * innerRadius}
+                  y1={Math.sin(angle) * innerRadius}
+                  x2={Math.cos(angle) * outerRadius}
+                  y2={Math.sin(angle) * outerRadius}
+                  stroke="#f07c4c"
+                  strokeWidth={Math.max(1.5, snapshot.cell * 0.055)}
+                  strokeLinecap="round"
+                  opacity={0.56 + charge * 0.4}
+                  transform={`rotate(${ringRotation * (180 / Math.PI)} 0 0)`}
+                />
+              );
+            })}
+            <Circle
+              cx={0}
+              cy={0}
+              r={bombRadiusValue * 0.36 * pulse}
+              fill="#f13a2f"
+              stroke="#ff9a4c"
+              strokeWidth={Math.max(1.5, snapshot.cell * 0.06)}
+              opacity={0.95}
+            />
+            <Circle
+              cx={-bombRadiusValue * 0.1}
+              cy={-bombRadiusValue * 0.12}
+              r={bombRadiusValue * 0.1}
+              fill="#ffe4a6"
+              opacity={0.7}
+            />
+          </G>
+        );
+      })}
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
         const frame = enemyFrameIndex(enemy);
@@ -1806,6 +2100,7 @@ export default function GameScreen() {
     protectedTrails: [],
     enemies: [],
     diamonds: [],
+    bombs: [],
     particles: [],
     smokePuffs: [],
     smokeAccumulator: 0,
@@ -2115,6 +2410,9 @@ export default function GameScreen() {
       ? g.diamonds.map((diamond) => ({ ...diamond }))
       : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
     const previousEnemies = preserveStats && !resetBoard ? g.enemies : [];
+    const previousBombs = preserveStats && !resetBoard
+      ? g.bombs.map((bomb) => ({ ...bomb }))
+      : [];
     if (!preserveStats) recordBannerShownRef.current = false;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
@@ -2122,6 +2420,16 @@ export default function GameScreen() {
     const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
     const enemies = createEnemies(width, height, cell, previousLevel);
     preserveDestroyedEnemies(enemies, previousEnemies);
+    const bombs = createBombs(width, height, cell, previousLevel);
+    if (previousBombs.length > 0 && bombs.length === previousBombs.length) {
+      bombs.forEach((bomb, index) => {
+        bomb.x = previousBombs[index].x;
+        bomb.y = previousBombs[index].y;
+        bomb.phase = previousBombs[index].phase;
+        bomb.spin = previousBombs[index].spin;
+        bomb.destroyed = previousBombs[index].destroyed;
+      });
+    }
     const respawnPlayer = {
       x: bounds.left + cell,
       y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
@@ -2136,6 +2444,19 @@ export default function GameScreen() {
       [],
       respawnPlayer,
     );
+    if (!(preserveStats && !resetBoard && previousBombs.length > 0)) {
+      placeBombsInOpenSurface(
+        bombs,
+        enemies,
+        width,
+        height,
+        cell,
+        previousClaimedPolygons,
+        previousProtectedTrails,
+        [],
+        respawnPlayer,
+      );
+    }
 
     gameRef.current = {
       ...g,
@@ -2153,6 +2474,7 @@ export default function GameScreen() {
       protectedTrails: previousProtectedTrails,
       enemies,
       diamonds: previousDiamonds,
+      bombs,
       particles: [],
       smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
         ? enemies
@@ -2280,6 +2602,41 @@ export default function GameScreen() {
       g.respawnAt = now + CONTACT_FREEZE_DURATION;
       playShieldLossExplosion();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    };
+
+    const neutralizeBomb = (g: Game, bomb: Bomb) => {
+      if (bomb.destroyed) return;
+      bomb.destroyed = true;
+      g.score += BOMB_SCORE;
+      enqueueBanner({ kind: 'BOMB', points: BOMB_SCORE });
+      for (let index = 0; index < 120; index += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 35 + Math.random() * 190;
+        g.particles.push({
+          x: bomb.x,
+          y: bomb.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 0.45 + Math.random() * 0.65,
+          size: 0.8 + Math.random() * 2.8,
+          color: ['#ffffff', '#ffb02e', '#ff5500', '#00f3ff'][index % 4],
+          streak: index % 3 === 0,
+        });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    };
+
+    const checkBombContact = (g: Game, now: number) => {
+      if (g.status !== 'PLAYING') return;
+      const playerContactRadius = bombRadius(g.cell) + playerBodyRadius(g.cell);
+      const bomb = g.bombs.find((candidate) => (
+        !candidate.destroyed
+        && (
+          Math.hypot(candidate.x - g.player.x, candidate.y - g.player.y) <= playerContactRadius
+          || bombTouchesTrail(candidate, g.cell, g.trail)
+        )
+      ));
+      if (bomb) explode(g, now);
     };
 
     const capture = (g: Game) => {
@@ -2926,6 +3283,14 @@ export default function GameScreen() {
               g.totalPlayableArea,
               g.claimedPolygons.reduce((area, polygon) => area + polygonArea(polygon), 0),
             );
+            g.bombs.forEach((bomb) => {
+              if (
+                !bomb.destroyed
+                && captureRegionsOverlapCircle(bomb, bombRadius(g.cell), completedPolygons)
+              ) {
+                neutralizeBomb(g, bomb);
+              }
+            });
             g.diamonds.forEach((diamond) => {
               if (
                 diamond.collected
@@ -3040,6 +3405,13 @@ export default function GameScreen() {
           next.x = clamp(next.x, outerBounds.left, outerBounds.right);
           next.y = clamp(next.y, outerBounds.top, outerBounds.bottom);
           g.player = next;
+           const movementHitBomb = g.bombs.some((bomb) => (
+             !bomb.destroyed && bombTouchesSegment(bomb, g.cell, previous, g.player)
+           ));
+           if (movementHitBomb) {
+             explode(g, now);
+             break;
+           }
           if (activeTrail) {
             g.trailScoreAccumulator += Math.hypot(g.player.x - previous.x, g.player.y - previous.y);
             const trailPoints = Math.floor(g.trailScoreAccumulator / 8);
@@ -3102,6 +3474,8 @@ export default function GameScreen() {
         }
       }
 
+      checkBombContact(g, now);
+      if (g.status !== 'PLAYING') return;
       moveEnemies(g, dt, now);
       if (g.status !== 'PLAYING') return;
 
@@ -3357,6 +3731,10 @@ export default function GameScreen() {
            context.restore();
          });
        }
+       g.bombs.forEach((bomb) => {
+         if (bomb.destroyed) return;
+         drawCoreReactorCanvas(context, bomb, g.cell, g.frame);
+       });
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
@@ -3446,6 +3824,7 @@ export default function GameScreen() {
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
+              bombs: g.bombs.map((bomb) => ({ ...bomb })),
               particles: g.particles.slice(-200),
              // Keep native SVG state immutable between frames. The game loop
              // mutates live puff objects in place, which can otherwise leave
@@ -3547,6 +3926,8 @@ export default function GameScreen() {
                   ? styles.recordBanner
                   : banner.kind === 'DIAMOND'
                     ? styles.diamondBanner
+                    : banner.kind === 'BOMB'
+                      ? styles.bombBanner
                     : banner.kind === 'SECTOR'
                       ? styles.sectorBanner
                       : banner.kind === 'CLEAN'
@@ -3569,6 +3950,8 @@ export default function GameScreen() {
                   ? 'NOUVEAU RECORD !'
                   : banner.kind === 'DIAMOND'
                     ? 'BONUS DIAMANT CAPTURÉ'
+                    : banner.kind === 'BOMB'
+                      ? 'BOMBE NEUTRALISÉE'
                     : banner.kind === 'SECTOR'
                       ? 'SECTEUR TERMINÉ'
                         : banner.kind === 'CLEAN'
@@ -3582,6 +3965,8 @@ export default function GameScreen() {
                   ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
                   : banner.kind === 'DIAMOND'
                     ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
+                    : banner.kind === 'BOMB'
+                      ? `+${banner.points ?? BOMB_SCORE} POINTS`
                     : banner.kind === 'SECTOR'
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
                       : banner.kind === 'CLEAN'
@@ -3906,6 +4291,10 @@ const styles = StyleSheet.create({
   diamondBanner: {
     borderColor: HUD_COLORS.cyan,
     backgroundColor: 'rgba(0, 24, 34, 0.56)',
+  },
+  bombBanner: {
+    borderColor: '#ff6a22',
+    backgroundColor: 'rgba(48, 12, 4, 0.62)',
   },
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
