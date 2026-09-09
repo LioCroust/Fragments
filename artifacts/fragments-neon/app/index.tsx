@@ -1834,7 +1834,7 @@ export default function GameScreen() {
         }),
         Animated.delay(1000),
         Animated.timing(bannerTranslateX, {
-          toValue: -21,
+          toValue: -30,
           duration: 72,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
