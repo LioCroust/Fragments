@@ -2476,7 +2476,7 @@ const styles = StyleSheet.create({
   },
   arena: {
     position: 'absolute',
-    top: 168,
+    top: 174,
     left: 0,
     right: 0,
     bottom: 4,
