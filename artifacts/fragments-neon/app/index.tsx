@@ -2015,18 +2015,15 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
 const DebugSectorSelector = ({
   currentSector,
   onSelect,
-  onLayout,
   bottomInset,
 }: {
   currentSector: number;
   onSelect: (sector: number) => void;
-  onLayout: (event: LayoutChangeEvent) => void;
   bottomInset: number;
 }) => {
   if (!DEBUG_SECTOR_SELECTOR_ENABLED) return null;
   return (
-    <View style={[styles.debugSectorSelector, { bottom: bottomInset }]} onLayout={onLayout}>
-      <Text style={styles.debugSectorLabel}>TEST SECTEUR</Text>
+    <View style={[styles.debugSectorSelector, { bottom: bottomInset }]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -2132,7 +2129,6 @@ export default function GameScreen() {
   const bannerQueueRef = useRef<Banner[]>([]);
   const bannerAnimatingRef = useRef(false);
   const bannerSequenceRef = useRef(0);
-  const debugSectorSelectorBoundsRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
@@ -2525,20 +2521,6 @@ export default function GameScreen() {
     resetGame(true, true);
   }, [resetGame]);
 
-  const handleDebugSectorSelectorLayout = useCallback((event: LayoutChangeEvent) => {
-    debugSectorSelectorBoundsRef.current = event.nativeEvent.layout;
-  }, []);
-
-  const isDebugSectorSelectorTouch = (x: number, y: number) => {
-    if (!DEBUG_SECTOR_SELECTOR_ENABLED) return false;
-    const bounds = debugSectorSelectorBoundsRef.current;
-    return bounds.width > 0
-      && x >= bounds.x
-      && x <= bounds.x + bounds.width
-      && y >= bounds.y
-      && y <= bounds.y + bounds.height;
-  };
-
   const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width <= 0 || height <= 0) return;
@@ -2550,12 +2532,8 @@ export default function GameScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: (_, gesture) => (
-        !isDebugSectorSelectorTouch(gesture.x0, gesture.y0)
-      ),
-      onMoveShouldSetPanResponder: (_, gesture) => (
-        !isDebugSectorSelectorTouch(gesture.x0, gesture.y0)
-      ),
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
         audioUnlockedRef.current = true;
       },
