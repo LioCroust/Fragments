@@ -60,7 +60,9 @@ const sectorTransitionVictorySource = require('../assets/audio/sector-transition
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
+const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
+const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
@@ -1389,6 +1391,13 @@ const NativeArenaStatic = React.memo(({
   protectedTrailCount,
 }: NativeArenaStaticProps) => {
   const isSectorTwo = level === 2;
+  const backgroundSource = level === 1
+    ? sector1SpaceBackgroundSource
+    : level === 2
+      ? sector2SpaceBackgroundSource
+      : sector3SpaceBackgroundSource;
+  const gridOpacity = level === 1 ? 0.11 : 0.055;
+  const gridColor = level === 1 ? '#00f3ff' : '#746bff';
   const gridLines = [];
   for (let x = 0; x <= COLS; x += 1) {
     gridLines.push(
@@ -1398,8 +1407,8 @@ const NativeArenaStatic = React.memo(({
         y1={0}
         x2={x * cell}
         y2={height}
-        stroke="#00f3ff"
-        opacity={0.11}
+        stroke={gridColor}
+        opacity={isSectorTwo ? 0 : gridOpacity}
         strokeWidth={0.6}
       />,
     );
@@ -1412,8 +1421,8 @@ const NativeArenaStatic = React.memo(({
         y1={y * cell}
         x2={width}
         y2={y * cell}
-        stroke="#00f3ff"
-        opacity={0.11}
+        stroke={gridColor}
+        opacity={isSectorTwo ? 0 : gridOpacity}
         strokeWidth={0.6}
       />,
     );
@@ -1421,18 +1430,14 @@ const NativeArenaStatic = React.memo(({
     const bounds = perimeterBounds(width, height, cell);
   return (
     <>
-      {isSectorTwo ? (
-        <SvgImage
-          href={sector2SpaceBackgroundSource}
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          preserveAspectRatio="xMidYMid slice"
-        />
-      ) : (
-        <Rect width={width} height={height} fill="#000000" />
-      )}
+      <SvgImage
+        href={backgroundSource}
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        preserveAspectRatio="xMidYMid slice"
+      />
       <Rect
         x={bounds.left}
         y={bounds.top}
@@ -1748,7 +1753,7 @@ export default function GameScreen() {
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
   const shipSmokeSpriteImageRef = useRef<any>(null);
-  const sector2SpaceBackgroundImageRef = useRef<any>(null);
+  const sectorBackgroundImageRefs = useRef<Record<number, any>>({});
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
   const recordBannerShownRef = useRef(false);
@@ -1979,13 +1984,19 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
-    const resolvedSector2Background = (RNImage as any).resolveAssetSource?.(sector2SpaceBackgroundSource);
-    const sector2BackgroundImage = new (globalThis as any).Image();
-    sector2BackgroundImage.decoding = 'async';
-    sector2BackgroundImage.onload = () => {
-      if (!cancelled) sector2SpaceBackgroundImageRef.current = sector2BackgroundImage;
-    };
-    sector2BackgroundImage.src = resolvedSector2Background?.uri ?? sector2SpaceBackgroundSource;
+    [
+      [1, sector1SpaceBackgroundSource],
+      [2, sector2SpaceBackgroundSource],
+      [3, sector3SpaceBackgroundSource],
+    ].forEach(([level, source]) => {
+      const resolvedBackground = (RNImage as any).resolveAssetSource?.(source);
+      const backgroundImage = new (globalThis as any).Image();
+      backgroundImage.decoding = 'async';
+      backgroundImage.onload = () => {
+        if (!cancelled) sectorBackgroundImageRefs.current[level] = backgroundImage;
+      };
+      backgroundImage.src = resolvedBackground?.uri ?? source;
+    });
 
     return () => {
       cancelled = true;
@@ -1994,7 +2005,7 @@ export default function GameScreen() {
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
       shipSmokeSpriteImageRef.current = null;
-      sector2SpaceBackgroundImageRef.current = null;
+      sectorBackgroundImageRefs.current = {};
     };
   }, []);
 
@@ -3024,8 +3035,8 @@ export default function GameScreen() {
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, g.width, g.height);
       context.globalAlpha = 1;
-      if (g.level === 2 && sector2SpaceBackgroundImageRef.current) {
-        const background = sector2SpaceBackgroundImageRef.current;
+      const background = sectorBackgroundImageRefs.current[g.level];
+      if (background) {
         const sourceWidth = background.naturalWidth || background.width;
         const sourceHeight = background.naturalHeight || background.height;
         const scale = Math.max(g.width / sourceWidth, g.height / sourceHeight);
@@ -3065,7 +3076,9 @@ export default function GameScreen() {
        context.globalAlpha = 1;
        const bounds = perimeterBounds(g.width, g.height, g.cell);
        if (g.level !== 2) {
-         context.strokeStyle = 'rgba(0,243,255,0.11)';
+         context.strokeStyle = g.level === 1
+           ? 'rgba(0,243,255,0.11)'
+           : 'rgba(116,107,255,0.055)';
          context.lineWidth = 0.65;
           for (let x = 0; x <= COLS; x += 1) {
            context.beginPath();

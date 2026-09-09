@@ -206,3 +206,31 @@ mtime_ms = 1788974345637
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/6077be54-531f-467e-a310-431fb3722fd8/ccc0dbe2-4e11-489b-9d80-cb1582e2fc79"
 storage_version_token = "1788975259011192"
 content_type = "image/png"
+
+[[outputs]]
+id = "BRCDfh_qqK9_q_DU9LVMW"
+uri = "file://artifacts/fragments-neon/assets/images/sector-1-space-background.png"
+type = "image"
+title = "Fond spatial — secteur 1"
+description = "Fond orbital sombre et calme, avec anneaux de navigation très discrets et espace central dégagé."
+logical_id = "9dc86420-9367-49b3-8968-092977c5d6fa"
+content_hash = "sha256:6490e16288ea043c1c047d54ccda8631bf1c355e504ebca272f51876a57e40ed"
+size = 1246499
+mtime_ms = 1788975583377
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/9dc86420-9367-49b3-8968-092977c5d6fa/8f48c6fc-6a2a-42b8-8564-5ab6676eb09e"
+storage_version_token = "1788975699654247"
+content_type = "image/png"
+
+[[outputs]]
+id = "PalG3oQSBbuiZOm4L8I_9"
+uri = "file://artifacts/fragments-neon/assets/images/sector-3-space-background.png"
+type = "image"
+title = "Fond spatial — secteur 3"
+description = "Fond spatial avancé, sombre, violet et ambré, avec structure de nébuleuse plus dense et centre lisible."
+logical_id = "22d83908-1429-4d19-9baf-da4a7e35dd6c"
+content_hash = "sha256:cb22fa62506b4e5af4e022279faa82f4e39899b3f40267236be2190335208ea2"
+size = 1220580
+mtime_ms = 1788975583080
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/22d83908-1429-4d19-9baf-da4a7e35dd6c/3409c96a-aaf0-4053-bcc1-67301b943392"
+storage_version_token = "1788975700214052"
+content_type = "image/png"
