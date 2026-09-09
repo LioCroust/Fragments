@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, G, Image as SvgImage, Line, Polygon, Polyline, Rect } from 'react-native-svg';
-import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -1191,13 +1191,37 @@ export default function GameScreen() {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
+  const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
+    pickupChimePlayer.muted = false;
     pickupChimePlayer.volume = 0.78;
-    void setAudioModeAsync({
+    audioSessionReadyRef.current = setAudioModeAsync({
+      allowsRecording: false,
       playsInSilentMode: true,
-      interruptionMode: 'mixWithOthers',
-    }).catch(() => undefined);
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
+      interruptionMode: 'duckOthers',
+    })
+      .then(() => setIsAudioActiveAsync(true))
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to initialize native audio session', error);
+      });
+  }, [pickupChimePlayer]);
+
+  const playPickupChime = useCallback(() => {
+    void audioSessionReadyRef.current.then(async () => {
+      pickupChimePlayer.muted = false;
+      pickupChimePlayer.volume = 0.78;
+      try {
+        await pickupChimePlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      pickupChimePlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play pickup chime', error);
+    });
   }, [pickupChimePlayer]);
 
   useEffect(() => {
@@ -1996,9 +2020,7 @@ export default function GameScreen() {
           g.scanY = 0;
           g.pendingCapturePolygons = [];
           g.pendingCaptureArea = 0;
-          void pickupChimePlayer.seekTo(0)
-            .catch(() => undefined)
-            .then(() => pickupChimePlayer.play());
+          playPickupChime();
         }
         return;
       }
@@ -2342,7 +2364,7 @@ export default function GameScreen() {
 
     animationFrame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrame);
-  }, [resetGame, pickupChimePlayer]);
+  }, [resetGame, playPickupChime]);
 
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
@@ -2536,6 +2558,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
+    marginTop: 6,
     minHeight: 86,
   },
   hudCard: {
