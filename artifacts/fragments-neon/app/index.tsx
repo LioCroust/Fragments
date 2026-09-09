@@ -18,7 +18,7 @@ import {
 } from '../components/captureGeometry';
 
 const COLS = 12;
-const PERIMETER_HORIZONTAL_INSET_CELLS = 1.6;
+const PERIMETER_HORIZONTAL_INSET_CELLS = 0.65;
 const PERIMETER_VERTICAL_INSET_CELLS = 2;
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
@@ -1428,7 +1428,7 @@ export default function GameScreen() {
     const spawnPointAfterBurst = (g: Game, enemy: Enemy) => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
       const visualRadius = enemyVisualRadius(enemy, g.cell);
-      const candidateSeeds = [
+      const preferredSeeds = [
         { x: 0.5, y: 0.3 },
         { x: 0.28, y: 0.3 },
         { x: 0.72, y: 0.3 },
@@ -1439,11 +1439,17 @@ export default function GameScreen() {
         { x: 0.28, y: 0.7 },
         { x: 0.72, y: 0.7 },
       ];
-      const candidates = candidateSeeds.map((seed) => ({
+      const gridSeeds = Array.from({ length: 9 }, (_, row) => (
+        Array.from({ length: 9 }, (_, column) => ({
+          x: (column + 0.5) / 9,
+          y: (row + 0.5) / 9,
+        }))
+      )).flat();
+      const candidates = [...preferredSeeds, ...gridSeeds].map((seed) => ({
         x: bounds.left + (bounds.right - bounds.left) * seed.x,
         y: bounds.top + (bounds.bottom - bounds.top) * seed.y,
       }));
-      const candidateIsUsable = (point: Point, requireUnsecured: boolean) => {
+      const candidateIsUsable = (point: Point) => {
         const x = clamp(point.x, bounds.left + visualRadius, bounds.right - visualRadius);
         const y = clamp(point.y, bounds.top + visualRadius, bounds.bottom - visualRadius);
         const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
@@ -1454,24 +1460,17 @@ export default function GameScreen() {
         const noClaimedPolygonOverlap = g.claimedPolygons.every((polygon) => (
           !polygonsIntersect(spriteCorners, polygon)
         ));
-        if (requireUnsecured && (!outsideClaimedSurface || !noClaimedPolygonOverlap)) return null;
+        if (!outsideClaimedSurface || !noClaimedPolygonOverlap) return null;
         return { x, y };
       };
 
-      // Respawns belong in the dark, unsecured field. Only fall back to a
-      // claimed location if the entire remaining field is secured.
       const candidate = candidates
-        .map((point) => candidateIsUsable(point, true))
-        .find((point): point is Point => point !== null)
-        ?? candidates
-          .map((point) => candidateIsUsable(point, false))
-          .find((point): point is Point => point !== null)
-        ?? {
-          x: clamp(candidates[0].x, bounds.left + visualRadius, bounds.right - visualRadius),
-          y: clamp(candidates[0].y, bounds.top + visualRadius, bounds.bottom - visualRadius),
-        };
+        .map(candidateIsUsable)
+        .find((point): point is Point => point !== null);
+      if (!candidate) return false;
       enemy.x = candidate.x;
       enemy.y = candidate.y;
+      return true;
     };
 
     const burstEnemy = (g: Game, enemy: Enemy, now: number) => {
@@ -1495,7 +1494,6 @@ export default function GameScreen() {
       enemy.respawnAt = now + 900;
       enemy.vx = 0;
       enemy.vy = 0;
-      spawnPointAfterBurst(g, enemy);
     };
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
@@ -1516,6 +1514,10 @@ export default function GameScreen() {
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         if (enemy.respawnAt > 0) {
+          if (!spawnPointAfterBurst(g, enemy)) {
+            enemy.respawnAt = now + 250;
+            return;
+          }
           enemy.respawnAt = 0;
           enemy.blockedTime = 0;
           enemy.edgeTurnTimer = 0;
@@ -2373,7 +2375,7 @@ export default function GameScreen() {
   };
 
   const zoneProgress = clamp(hud.capture / LEVEL_CAPTURE_TARGET, 0, 1);
-  const shieldSegments = Array.from({ length: hud.shields });
+  const shieldSegments = Array.from({ length: 3 });
 
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
@@ -2385,12 +2387,6 @@ export default function GameScreen() {
           accessibilityLabel="Intérieur du cockpit Prism Warbird vu depuis le siège du pilote"
         />
         <View style={styles.cockpitShade} />
-        <View style={styles.cockpitBottomRail}>
-          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.cyan }]} />
-          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.lime }]} />
-          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.amber }]} />
-          <View style={[styles.cockpitRailLight, { backgroundColor: HUD_COLORS.magenta }]} />
-        </View>
       </View>
 
       <View style={styles.arena} onLayout={handleArenaLayout} testID="game-arena">
@@ -2438,7 +2434,9 @@ export default function GameScreen() {
                   key={`shield-${index}`}
                   style={[
                     styles.shieldSegment,
-                    { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index % 3] },
+                    index < hud.shields
+                      ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
+                      : styles.shieldSegmentInactive,
                   ]}
                 />
               ))}
@@ -2466,11 +2464,6 @@ export default function GameScreen() {
         {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
 
-      <View style={[styles.slowStatus, { bottom: Math.max(insets.bottom, 14) + 18 }]}>
-        <Text style={styles.slowStatusKicker}>MODE DE DÉCOUPE</Text>
-        <Text style={styles.slowStatusLabel}>CHALUMEAU SLOW</Text>
-        <Text style={styles.slowStatusHint}>PARTICULES ACTIVES · BONUS DE SCORE</Text>
-      </View>
     </View>
   );
 }
@@ -2486,7 +2479,7 @@ const styles = StyleSheet.create({
     top: 168,
     left: 0,
     right: 0,
-    bottom: 76,
+    bottom: 4,
     backgroundColor: '#000000',
     overflow: 'hidden',
   },
@@ -2509,26 +2502,6 @@ const styles = StyleSheet.create({
   cockpitShade: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.34)',
-  },
-  cockpitBottomRail: {
-    position: 'absolute',
-    left: 34,
-    right: 34,
-    bottom: 6,
-    height: 5,
-    flexDirection: 'row',
-    gap: 5,
-    padding: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 189, 98, 0.58)',
-    backgroundColor: 'rgba(5, 5, 10, 0.88)',
-  },
-  cockpitRailLight: {
-    flex: 1,
-    height: 1,
-    shadowColor: '#ffffff',
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
   },
   hud: {
     position: 'absolute',
@@ -2636,12 +2609,16 @@ const styles = StyleSheet.create({
     minHeight: 5,
   },
   shieldSegment: {
-    flex: 1,
+    width: 16,
     height: 5,
     borderRadius: 1,
     shadowColor: '#ffffff',
     shadowOpacity: 0.85,
     shadowRadius: 4,
+  },
+  shieldSegmentInactive: {
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
   },
   zoneModule: {
     alignItems: 'center',
@@ -2704,35 +2681,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 11,
     letterSpacing: 1.8,
-  },
-  slowStatus: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    minHeight: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: '#ff5500',
-    backgroundColor: 'rgba(255,85,0,0.08)',
-  },
-  slowStatusKicker: {
-    color: '#9ba0b3',
-    fontFamily: 'Inter_700Bold',
-    fontSize: 8,
-    letterSpacing: 1.2,
-  },
-  slowStatusLabel: {
-    color: '#ff8a00',
-    fontFamily: 'Inter_700Bold',
-    fontSize: 16,
-    letterSpacing: 2,
-  },
-  slowStatusHint: {
-    color: '#9ba0b3',
-    fontFamily: 'Inter_500Medium',
-    fontSize: 8,
-    letterSpacing: 0.7,
   },
 });
