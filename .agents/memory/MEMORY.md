@@ -11,3 +11,4 @@
 - [Capture fill visual rules](capture-fill-visual-rules.md) — Use 7%/15% cyan, animate only a white scan line, and always commit the smallest region without exceptions.
 - [Claimed-surface exit contact](claimed-exit-contact.md) — Start cuts leaving captured areas at the exact boundary intersection, never at an interior animation frame.
 - [Fill chime device validation](fill-chime-device-validation.md) — Confirmed on Android Expo Go; iOS silent-mode behavior still needs a real-device check.
+- [Mockup PNG cache](mockup-png-cache.md) — Restart the mockup preview workflow after replacing a public PNG when screenshots still show the previous asset.
