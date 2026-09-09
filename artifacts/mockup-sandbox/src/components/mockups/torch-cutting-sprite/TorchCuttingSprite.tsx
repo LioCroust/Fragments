@@ -45,17 +45,19 @@ function Spark({
 function TorchHead({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`torch-head ${compact ? "torch-head--compact" : ""}`}>
+      <div className="torch-body" />
+      <div className="torch-grip" />
       <div className="torch-nozzle" />
-      <div className="torch-core" />
-      <div className="torch-ring" />
-      <div className="torch-glow" />
+      <div className="torch-flame" />
+      <div className="torch-fusion" />
+      <div className="torch-heat" />
       <div className="torch-haze haze-one" />
       <div className="torch-haze haze-two" />
-      <Spark x={22} y={10} length={20} angle={-38} delay={0.1} color="#fff5c7" />
-      <Spark x={35} y={78} length={15} angle={28} delay={0.4} />
-      <Spark x={50} y={6} length={11} angle={-64} delay={0.65} color="#ffe19b" />
-      <Spark x={56} y={80} length={23} angle={18} delay={0.85} color="#ff6b22" />
-      <Spark x={12} y={62} length={12} angle={160} delay={0.95} color="#ffd36e" />
+      <Spark x={35} y={48} length={20} angle={-154} delay={0.1} color="#fff5c7" />
+      <Spark x={25} y={68} length={15} angle={158} delay={0.4} />
+      <Spark x={49} y={52} length={11} angle={-136} delay={0.65} color="#ffe19b" />
+      <Spark x={18} y={58} length={23} angle={142} delay={0.85} color="#ff6b22" />
+      <Spark x={43} y={76} length={12} angle={166} delay={0.95} color="#ffd36e" />
     </div>
   );
 }
@@ -226,12 +228,12 @@ export function TorchCuttingSprite() {
           position: absolute;
           left: 54%;
           top: 50%;
-          width: 86px;
-          height: 16px;
+          width: 62px;
+          height: 5px;
           transform: translate(-50%, -50%);
-          border-radius: 50%;
-          background: rgba(255, 104, 34, .72);
-          filter: blur(8px);
+          border-radius: 80%;
+          background: linear-gradient(90deg, transparent, #fff0ae 35%, #ff6b20 68%, transparent);
+          filter: blur(2px);
           animation: hotspot 1.9s ease-in-out infinite;
         }
 
@@ -263,18 +265,18 @@ export function TorchCuttingSprite() {
 
         .torch-anchor {
           position: absolute;
-          left: 51%;
-          top: calc(58% - 30px);
+          left: 61%;
+          top: calc(58% - 80px);
           z-index: 9;
-          width: 110px;
-          height: 70px;
+          width: 96px;
+          height: 92px;
           transform: translateX(-50%);
         }
 
         .torch-head {
           position: relative;
-          width: 110px;
-          height: 70px;
+          width: 96px;
+          height: 92px;
           filter: drop-shadow(0 0 5px rgba(255, 119, 41, .9));
           animation: torchJitter .12s steps(2) infinite;
         }
@@ -284,83 +286,121 @@ export function TorchCuttingSprite() {
           transform-origin: center;
         }
 
+        .torch-body {
+          position: absolute;
+          left: 8px;
+          top: 8px;
+          width: 55px;
+          height: 27px;
+          border: 2px solid #b97845;
+          border-radius: 5px 10px 4px 4px;
+          transform: skewX(-17deg);
+          background:
+            linear-gradient(180deg, rgba(246, 184, 105, .68), transparent 25%),
+            linear-gradient(180deg, #5a4435, #17191a 67%, #33251e);
+          box-shadow: inset 0 0 0 1px rgba(255, 231, 165, .18), 0 0 8px rgba(255, 102, 29, .28);
+        }
+
+        .torch-body::after {
+          content: "";
+          position: absolute;
+          right: 7px;
+          top: 7px;
+          width: 12px;
+          height: 8px;
+          border: 1px solid #e8ae65;
+          border-radius: 2px;
+          background: #2b2520;
+          box-shadow: inset 0 0 4px #ff983a;
+        }
+
+        .torch-grip {
+          position: absolute;
+          left: 14px;
+          top: 29px;
+          width: 44px;
+          height: 17px;
+          border: 1px solid #8b5a3a;
+          border-radius: 3px;
+          transform: skewX(-17deg);
+          background: repeating-linear-gradient(90deg, #1b1c1b 0 6px, #8b5433 7px 8px);
+          box-shadow: 0 3px 5px rgba(0, 0, 0, .64);
+        }
+
         .torch-nozzle {
           position: absolute;
-          left: 7px;
-          top: 29px;
-          width: 52px;
-          height: 13px;
-          border: 2px solid #d28c52;
-          border-right: 0;
-          border-radius: 8px 0 0 8px;
-          transform: skewX(-19deg);
-          background: linear-gradient(#554034, #1b1919);
-          box-shadow: inset 0 2px #f0bd75, 0 0 10px rgba(255, 120, 37, .34);
+          left: 43px;
+          top: 36px;
+          width: 18px;
+          height: 47px;
+          border: 2px solid #c5874c;
+          border-top: 0;
+          border-radius: 2px 2px 8px 8px;
+          transform: skewX(-6deg);
+          background: linear-gradient(90deg, #211d1a, #a76335 48%, #30211c);
+          box-shadow: inset 2px 0 rgba(255, 222, 141, .24), 0 0 7px rgba(255, 97, 24, .35);
         }
 
         .torch-nozzle::after {
           content: "";
           position: absolute;
-          right: -10px;
-          top: 2px;
+          left: 4px;
+          bottom: -5px;
+          width: 7px;
+          height: 8px;
+          border-radius: 1px 1px 4px 4px;
+          background: #f3bf73;
+          box-shadow: 0 0 5px #fff0bd, 0 0 15px #ff7c25;
+        }
+
+        .torch-flame {
+          position: absolute;
+          left: 46px;
+          top: 67px;
           width: 12px;
-          height: 6px;
-          border-radius: 50%;
-          background: #fff2c2;
-          box-shadow: 0 0 8px #fff, 0 0 21px #ff8c2d;
+          height: 19px;
+          clip-path: polygon(50% 100%, 0 0, 100% 0);
+          background: linear-gradient(180deg, #fffde1, #ffffff 23%, #ffca62 59%, #ff5b1b);
+          filter: blur(.45px) drop-shadow(0 0 5px #fff2ae);
+          animation: flamePulse .25s ease-in-out infinite alternate;
         }
 
-        .torch-core {
+        .torch-fusion {
           position: absolute;
-          left: 47px;
-          top: 30px;
-          width: 35px;
-          height: 9px;
+          left: 31px;
+          top: 83px;
+          width: 43px;
+          height: 7px;
           border-radius: 50%;
-          background: linear-gradient(90deg, #fff9d1 0%, #fff 30%, #ffbd51 70%, transparent);
+          background: linear-gradient(90deg, transparent, #ff6a20 16%, #fff0b4 49%, #ff6a20 82%, transparent);
           filter: blur(1px);
-          animation: arcPulse .38s ease-in-out infinite alternate;
+          box-shadow: 0 0 7px #ff6a20, 0 0 15px rgba(255, 98, 22, .75);
+          animation: fusionWeld .42s ease-in-out infinite alternate;
         }
 
-        .torch-ring {
+        .torch-heat {
           position: absolute;
-          left: 42px;
-          top: 19px;
-          width: 34px;
-          height: 32px;
-          border: 2px solid rgba(255, 148, 44, .82);
-          border-left-color: rgba(255, 236, 147, .92);
-          border-radius: 50%;
-          transform: rotate(-22deg);
-          box-shadow: 0 0 9px rgba(255, 122, 27, .9), inset 0 0 9px rgba(255, 92, 18, .48);
-          animation: ringSpin .72s linear infinite;
-        }
-
-        .torch-glow {
-          position: absolute;
-          left: 40px;
-          top: 14px;
-          width: 54px;
-          height: 44px;
-          border-radius: 50%;
-          background: radial-gradient(ellipse, rgba(255, 228, 140, .48), rgba(255, 82, 16, .22) 44%, transparent 72%);
-          filter: blur(6px);
-          animation: glowPulse .45s ease-in-out infinite alternate;
+          left: 22px;
+          top: 73px;
+          width: 58px;
+          height: 21px;
+          background: linear-gradient(90deg, transparent, rgba(255, 88, 22, .34), rgba(255, 190, 92, .38), rgba(255, 88, 22, .22), transparent);
+          filter: blur(8px);
+          animation: heatShimmer .55s ease-in-out infinite alternate;
         }
 
         .torch-haze {
           position: absolute;
-          left: 8px;
-          width: 70px;
-          height: 28px;
-          border-radius: 50%;
-          border-top: 2px solid rgba(255, 148, 71, .38);
+          left: 20px;
+          width: 45px;
+          height: 12px;
+          border-top: 1px solid rgba(255, 148, 71, .32);
           filter: blur(2px);
-          opacity: .5;
+          opacity: .4;
         }
 
-        .haze-one { top: 10px; transform: rotate(-14deg); animation: hazeFloat 1.5s ease-in-out infinite; }
-        .haze-two { top: 41px; transform: rotate(13deg); animation: hazeFloat 1.9s ease-in-out infinite reverse; }
+        .haze-one { top: 58px; transform: rotate(-18deg); animation: hazeFloat 1.5s ease-in-out infinite; }
+        .haze-two { top: 68px; transform: rotate(14deg); animation: hazeFloat 1.9s ease-in-out infinite reverse; }
 
         .spark {
           position: absolute;
@@ -552,14 +592,14 @@ export function TorchCuttingSprite() {
           0%, 100% { transform: translate(0, 0) rotate(-1deg); }
           50% { transform: translate(1px, -1px) rotate(1deg); }
         }
-        @keyframes arcPulse { from { opacity: .72; transform: scaleX(.8); } to { opacity: 1; transform: scaleX(1.14); } }
-        @keyframes ringSpin { to { transform: rotate(338deg); } }
-        @keyframes glowPulse { from { opacity: .66; transform: scale(.84); } to { opacity: 1; transform: scale(1.14); } }
+        @keyframes flamePulse { from { opacity: .66; transform: scaleX(.72) scaleY(.85); } to { opacity: 1; transform: scaleX(1.16) scaleY(1.08); } }
+        @keyframes fusionWeld { from { opacity: .62; transform: scaleX(.78); } to { opacity: 1; transform: scaleX(1.1); } }
+        @keyframes heatShimmer { from { opacity: .48; transform: translateX(-3px); } to { opacity: .9; transform: translateX(3px); } }
         @keyframes hazeFloat { 0%, 100% { transform: translate(0, 0) rotate(-14deg); opacity: .28; } 50% { transform: translate(8px, -8px) rotate(4deg); opacity: .68; } }
         @keyframes sparkFly {
           0% { opacity: 0; transform: translate(0, 0) scaleX(.45) rotate(var(--spark-angle)); }
           18% { opacity: 1; }
-          100% { opacity: 0; transform: translate(26px, -25px) scaleX(1) rotate(var(--spark-angle)); }
+          100% { opacity: 0; transform: translate(-28px, 23px) scaleX(1) rotate(var(--spark-angle)); }
         }
         @keyframes hotspot { 0%, 100% { opacity: .6; transform: translate(-50%, -50%) scaleX(.8); } 50% { opacity: 1; transform: translate(-50%, -50%) scaleX(1.2); } }
         @keyframes cooling { 0% { opacity: .8; transform: scaleX(1); } 100% { opacity: 0; transform: scaleX(.45); } }
@@ -570,8 +610,8 @@ export function TorchCuttingSprite() {
       <div className="eyebrow"><i /> Fragments Neon / FX Lab / Trait rouge</div>
       <h1>Prism Torch — sprite de découpe</h1>
       <p className="intro">
-        Le chalumeau reste collé au trait rouge derrière le drone : l&apos;arc découpe,
-        les étincelles partent vers l&apos;arrière, puis refroidissent sans laisser de fumée persistante.
+        La buse mécanique reste collée à l&apos;arrière du drone et touche directement la tôle :
+        l&apos;arc découpe, les étincelles partent vers l&apos;arrière, puis refroidissent sans laisser de fumée persistante.
       </p>
 
       <section className="hero">
