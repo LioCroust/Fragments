@@ -180,7 +180,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'SECTOR' | 'ENEMY';
+  kind: 'RECORD' | 'DIAMOND' | 'SECTOR' | 'ENEMY' | 'CLEAN';
   score?: number;
   points?: number;
   level?: number;
@@ -1832,6 +1832,12 @@ export default function GameScreen() {
         }),
         Animated.delay(1000),
         Animated.timing(bannerTranslateX, {
+          toValue: -7,
+          duration: 72,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bannerTranslateX, {
           toValue: Math.max(sizeRef.current.width, 360) + 120,
           duration: 170,
           easing: Easing.in(Easing.cubic),
@@ -2270,6 +2276,9 @@ export default function GameScreen() {
       enemy.respawnAt = Number.POSITIVE_INFINITY;
       enemy.vx = 0;
       enemy.vy = 0;
+      if (g.enemies.every((candidate) => enemyIsDestroyed(candidate))) {
+        enqueueBanner({ kind: 'CLEAN' });
+      }
       if (enemy.kind === 'SHIP') {
         // Smoke is only emitted by the ship. Remove the old trail while it
         // is off-screen so it cannot remain at the previous spawn point.
@@ -3344,6 +3353,8 @@ export default function GameScreen() {
                     ? styles.diamondBanner
                     : banner.kind === 'SECTOR'
                       ? styles.sectorBanner
+                      : banner.kind === 'CLEAN'
+                        ? styles.cleanBanner
                       : styles.enemyBanner,
                 { transform: [{ translateX: bannerTranslateX }] },
               ]}
@@ -3362,6 +3373,8 @@ export default function GameScreen() {
                     ? 'BONUS DIAMANT CAPTURÉ'
                     : banner.kind === 'SECTOR'
                       ? 'SECTEUR TERMINÉ'
+                        : banner.kind === 'CLEAN'
+                          ? 'SECTEUR NETTOYÉ !'
                       : 'ENNEMI DÉTRUIT'}
               </Text>
               <Text style={styles.bannerScore} numberOfLines={1}>
@@ -3371,6 +3384,8 @@ export default function GameScreen() {
                     ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
                     : banner.kind === 'SECTOR'
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
+                      : banner.kind === 'CLEAN'
+                        ? 'TERMINEZ LA SÉCURISATION À 80%'
                       : `+${banner.points ?? 0} POINTS`}
               </Text>
             </Animated.View>
@@ -3693,6 +3708,10 @@ const styles = StyleSheet.create({
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
     backgroundColor: 'rgba(24, 4, 24, 0.56)',
+  },
+  cleanBanner: {
+    borderColor: HUD_COLORS.lime,
+    backgroundColor: 'rgba(18, 34, 8, 0.56)',
   },
   enemyBanner: {
     borderColor: HUD_COLORS.lime,
