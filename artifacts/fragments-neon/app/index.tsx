@@ -758,6 +758,27 @@ const playerOuterBounds = (
   };
 };
 
+const playerPerimeterSafetyPoint = (
+  point: Point,
+  direction: Direction,
+  bounds: ReturnType<typeof perimeterBounds>,
+  cell: number,
+) => {
+  const spriteSize = playerSpriteSize(cell);
+  const safePoint = { ...point };
+  if (direction.x < 0) {
+    safePoint.x = bounds.left - spriteSize.width * 0.5 - OUTER_STOP_GAP;
+  } else if (direction.x > 0) {
+    safePoint.x = bounds.right + spriteSize.width * 0.5 + OUTER_STOP_GAP;
+  }
+  if (direction.y < 0) {
+    safePoint.y = bounds.top - spriteSize.height * 0.5 - OUTER_STOP_GAP;
+  } else if (direction.y > 0) {
+    safePoint.y = bounds.bottom + spriteSize.height * 0.5 + OUTER_STOP_GAP;
+  }
+  return safePoint;
+};
+
 const spriteFrames: Record<EnemyKind, any[]> = {
   SHIP: [
     require('../assets/images/enemy-ship-final-frame-0.png'),
@@ -2701,7 +2722,7 @@ export default function GameScreen() {
       g.projectiles.length = activeProjectileCount;
     };
 
-    const capture = (g: Game) => {
+    const capture = (g: Game, exitDirection?: Direction) => {
       const captureResult = buildOrthogonalCaptureRegions({
         trail: g.trail,
         protectedTrails: g.protectedTrails,
@@ -2711,6 +2732,17 @@ export default function GameScreen() {
       });
       if (!captureResult || captureResult.regions.length === 0) {
         g.trail = [];
+        if (exitDirection) {
+          g.player = playerPerimeterSafetyPoint(
+            g.player,
+            exitDirection,
+            perimeterBounds(g.width, g.height, g.cell),
+            g.cell,
+          );
+          g.inputDir = exitDirection;
+          g.facingDir = exitDirection;
+          g.hasMoveCommand = true;
+        }
         return;
       }
 
@@ -2728,6 +2760,19 @@ export default function GameScreen() {
       g.trail = [];
       g.fillCursor = 0;
       g.scanY = Math.min(...captureResult.regions.flatMap((polygon) => polygon.map((point) => point.y)));
+      if (exitDirection) {
+        // Leave the blue perimeter immediately and keep the outward command
+        // latched while the cyan fill animation runs.
+        g.player = playerPerimeterSafetyPoint(
+          g.player,
+          exitDirection,
+          perimeterBounds(g.width, g.height, g.cell),
+          g.cell,
+        );
+        g.inputDir = exitDirection;
+        g.facingDir = exitDirection;
+        g.hasMoveCommand = true;
+      }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     };
 
@@ -3476,9 +3521,18 @@ export default function GameScreen() {
             g.player = contact;
             if (g.trail.length > 2) {
               g.trail.push(contact);
-              capture(g);
+              capture(g, direction);
             } else {
               g.trail = [];
+              g.player = playerPerimeterSafetyPoint(
+                g.player,
+                direction,
+                bounds,
+                g.cell,
+              );
+              g.inputDir = direction;
+              g.facingDir = direction;
+              g.hasMoveCommand = true;
             }
             break;
           }
