@@ -8,3 +8,9 @@ Only the enemy ship emits the decorative smoke trail. It should look like short-
 **Why:** The player explicitly corrected that the trail belongs to the enemy ship and should read as smoke.
 
 **How to apply:** Keep the smoke purely visual, low-opacity, short-lived, and excluded from all collision, score, and movement logic.
+
+When the ship is destroyed or respawns, discard its previous puffs and seed a fresh short trail from its new position.
+
+**Why:** Reusing puffs from the previous route makes the exhaust appear detached from the ship after a respawn.
+
+**How to apply:** Treat the ship's smoke as a local visual trail that resets with the ship's lifecycle, while keeping its drift proportional to the current ship velocity.

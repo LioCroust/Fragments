@@ -960,14 +960,15 @@ const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[
     const sideOffset = (Math.random() - 0.5) * cell * 0.34;
     const trailOffset = cell * (0.92 + index * 0.2);
     const maxLife = 0.43 + Math.random() * 0.17;
+    const smokeSpeed = Math.max(20, velocityLength * (0.48 + Math.random() * 0.16));
     return {
       x: enemy.x + backwardX * trailOffset + sideX * sideOffset,
       y: enemy.y + backwardY * trailOffset + sideY * sideOffset,
       life: maxLife,
       maxLife,
       size: cell * (0.13 + Math.random() * 0.1),
-      driftX: backwardX * (10 + Math.random() * 22) + sideX * (Math.random() - 0.5) * 13,
-      driftY: backwardY * (10 + Math.random() * 22) + sideY * (Math.random() - 0.5) * 13,
+      driftX: backwardX * smokeSpeed + sideX * (Math.random() - 0.5) * 13,
+      driftY: backwardY * smokeSpeed + sideY * (Math.random() - 0.5) * 13,
     };
   });
 };
@@ -1544,6 +1545,12 @@ export default function GameScreen() {
       enemy.respawnAt = now + 900;
       enemy.vx = 0;
       enemy.vy = 0;
+      if (enemy.kind === 'SHIP') {
+        // Smoke is only emitted by the ship. Remove the old trail while it
+        // is off-screen so it cannot remain at the previous spawn point.
+        g.smokePuffs.length = 0;
+        g.smokeAccumulator = 0;
+      }
     };
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
