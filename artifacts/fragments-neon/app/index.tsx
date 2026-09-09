@@ -64,11 +64,13 @@ const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
 const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
 const sectorTransitionVictorySource = require('../assets/audio/sector-transition-victory-joyful.wav');
+const sevenFireShotSource = require('../assets/audio/seven-fire-shot.wav');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
 const coreReactorSpriteSource = require('../assets/images/core-reactor-sprite-sheet.png');
 const sevenFireOrbSource = require('../assets/images/seven-fire-orb.png');
+const diamondSpriteSource = require('../assets/images/neon-diamond-fragment-sprite-sheet.png');
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
@@ -111,6 +113,9 @@ const SHIP_SMOKE_SPRITE_FRAME_DURATION = 4;
 const CORE_REACTOR_SPRITE_FRAME_COUNT = 8;
 const CORE_REACTOR_SPRITE_FRAME_SIZE = 256;
 const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
+const DIAMOND_SPRITE_FRAME_COUNT = 8;
+const DIAMOND_SPRITE_FRAME_SIZE = 256;
+const DIAMOND_SPRITE_FRAME_DURATION = 5;
 const SEVEN_PROJECTILE_COUNT = 7;
 const SEVEN_PROJECTILE_INTERVAL = 7;
 const SEVEN_PROJECTILE_SPEED = 42;
@@ -746,13 +751,19 @@ const playerOuterBounds = (
   const arenaWidth = bounds.left + bounds.right;
   const arenaHeight = bounds.top + bounds.bottom;
   const radius = playerBodyRadius(cell);
+  const spriteSize = playerSpriteSize(cell);
+  const physicalLeft = radius + OUTER_STOP_GAP;
+  const physicalRight = arenaWidth - radius - OUTER_STOP_GAP;
+  const physicalTop = radius + OUTER_STOP_GAP;
+  const physicalBottom = arenaHeight - radius - OUTER_STOP_GAP;
   return {
-    // Keep the drone body inside the physical viewport while its sprite can
-    // visibly sit behind the blue perimeter in the outer safe band.
-    left: radius + OUTER_STOP_GAP,
-    right: arenaWidth - radius - OUTER_STOP_GAP,
-    top: radius + OUTER_STOP_GAP,
-    bottom: arenaHeight - radius - OUTER_STOP_GAP,
+    // The outer band is limited to the drone's own half-length. This keeps
+    // the nose/tail from reaching the HUD while retaining a real safe band
+    // outside the blue perimeter on every side.
+    left: Math.max(physicalLeft, bounds.left - spriteSize.width * 0.5),
+    right: Math.min(physicalRight, bounds.right + spriteSize.width * 0.5),
+    top: Math.max(physicalTop, bounds.top - spriteSize.height * 0.5),
+    bottom: Math.min(physicalBottom, bounds.bottom + spriteSize.height * 0.5),
   };
 };
 
@@ -1001,14 +1012,14 @@ const drawCuttingSpriteCanvas = (
 };
 
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
-  if (kind === 'DRAGON') return { width: cell * 1.7, height: cell * 1.7 };
+  if (kind === 'DRAGON') return { width: cell * 2.25, height: cell * 2.25 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
   if (kind === 'SPIDER') return { width: cell * 3.5, height: cell * 3.5 };
   return { width: cell * 1.9, height: cell * 1.9 };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
-  if (enemy.kind === 'DRAGON') return cell * 0.6;
+  if (enemy.kind === 'DRAGON') return cell * 0.78;
   if (enemy.kind === 'SPIDER') return cell * 1.0;
   if (enemy.kind === 'SEVEN') return cell * 1.32;
   return cell * 0.8;
@@ -1808,6 +1819,8 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const cutFrame = Math.floor(Date.now() / 55) % CUTTING_SPRITE_FRAME_COUNT;
   const cutSpriteWidth = snapshot.cell * 1.62;
   const cutSpriteHeight = cutSpriteWidth * CUTTING_SPRITE_FRAME_HEIGHT / CUTTING_SPRITE_FRAME_WIDTH;
+  const diamondFrame = Math.floor(snapshot.frame / DIAMOND_SPRITE_FRAME_DURATION)
+    % DIAMOND_SPRITE_FRAME_COUNT;
   const scanIntervals = snapshot.pendingCapturePolygons.flatMap((polygon) => (
     polygonHorizontalIntervals(polygon, snapshot.scanY)
   ));
@@ -1815,15 +1828,28 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
     <>
       {snapshot.diamonds.map((diamond, index) => (
         !diamond.collected && (
-          <SvgImage
-            key={`diamond-${index}`}
-            href={diamondSource}
-            x={diamond.x - snapshot.cell * 0.75}
-            y={diamond.y - snapshot.cell * 0.75}
-            width={snapshot.cell * 1.5}
-            height={snapshot.cell * 1.5}
-            opacity={0.98}
-          />
+          <G key={`diamond-${index}`} transform={`translate(${diamond.x} ${diamond.y})`}>
+            <Defs>
+              <ClipPath id={`diamond-sprite-clip-${index}`}>
+                <Rect
+                  x={-snapshot.cell * 0.75}
+                  y={-snapshot.cell * 0.75}
+                  width={snapshot.cell * 1.5}
+                  height={snapshot.cell * 1.5}
+                />
+              </ClipPath>
+            </Defs>
+            <G clipPath={`url(#diamond-sprite-clip-${index})`}>
+              <SvgImage
+                href={diamondSpriteSource}
+                x={-snapshot.cell * 0.75 - diamondFrame * snapshot.cell * 1.5}
+                y={-snapshot.cell * 0.75}
+                width={snapshot.cell * 1.5 * DIAMOND_SPRITE_FRAME_COUNT}
+                height={snapshot.cell * 1.5}
+                opacity={0.98}
+              />
+            </G>
+          </G>
         )
       ))}
       {SHIP_SMOKE_RENDER_MODE === 'SPRITE' && (
@@ -2160,7 +2186,7 @@ export default function GameScreen() {
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
   const sevenFireOrbImageRef = useRef<any>(null);
-  const diamondImageRef = useRef<any>(null);
+  const diamondSpriteImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
   const shipSmokeSpriteImageRef = useRef<any>(null);
@@ -2185,6 +2211,10 @@ export default function GameScreen() {
     keepAudioSessionActive: true,
   });
   const sectorTransitionVictoryPlayer = useAudioPlayer(sectorTransitionVictorySource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
+  const sevenFireShotPlayer = useAudioPlayer(sevenFireShotSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
@@ -2317,6 +2347,8 @@ export default function GameScreen() {
     shieldLossExplosionPlayer.volume = 0.92;
     sectorTransitionVictoryPlayer.muted = false;
     sectorTransitionVictoryPlayer.volume = 0.9;
+    sevenFireShotPlayer.muted = false;
+    sevenFireShotPlayer.volume = 0.55;
     audioSessionReadyRef.current = setAudioModeAsync({
       allowsRecording: false,
       playsInSilentMode: true,
@@ -2333,6 +2365,7 @@ export default function GameScreen() {
     pickupChimePlayer,
     sectorTransitionVictoryPlayer,
     shieldLossExplosionPlayer,
+    sevenFireShotPlayer,
   ]);
 
   const playPickupChime = useCallback(() => {
@@ -2351,6 +2384,22 @@ export default function GameScreen() {
     });
   }, [pickupChimePlayer]);
 
+  const playSevenFireShot = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    void audioSessionReadyRef.current.then(async () => {
+      sevenFireShotPlayer.muted = false;
+      sevenFireShotPlayer.volume = 0.55;
+      try {
+        await sevenFireShotPlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      sevenFireShotPlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play Seven fire shot', error);
+    });
+  }, [sevenFireShotPlayer]);
+
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
 
@@ -2367,13 +2416,13 @@ export default function GameScreen() {
         image.src = uri;
       });
     });
-    const resolvedDiamond = (RNImage as any).resolveAssetSource?.(diamondSource);
+    const resolvedDiamond = (RNImage as any).resolveAssetSource?.(diamondSpriteSource);
     const diamondImage = new (globalThis as any).Image();
     diamondImage.decoding = 'async';
     diamondImage.onload = () => {
-      if (!cancelled) diamondImageRef.current = diamondImage;
+      if (!cancelled) diamondSpriteImageRef.current = diamondImage;
     };
-    diamondImage.src = resolvedDiamond?.uri ?? diamondSource;
+    diamondImage.src = resolvedDiamond?.uri ?? diamondSpriteSource;
     const resolvedCoreReactorSprite = (RNImage as any).resolveAssetSource?.(coreReactorSpriteSource);
     const coreReactorImage = new (globalThis as any).Image();
     coreReactorImage.decoding = 'async';
@@ -2423,8 +2472,8 @@ export default function GameScreen() {
       cancelled = true;
       spriteImagesRef.current = {};
       coreReactorImageRef.current = null;
+      diamondSpriteImageRef.current = null;
       sevenFireOrbImageRef.current = null;
-      diamondImageRef.current = null;
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
       shipSmokeSpriteImageRef.current = null;
@@ -3314,6 +3363,7 @@ export default function GameScreen() {
 
         if (enemy.kind === 'SEVEN' && (enemy.sevenFireTimer ?? 0) <= 0) {
           g.projectiles.push(...createSevenVolley(enemy, g.cell));
+          playSevenFireShot();
           enemy.sevenFireTimer = SEVEN_PROJECTILE_INTERVAL;
         }
 
@@ -3856,19 +3906,29 @@ export default function GameScreen() {
        }
 
        context.globalCompositeOperation = 'lighter';
-      const diamondImage = diamondImageRef.current;
-       if (diamondImage) {
+        const diamondImage = diamondSpriteImageRef.current;
+        if (diamondImage) {
          const diamondSize = g.cell * 1.5;
+          const diamondFrame = Math.floor(g.frame / DIAMOND_SPRITE_FRAME_DURATION)
+            % DIAMOND_SPRITE_FRAME_COUNT;
          g.diamonds.forEach((diamond) => {
            if (diamond.collected) return;
            context.save();
            context.translate(diamond.x, diamond.y);
-           drawEnemySpriteWithGlow(
-             context,
-             diamondImage,
-             { width: diamondSize, height: diamondSize },
-             '#ffffff',
-           );
+            context.globalCompositeOperation = 'lighter';
+            context.shadowColor = '#ffffff';
+            context.shadowBlur = g.cell * 0.22;
+            context.drawImage(
+              diamondImage,
+              diamondFrame * DIAMOND_SPRITE_FRAME_SIZE,
+              0,
+              DIAMOND_SPRITE_FRAME_SIZE,
+              DIAMOND_SPRITE_FRAME_SIZE,
+              -diamondSize / 2,
+              -diamondSize / 2,
+              diamondSize,
+              diamondSize,
+            );
            context.restore();
          });
        }
@@ -4038,6 +4098,7 @@ export default function GameScreen() {
     enqueueBanner,
     playDiamondCapture,
     playPickupChime,
+    playSevenFireShot,
     playSectorTransition,
     playShieldLossExplosion,
     resetGame,
