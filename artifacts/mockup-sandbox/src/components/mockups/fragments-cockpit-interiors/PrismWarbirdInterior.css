@@ -1,17 +1,17 @@
 .prism-warbird {
   --iron: #17141a;
   --iron-deep: #0c0910;
-  --copper: #c46643;
-  --ruby: #e01961;
-  --magenta: #ff3bb5;
-  --gold: #ffb748;
+  --copper: #b47c55;
+  --ruby: #ba5a68;
+  --magenta: #d28db4;
+  --gold: #e8b765;
   --paper: #ffe8d2;
   min-height: 100dvh;
   overflow: hidden;
   display: grid;
   place-items: center;
   background:
-    radial-gradient(ellipse at 50% 45%, rgba(123, 19, 57, .2), transparent 58%),
+    radial-gradient(ellipse at 50% 45%, rgba(104, 67, 37, .2), transparent 58%),
     #09070b;
   color: var(--paper);
   font-family: "Space Mono", "Courier New", monospace;
@@ -37,8 +37,9 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  filter: contrast(1.06) saturate(1.08) drop-shadow(0 18px 15px rgba(0, 0, 0, .7));
+  object-fit: cover;
+  object-position: center 57%;
+  filter: contrast(1.08) saturate(.78) sepia(.08) drop-shadow(0 18px 15px rgba(0, 0, 0, .7));
 }
 
 .prism-warbird__readout {
@@ -48,15 +49,28 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  padding: .45rem .62rem .4rem;
+  min-height: 74px;
+  padding: .58rem .82rem .52rem;
   overflow: hidden;
-  border: 1px solid rgba(255, 183, 72, .68);
-  background: rgba(19, 11, 19, .9);
+  border: 2px solid rgba(232, 183, 101, .78);
+  background: rgba(18, 14, 15, .94);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 232, 210, .1),
-    inset 0 -8px 18px rgba(111, 9, 50, .34),
-    0 5px 0 rgba(3, 2, 5, .74);
+    inset 0 0 0 1px rgba(255, 232, 210, .16),
+    inset 0 -11px 20px rgba(84, 52, 31, .32),
+    0 0 0 1px rgba(12, 9, 10, .88),
+    0 6px 0 rgba(3, 2, 5, .74);
   transform: skewX(-7deg);
+}
+
+.prism-warbird__readout::before {
+  position: absolute;
+  top: .35rem;
+  right: .4rem;
+  left: .4rem;
+  height: 2px;
+  background: linear-gradient(90deg, var(--copper), transparent 68%, var(--gold));
+  content: "";
+  opacity: .82;
 }
 
 .prism-warbird__readout > * {
@@ -67,16 +81,16 @@
   position: absolute;
   right: .4rem;
   bottom: .38rem;
-  width: 3px;
-  height: 3px;
+  width: 5px;
+  height: 5px;
   background: var(--gold);
-  box-shadow: 7px 0 var(--ruby), 14px 0 var(--magenta);
+  box-shadow: 9px 0 var(--ruby), 18px 0 var(--magenta), 27px 0 var(--copper);
   content: "";
 }
 
 .prism-warbird__label {
   color: rgba(255, 232, 210, .63);
-  font-size: clamp(6px, .8vw, 9px);
+  font-size: clamp(7px, .88vw, 11px);
   font-weight: 700;
   letter-spacing: .17em;
   line-height: 1;
@@ -84,9 +98,9 @@
 }
 
 .prism-warbird__value {
-  margin-top: .24rem;
+  margin-top: .45rem;
   color: var(--paper);
-  font-size: clamp(13px, 2.1vw, 25px);
+  font-size: clamp(17px, 2.55vw, 31px);
   font-weight: 700;
   letter-spacing: .06em;
   line-height: 1;
@@ -100,20 +114,31 @@
   letter-spacing: .05em;
 }
 
+.prism-warbird__meta {
+  display: block;
+  margin-top: .34rem;
+  color: rgba(232, 183, 101, .68);
+  font-size: clamp(6px, .65vw, 8px);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .14em;
+  white-space: nowrap;
+}
+
 .prism-warbird__readout--score {
-  top: 49.5%;
-  left: 18.5%;
-  width: 17.5%;
-  height: 18%;
+  top: 48%;
+  left: 29%;
+  width: 24%;
+  height: 24%;
   border-color: rgba(255, 183, 72, .8);
 }
 
 .prism-warbird__readout--sector {
-  top: 59%;
-  left: 7.8%;
-  width: 11.2%;
-  height: 17%;
-  border-color: rgba(255, 59, 181, .82);
+  top: 68%;
+  left: 4%;
+  width: 19%;
+  height: 23%;
+  border-color: rgba(186, 90, 104, .84);
 }
 
 .prism-warbird__readout--sector .prism-warbird__value {
@@ -121,11 +146,11 @@
 }
 
 .prism-warbird__readout--shields {
-  top: 59%;
-  right: 7.8%;
-  width: 11.2%;
-  height: 17%;
-  border-color: rgba(255, 59, 181, .82);
+  top: 68%;
+  right: 4%;
+  width: 19%;
+  height: 23%;
+  border-color: rgba(186, 90, 104, .84);
 }
 
 .prism-warbird__readout--shields .prism-warbird__value {
@@ -133,11 +158,11 @@
 }
 
 .prism-warbird__readout--zone {
-  top: 70%;
-  right: 18.5%;
-  width: 17.5%;
-  height: 18%;
-  border-color: rgba(196, 102, 67, .9);
+  top: 68%;
+  right: 29%;
+  width: 24%;
+  height: 23%;
+  border-color: rgba(180, 124, 85, .92);
 }
 
 .prism-warbird__readout--zone .prism-warbird__value {
@@ -154,5 +179,14 @@
     min-width: 640px;
     transform: scale(.62);
     transform-origin: center center;
+  }
+
+  .prism-warbird__readout {
+    min-height: 64px;
+    padding-inline: .58rem;
+  }
+
+  .prism-warbird__meta {
+    display: none;
   }
 }
