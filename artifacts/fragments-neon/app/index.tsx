@@ -45,7 +45,14 @@ const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-n
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
 type Point = { x: number; y: number };
 type Mode = 'SLOW';
-type Particle = Point & { vx: number; vy: number; life: number; size: number; color: string };
+type Particle = Point & {
+  vx: number;
+  vy: number;
+  life: number;
+  size: number;
+  color: string;
+  streak?: boolean;
+};
 type SmokePuff = Point & {
   life: number;
   maxLife: number;
@@ -736,6 +743,53 @@ const drawEnemySpriteWithGlow = (
   context.restore();
 };
 
+const cuttingPoint = (player: Point, direction: Direction, cell: number) => ({
+  x: player.x - direction.x * cell * 0.78,
+  y: player.y - direction.y * cell * 0.78,
+});
+
+const drawCuttingEffectCanvas = (
+  context: CanvasRenderingContext2D,
+  player: Point,
+  direction: Direction,
+  cell: number,
+  frame: number,
+) => {
+  if (direction.x === 0 && direction.y === 0) return;
+  const point = cuttingPoint(player, direction, cell);
+  const pulse = 0.72 + Math.sin(frame * 0.42) * 0.2;
+  const angle = Math.atan2(direction.y, direction.x);
+
+  context.save();
+  context.translate(point.x, point.y);
+  context.rotate(angle);
+  context.globalCompositeOperation = 'lighter';
+
+  // A narrow molten kerf sits directly on the red trail. It is deliberately
+  // linear rather than circular so the effect reads as sheet-metal cutting.
+  context.shadowColor = '#ff6a22';
+  context.shadowBlur = 13 + pulse * 8;
+  context.globalAlpha = 0.34 + pulse * 0.2;
+  context.fillStyle = '#ff6a22';
+  context.fillRect(-cell * 0.5, -cell * 0.08, cell * 0.88, cell * 0.16);
+
+  context.shadowColor = '#fff1b0';
+  context.shadowBlur = 5 + pulse * 4;
+  context.globalAlpha = 0.78 + pulse * 0.18;
+  context.fillStyle = '#fff5cf';
+  context.fillRect(cell * 0.03, -cell * 0.035, cell * 0.26, cell * 0.07);
+
+  // A compact embedded nozzle, kept on the line instead of drawing a torch body.
+  context.shadowColor = '#ff8a2c';
+  context.shadowBlur = 5;
+  context.globalAlpha = 0.86;
+  context.fillStyle = '#9b542f';
+  context.fillRect(cell * 0.25, -cell * 0.12, cell * 0.16, cell * 0.24);
+  context.fillStyle = '#f7c56f';
+  context.fillRect(cell * 0.39, -cell * 0.045, cell * 0.08, cell * 0.09);
+  context.restore();
+};
+
 const enemySpriteSize = (kind: EnemyKind, cell: number) => {
   if (kind === 'DRAGON') return { width: cell * 1.7, height: cell * 1.7 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
@@ -1076,6 +1130,10 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
+  const activeCut = snapshot.trail.length > 0
+    && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
+  const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
+  const cutPulse = 0.72 + Math.sin(Date.now() * 0.012) * 0.2;
   const scanIntervals = snapshot.pendingCapturePolygons.flatMap((polygon) => (
     polygonHorizontalIntervals(polygon, snapshot.scanY)
   ));
@@ -1091,15 +1149,67 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           opacity={0.98}
         />
       )}
+      {activeCut && (
+        <G transform={`translate(${cutPoint.x} ${cutPoint.y}) rotate(${angle * (180 / Math.PI)})`}>
+          <Line
+            x1={-snapshot.cell * 0.5}
+            y1={0}
+            x2={snapshot.cell * 0.38}
+            y2={0}
+            stroke="#ff6a22"
+            strokeWidth={snapshot.cell * 0.16}
+            strokeLinecap="round"
+            opacity={0.34 + cutPulse * 0.2}
+          />
+          <Line
+            x1={snapshot.cell * 0.03}
+            y1={0}
+            x2={snapshot.cell * 0.29}
+            y2={0}
+            stroke="#fff5cf"
+            strokeWidth={snapshot.cell * 0.07}
+            strokeLinecap="round"
+            opacity={0.78 + cutPulse * 0.18}
+          />
+          <Polygon
+            points={`${snapshot.cell * 0.24},${-snapshot.cell * 0.12} ${snapshot.cell * 0.42},${-snapshot.cell * 0.09} ${snapshot.cell * 0.42},${snapshot.cell * 0.09} ${snapshot.cell * 0.24},${snapshot.cell * 0.12}`}
+            fill="#9b542f"
+            opacity={0.86}
+          />
+          <Line
+            x1={snapshot.cell * 0.4}
+            y1={0}
+            x2={snapshot.cell * 0.5}
+            y2={0}
+            stroke="#f7c56f"
+            strokeWidth={snapshot.cell * 0.09}
+            strokeLinecap="round"
+          />
+        </G>
+      )}
       {snapshot.particles.map((particle, index) => (
-        <Circle
-          key={`spark${index}`}
-          cx={particle.x}
-          cy={particle.y}
-          r={particle.size}
-          fill={particle.color}
-          opacity={clamp(particle.life / 0.4, 0, 1)}
-        />
+        particle.streak ? (
+          <Line
+            key={`spark${index}`}
+            x1={particle.x}
+            y1={particle.y}
+            x2={particle.x - particle.vx * 0.018}
+            y2={particle.y - particle.vy * 0.018}
+            stroke={particle.color}
+            strokeWidth={particle.size * 1.35}
+            strokeLinecap="round"
+            opacity={clamp(particle.life / 0.4, 0, 1)}
+          />
+        ) : (
+          <Circle
+            key={`spark${index}`}
+            cx={particle.x}
+            cy={particle.y}
+            r={particle.size}
+            fill={particle.color}
+            opacity={clamp(particle.life / 0.4, 0, 1)}
+          />
+        )
       ))}
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
@@ -1408,17 +1518,20 @@ export default function GameScreen() {
     const addParticle = (g: Game, direction: Direction) => {
       if (g.particles.length >= 96) return;
       const backwards = Math.atan2(-direction.y, -direction.x);
-      const angle = backwards + (Math.random() - 0.5) * (Math.PI / 4);
-      const speed = 80 + Math.random() * 210;
+      // Spread around the backward axis so sparks visibly fan above and below
+      // the cut instead of forming a single narrow exhaust line.
+      const angle = backwards + (Math.random() - 0.5) * (Math.PI * 0.92);
+      const speed = 95 + Math.random() * 225;
       const colorsForSpark = ['#ffffff', '#fff35c', '#ff8a00', '#ff5500'];
       g.particles.push({
-        x: g.player.x - direction.x * g.cell * 0.8,
-        y: g.player.y - direction.y * g.cell * 0.8,
+        x: g.player.x - direction.x * g.cell * 0.76,
+        y: g.player.y - direction.y * g.cell * 0.76,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-         life: 0.24,
-         size: 1 + Math.random() * 1.8,
+        life: 0.3 + Math.random() * 0.24,
+        size: 1 + Math.random() * 1.8,
         color: colorsForSpark[Math.floor(Math.random() * colorsForSpark.length)],
+        streak: true,
       });
     };
 
@@ -2183,7 +2296,7 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            for (let spark = 0; spark < 3; spark += 1) addParticle(g, g.cutDir);
+            for (let spark = 0; spark < 4; spark += 1) addParticle(g, g.cutDir);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
@@ -2286,12 +2399,30 @@ export default function GameScreen() {
         context.lineJoin = 'miter';
       }
 
+      if (g.trail.length > 0) {
+        drawCuttingEffectCanvas(context, g.player, g.cutDir, g.cell, g.frame);
+      }
+
       context.globalCompositeOperation = 'lighter';
       g.particles.forEach((particle) => {
         context.globalAlpha = clamp(particle.life / 0.4, 0, 1);
-        context.fillStyle = particle.color;
-        context.fillRect(particle.x, particle.y, particle.size, particle.size);
+        if (particle.streak) {
+          context.strokeStyle = particle.color;
+          context.lineWidth = particle.size * 1.35;
+          context.lineCap = 'round';
+          context.beginPath();
+          context.moveTo(particle.x, particle.y);
+          context.lineTo(
+            particle.x - particle.vx * 0.018,
+            particle.y - particle.vy * 0.018,
+          );
+          context.stroke();
+        } else {
+          context.fillStyle = particle.color;
+          context.fillRect(particle.x, particle.y, particle.size, particle.size);
+        }
       });
+      context.lineCap = 'butt';
       context.globalAlpha = 1;
 
       context.globalCompositeOperation = 'lighter';
