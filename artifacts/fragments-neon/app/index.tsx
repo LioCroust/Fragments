@@ -212,6 +212,7 @@ const DRAGON_ATTACK_SPEED = 105;
 const SPIDER_THREAD_INITIAL_DELAY = 3.5;
 const SPIDER_THREAD_COOLDOWN = 6.5;
 const SPIDER_THREAD_SPEED = 260;
+const SPIDER_THREAD_EXTRA_LEAD_TIME = 0.34;
 const SPIDER_THREAD_ACTIVE_DURATION = 2.8;
 const SPIDER_THREAD_LENGTH_CELLS = 1.65;
 const SPIDER_THREAD_SLOW_FACTOR = 0.58;
@@ -3491,11 +3492,36 @@ export default function GameScreen() {
               : g.hasMoveCommand
                 ? g.facingDir
                 : ZERO;
-          const distanceToDrone = Math.hypot(g.player.x - enemy.x, g.player.y - enemy.y);
-          const flightTime = clamp(distanceToDrone / SPIDER_THREAD_SPEED, 0.18, 0.7);
+          const droneVelocity = {
+            x: droneDirection.x * 118,
+            y: droneDirection.y * 118,
+          };
+          const offsetX = g.player.x - enemy.x;
+          const offsetY = g.player.y - enemy.y;
+          const velocitySquared = droneVelocity.x ** 2 + droneVelocity.y ** 2;
+          const projectileSquared = SPIDER_THREAD_SPEED ** 2;
+          const quadraticA = velocitySquared - projectileSquared;
+          const quadraticB = 2 * (offsetX * droneVelocity.x + offsetY * droneVelocity.y);
+          const quadraticC = offsetX ** 2 + offsetY ** 2;
+          const discriminant = quadraticB ** 2 - 4 * quadraticA * quadraticC;
+          const roots = discriminant >= 0 && Math.abs(quadraticA) > 0.001
+            ? [
+                (-quadraticB - Math.sqrt(discriminant)) / (2 * quadraticA),
+                (-quadraticB + Math.sqrt(discriminant)) / (2 * quadraticA),
+              ].filter((root) => root > 0)
+            : [];
+          const interceptTime = roots.length > 0
+            ? Math.min(...roots)
+            : Math.max(0, Math.hypot(offsetX, offsetY) / SPIDER_THREAD_SPEED);
+          const isDroneMoving = droneVelocity.x !== 0 || droneVelocity.y !== 0;
+          const flightTime = clamp(
+            interceptTime + (isDroneMoving ? SPIDER_THREAD_EXTRA_LEAD_TIME : 0),
+            0.22,
+            1.15,
+          );
           const target = {
-            x: g.player.x + droneDirection.x * 118 * flightTime * 0.92,
-            y: g.player.y + droneDirection.y * 118 * flightTime * 0.92,
+            x: g.player.x + droneVelocity.x * flightTime,
+            y: g.player.y + droneVelocity.y * flightTime,
           };
           const clampThreadPoint = (point: Point): Point => ({
             x: clamp(point.x, bounds.left + g.cell * 0.16, bounds.right - g.cell * 0.16),
@@ -3507,6 +3533,10 @@ export default function GameScreen() {
           const launchLength = Math.hypot(launchX, launchY) || 1;
           const launchVx = (launchX / launchLength) * SPIDER_THREAD_SPEED;
           const launchVy = (launchY / launchLength) * SPIDER_THREAD_SPEED;
+          const actualFlightTime = Math.max(
+            0.2,
+            Math.hypot(launchX, launchY) / SPIDER_THREAD_SPEED,
+          );
           g.spiderThreads.push({
             start: { x: enemy.x, y: enemy.y },
             end: { x: enemy.x, y: enemy.y },
@@ -3514,7 +3544,7 @@ export default function GameScreen() {
             vx: launchVx,
             vy: launchVy,
             ownerIndex: enemyIndex,
-            remaining: SPIDER_THREAD_ACTIVE_DURATION + flightTime,
+            remaining: SPIDER_THREAD_ACTIVE_DURATION + actualFlightTime,
             anchored: false,
           });
           enemy.spiderThreadTimer = SPIDER_THREAD_COOLDOWN;
