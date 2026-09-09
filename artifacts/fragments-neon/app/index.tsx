@@ -1482,14 +1482,22 @@ export default function GameScreen() {
             pathTouchesPolygon(protectedTrail, corners, PERIMETER_STROKE_WIDTH * 0.5)
           ));
         };
+        const spriteFitsInsidePerimeter = (x: number, y: number) => (
+          enemySpriteCorners(enemy, g.cell, x, y).every((corner) => (
+            corner.x >= bounds.left
+            && corner.x <= bounds.right
+            && corner.y >= bounds.top
+            && corner.y <= bounds.bottom
+          ))
+        );
         const enemyFitsAt = (x: number, y: number) => {
-          if (x < minX || x > maxX || y < minY || y > maxY) return false;
+          if (!spriteFitsInsidePerimeter(x, y)) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
           return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
             && !enemyTouchesProtectedBoundary(x, y);
         };
         const enemyCanMoveAt = (x: number, y: number) => {
-          if (x < minX || x > maxX || y < minY || y > maxY) return false;
+          if (!spriteFitsInsidePerimeter(x, y)) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
           return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
             && !enemyTouchesProtectedBoundary(x, y);
