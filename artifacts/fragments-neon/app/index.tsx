@@ -2737,9 +2737,10 @@ export default function GameScreen() {
             perimeterBounds(g.width, g.height, g.cell),
             g.cell,
           );
-          g.inputDir = exitDirection;
           g.facingDir = exitDirection;
-          g.hasMoveCommand = true;
+          g.inputDir = ZERO;
+          g.cutDir = ZERO;
+          g.hasMoveCommand = false;
         }
         return;
       }
@@ -2759,17 +2760,18 @@ export default function GameScreen() {
       g.fillCursor = 0;
       g.scanY = Math.min(...captureResult.regions.flatMap((polygon) => polygon.map((point) => point.y)));
       if (exitDirection) {
-        // Leave the blue perimeter immediately and keep the outward command
-        // latched while the cyan fill animation runs.
+        // Leave the blue perimeter immediately, then stop just behind it
+        // instead of continuing toward the physical edge of the arena.
         g.player = playerPerimeterSafetyPoint(
           g.player,
           exitDirection,
           perimeterBounds(g.width, g.height, g.cell),
           g.cell,
         );
-        g.inputDir = exitDirection;
         g.facingDir = exitDirection;
-        g.hasMoveCommand = true;
+        g.inputDir = ZERO;
+        g.cutDir = ZERO;
+        g.hasMoveCommand = false;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     };
@@ -3528,9 +3530,10 @@ export default function GameScreen() {
                 bounds,
                 g.cell,
               );
-              g.inputDir = direction;
               g.facingDir = direction;
-              g.hasMoveCommand = true;
+              g.inputDir = ZERO;
+              g.cutDir = ZERO;
+              g.hasMoveCommand = false;
             }
             break;
           }
