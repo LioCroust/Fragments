@@ -2390,7 +2390,10 @@ export default function GameScreen() {
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
              diamond: { ...g.diamond },
               particles: g.particles.slice(-200),
-             smokePuffs: g.smokePuffs,
+             // Keep native SVG state immutable between frames. The game loop
+             // mutates live puff objects in place, which can otherwise leave
+             // Expo Go rendering the previous coordinates on Android.
+             smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
              claimedPolygons: g.claimedPolygons,
              pendingCapturePolygons: g.pendingCapturePolygons,
             scanY: g.scanY,
