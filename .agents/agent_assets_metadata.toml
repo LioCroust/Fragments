@@ -150,3 +150,17 @@ mtime_ms = 1788966087245
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/6d186207-f3ac-472d-b929-d9161e1a1d24/982d9600-1fcf-48b4-b9b5-ac0b1d1a0c92"
 storage_version_token = "1788969747172969"
 content_type = "audio/wav"
+
+[[outputs]]
+id = "DKI37UiSNv_wsxqWKDVLP"
+uri = "file://artifacts/fragments-neon/assets/audio/sector-transition-victory-heroic.wav"
+type = "audio"
+title = "Alternative — jingle de victoire héroïque"
+description = "Alternative plus triomphante : impact de réussite, montée en arpège et accord final majeur. Durée 2,25 secondes, stéréo."
+logical_id = "8cd8cfef-ff31-4301-bc3f-864b53241475"
+content_hash = "sha256:10072cfc917ee55d61347b0a877092c5fb57f5b2cd6e2076726f778d261c2c1b"
+size = 396944
+mtime_ms = 1788969840289
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/8cd8cfef-ff31-4301-bc3f-864b53241475/da753e1b-d03e-460a-a50f-60f650b79dfb"
+storage_version_token = "1788969850838264"
+content_type = "audio/wav"
