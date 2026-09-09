@@ -3557,8 +3557,16 @@ export default function GameScreen() {
             y: g.player.y + droneVelocity.y * flightTime,
           };
           const clampThreadPoint = (point: Point): Point => ({
-            x: clamp(point.x, bounds.left + g.cell * 0.16, bounds.right - g.cell * 0.16),
-            y: clamp(point.y, bounds.top + g.cell * 0.16, bounds.bottom - g.cell * 0.16),
+            x: clamp(
+              point.x,
+              bounds.left + g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
+              bounds.right - g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
+            ),
+            y: clamp(
+              point.y,
+              bounds.top + g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
+              bounds.bottom - g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
+            ),
           });
           const clampedTarget = clampThreadPoint(target);
           const launchX = clampedTarget.x - enemy.x;
