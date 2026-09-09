@@ -1832,7 +1832,7 @@ export default function GameScreen() {
         }),
         Animated.delay(1000),
         Animated.timing(bannerTranslateX, {
-          toValue: -7,
+          toValue: -21,
           duration: 72,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
