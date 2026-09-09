@@ -2009,11 +2009,6 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       ))}
       {snapshot.spiderThreads.map((thread, index) => {
         const active = spiderThreadIsActive(thread);
-        const warningOpacity = clamp(
-          0.3 + Math.min(0.48, thread.remaining * 0.12),
-          0.3,
-          0.78,
-        );
         const webSize = snapshot.cell * SPIDER_WEB_SIZE_CELLS;
         return (
           <G key={`spider-thread-${index}`} opacity={active ? 0.82 : 0.92}>
