@@ -5730,18 +5730,45 @@ export default function GameScreen() {
           claimedCount={snapshot.claimedPolygons.length}
           protectedTrailCount={snapshot.protectedTrails.length}
         />
-        {snapshot.trail.length > 1 && (
-          <Polyline
-            points={pointsToString(snapshot.trail)}
-            fill="none"
-            stroke="#ff5500"
-            strokeWidth={5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
-        <NativeArenaDynamic snapshot={snapshot} />
       </Svg>
+    );
+  };
+
+  const renderNativeDynamicArena = () => {
+    if (Platform.OS === 'web' || !nativeSnapshot) return null;
+    const snapshot = nativeSnapshot;
+    const renderMargin = Math.max(snapshot.cell * 2.2, 28);
+    const expandedWidth = snapshot.width + renderMargin * 2;
+    const expandedHeight = snapshot.height + renderMargin * 2;
+    return (
+      <View style={styles.nativeArenaDynamicLayer} pointerEvents="none">
+        <Svg
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              left: -renderMargin,
+              top: -renderMargin,
+              width: expandedWidth,
+              height: expandedHeight,
+              overflow: 'visible',
+            },
+          ]}
+          viewBox={`${-renderMargin} ${-renderMargin} ${expandedWidth} ${expandedHeight}`}
+          preserveAspectRatio="none"
+        >
+          {snapshot.trail.length > 1 && (
+            <Polyline
+              points={pointsToString(snapshot.trail)}
+              fill="none"
+              stroke="#ff5500"
+              strokeWidth={5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+          <NativeArenaDynamic snapshot={snapshot} />
+        </Svg>
+      </View>
     );
   };
 
@@ -5861,6 +5888,8 @@ export default function GameScreen() {
           </View>
         )}
       </View>
+
+      {renderNativeDynamicArena()}
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
@@ -6064,7 +6093,16 @@ const styles = StyleSheet.create({
     top: 0,
     left: 18,
     right: 18,
+    zIndex: 3,
+  },
+  nativeArenaDynamicLayer: {
+    position: 'absolute',
+    top: 174,
+    left: 0,
+    right: 0,
+    bottom: 4,
     zIndex: 2,
+    overflow: 'visible',
   },
   hudSignalRail: {
     flexDirection: 'row',
