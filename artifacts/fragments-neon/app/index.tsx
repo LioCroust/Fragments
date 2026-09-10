@@ -197,8 +197,11 @@ const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
 const DIAMOND_SPRITE_FRAME_COUNT = 4;
 const DIAMOND_SPRITE_FRAME_SIZE = 256;
 const DIAMOND_SPRITE_FRAME_DURATION = 7;
-const ENEMY_RENDER_SCALE = 0.92;
+const ENEMY_RENDER_SCALE = 0.88;
+const BOSS_RENDER_SCALE = 1.72;
 const PICKUP_VISUAL_SIZE_CELLS = 1.34;
+const PLAYER_MOVE_SPEED = 126;
+const BOSS_SPEED_BOOST = 1.06;
 const SEVEN_PROJECTILE_COUNT = 7;
 const SEVEN_PROJECTILE_INTERVAL = 7;
 const SEVEN_PROJECTILE_SPEED = 42;
@@ -380,7 +383,7 @@ const DRAGON_NOMINAL_SPEED = 32;
 const DRAGON_ATTACK_SPEED = 78;
 const dragonSpeedFor = (enemy: Enemy, attacking: boolean) => {
   const bossMultiplier = enemy.isBoss
-    ? 1.16 + Math.min(0.16, (enemy.bossTier ?? 1) * 0.035)
+    ? (1.16 + Math.min(0.16, (enemy.bossTier ?? 1) * 0.035)) * BOSS_SPEED_BOOST
     : 1;
   return (attacking ? DRAGON_ATTACK_SPEED : DRAGON_NOMINAL_SPEED) * bossMultiplier;
 };
@@ -1255,7 +1258,7 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
       : 0;
   return {
     rotation: directionRotation + sway,
-    scale: (enemy.isBoss ? 1.58 : 1)
+    scale: (enemy.isBoss ? BOSS_RENDER_SCALE : 1)
       + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
     offsetY: Math.sin(phase * 1.05) * cell * 0.08,
   };
@@ -1828,7 +1831,9 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
   }
   return (rosterByLevel[clampedLevel] ?? rosterByLevel[1]).map((spec) => {
     const enemy = { ...enemies[spec.baseIndex], ...spec };
-    const bossSpeed = spec.isBoss ? 1.24 + (spec.bossTier ?? 1) * 0.035 : 1;
+    const bossSpeed = spec.isBoss
+      ? (1.24 + (spec.bossTier ?? 1) * 0.035) * BOSS_SPEED_BOOST
+      : 1;
     const spiderDifficulty = enemy.kind === 'SPIDER'
       ? spiderDifficultyFor(spec.spiderGrade ?? enemy.spiderGrade ?? 1, spec.bossTier)
       : undefined;
@@ -4292,8 +4297,8 @@ export default function GameScreen() {
                 ? g.facingDir
                 : ZERO;
           const droneVelocity = {
-            x: droneDirection.x * 118,
-            y: droneDirection.y * 118,
+              x: droneDirection.x * PLAYER_MOVE_SPEED,
+              y: droneDirection.y * PLAYER_MOVE_SPEED,
           };
           const offsetX = g.player.x - enemy.x;
           const offsetY = g.player.y - enemy.y;
@@ -4543,7 +4548,7 @@ export default function GameScreen() {
             ? g.facingDir
             : ZERO;
       if (direction.x !== 0 || direction.y !== 0) g.facingDir = direction;
-      const baseSpeed = 118;
+      const baseSpeed = PLAYER_MOVE_SPEED;
       const baseDistance = baseSpeed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
         const steps = Math.max(1, Math.ceil(baseDistance));
