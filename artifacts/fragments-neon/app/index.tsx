@@ -5895,14 +5895,14 @@ export default function GameScreen() {
                 <Polygon
                   points="8,0.4 10,1.2 11.8,0.5 12.7,2.2 14.7,2.5 14.9,4.4 16.6,5.5 15.9,7.3 17.2,8.8 15.9,10.3 16.5,12.1 14.8,13.1 14.6,15 12.7,15.2 11.7,16.8 10,16.1 8.2,16.8 7.3,15.1 5.3,14.8 5.1,13 3.4,11.9 4.1,10.2 2.8,8.7 4.1,7.2 3.5,5.4 5.2,4.4 5.4,2.5 7.3,2.2"
                   fill="none"
-                  stroke={HUD_COLORS.magenta}
+                  stroke={HUD_COLORS.cyan}
                   strokeWidth="1.5"
                   strokeLinejoin="round"
                 />
-                <Circle cx="10" cy="8.7" r="3.1" fill="none" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Circle cx="10" cy="8.7" r="1" fill={HUD_COLORS.magenta} />
+                <Circle cx="10" cy="8.7" r="3.1" fill="none" stroke={HUD_COLORS.cyan} strokeWidth="1.5" />
+                <Circle cx="10" cy="8.7" r="1" fill={HUD_COLORS.cyan} />
               </Svg>
-              <Text style={[styles.utilityLabel, { color: HUD_COLORS.magenta }]}>OPTIONS</Text>
+              <Text style={[styles.utilityLabel, { color: HUD_COLORS.cyan }]}>OPTIONS</Text>
             </View>
           </View>
 
@@ -5937,13 +5937,13 @@ export default function GameScreen() {
             </View>
             <View style={[styles.hudCard, styles.utilityCard, styles.shopCard]}>
               <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole boutique">
-                <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.amber} strokeWidth="1.4" />
-                <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.amber} strokeWidth="1.4" />
-                <Rect x="4" y="6" width="12" height="9" fill="none" stroke={HUD_COLORS.amber} strokeWidth="1.4" />
-                <Rect x="8" y="10" width="4" height="5" fill="none" stroke={HUD_COLORS.amber} strokeWidth="1.2" />
-                <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.amber} strokeWidth="1" />
+                <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
+                <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
+                <Rect x="4" y="6" width="12" height="9" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
+                <Rect x="8" y="10" width="4" height="5" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.2" />
+                <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.lime} strokeWidth="1" />
               </Svg>
-              <Text style={[styles.utilityLabel, { color: HUD_COLORS.amber }]}>BOUTIQUE</Text>
+              <Text style={[styles.utilityLabel, { color: HUD_COLORS.lime }]}>BOUTIQUE</Text>
             </View>
           </View>
         </View>
@@ -6149,14 +6149,14 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   optionsCard: {
-    borderColor: HUD_COLORS.magenta,
-    backgroundColor: 'rgba(30, 5, 30, 0.9)',
-    transform: [{ rotate: '-1deg' }],
+    borderColor: HUD_COLORS.cyan,
+    backgroundColor: 'rgba(0, 24, 34, 0.9)',
+    transform: [{ translateY: -7 }, { rotate: '-1deg' }],
   },
   shopCard: {
-    borderColor: HUD_COLORS.amber,
-    backgroundColor: 'rgba(38, 15, 4, 0.9)',
-    transform: [{ rotate: '1deg' }],
+    borderColor: HUD_COLORS.lime,
+    backgroundColor: 'rgba(18, 34, 8, 0.9)',
+    transform: [{ translateY: -7 }, { rotate: '1deg' }],
   },
   utilityLabel: {
     fontFamily: 'Inter_700Bold',
