@@ -289,6 +289,14 @@ type SevenProjectile = Point & {
   radius: number;
 };
 
+type PlayerMissile = Point & {
+  vx: number;
+  vy: number;
+  life: number;
+  radius: number;
+  angle: number;
+};
+
 type SpiderThread = {
   start: Point;
   end: Point;
@@ -426,6 +434,7 @@ type Game = {
   diamonds: Diamond[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
+  missiles: PlayerMissile[];
   spiderThreads: SpiderThread[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
@@ -481,6 +490,7 @@ type Snapshot = {
   diamonds: Diamond[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
+  missiles: PlayerMissile[];
   spiderThreads: SpiderThread[];
   particles: Particle[];
   smokePuffs: SmokePuff[];
@@ -1041,6 +1051,7 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 };
 const diamondSource = require('../assets/images/neon-diamond-fragment.png');
 const playerSource = require('../assets/images/player-drone-prism-arrow.png');
+const playerMissileSource = require('../assets/images/player-missile-transparent.png');
 
 const createDiamond = (width: number, height: number, cell: number): Diamond => {
   const bounds = perimeterBounds(width, height, cell);
@@ -1409,6 +1420,29 @@ const bombTouchesTrail = (bomb: Bomb, cell: number, trail: Point[]) => (
 
 const sevenProjectileRadius = (cell: number) => cell * SEVEN_PROJECTILE_RADIUS_CELLS;
 const sevenProjectileSize = (cell: number) => cell * SEVEN_PROJECTILE_SIZE_CELLS;
+const PLAYER_MISSILE_SPEED = 270;
+const PLAYER_MISSILE_MAX_LIFE = 3.5;
+const PLAYER_MISSILE_RADIUS_CELLS = 0.2;
+const PLAYER_MISSILE_SIZE_CELLS = 0.72;
+const playerMissileRadius = (cell: number) => cell * PLAYER_MISSILE_RADIUS_CELLS;
+const playerMissileSize = (cell: number) => cell * PLAYER_MISSILE_SIZE_CELLS;
+
+const createPlayerMissileVolley = (player: Point, cell: number): PlayerMissile[] => (
+  [
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+  ].map((direction) => ({
+    x: player.x,
+    y: player.y,
+    vx: direction.x * PLAYER_MISSILE_SPEED,
+    vy: direction.y * PLAYER_MISSILE_SPEED,
+    life: PLAYER_MISSILE_MAX_LIFE,
+    radius: playerMissileRadius(cell),
+    angle: Math.atan2(direction.y, direction.x) + Math.PI / 2,
+  }))
+);
 
 const createSevenVolley = (enemy: Enemy, cell: number): SevenProjectile[] => (
   Array.from({ length: SEVEN_PROJECTILE_COUNT }, (_, index) => {
@@ -1444,6 +1478,17 @@ const sevenProjectileTouchesBlueBoundary = (
     ))
   ));
 };
+
+const playerMissileTouchesBlueBoundary = (
+  missile: PlayerMissile,
+  from: Point,
+  to: Point,
+  bounds: ReturnType<typeof perimeterBounds>,
+) => (
+  !pointInsidePerimeter(to, bounds)
+  || distanceToPerimeter(to, bounds)
+    <= missile.radius + PERIMETER_STROKE_WIDTH * 0.5
+);
 
 const pointInPolygon = (point: Point, polygon: Point[]) => {
   let inside = false;
@@ -2327,6 +2372,22 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         );
       })}
+      {snapshot.missiles.map((missile, missileIndex) => {
+        const spriteSize = playerMissileSize(snapshot.cell);
+        const rotationDegrees = missile.angle * (180 / Math.PI);
+        return (
+          <SvgImage
+            key={`player-missile-${missileIndex}`}
+            href={playerMissileSource}
+            x={missile.x - spriteSize / 2}
+            y={missile.y - spriteSize / 2}
+            width={spriteSize}
+            height={spriteSize}
+            opacity={0.98}
+            transform={`rotate(${rotationDegrees} ${missile.x} ${missile.y})`}
+          />
+        );
+      })}
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
         const frame = enemyFrameIndex(enemy);
@@ -2454,6 +2515,7 @@ export default function GameScreen() {
     diamonds: [],
     bombs: [],
     projectiles: [],
+    missiles: [],
     spiderThreads: [],
     particles: [],
     smokePuffs: [],
@@ -2491,6 +2553,7 @@ export default function GameScreen() {
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
   const sevenFireOrbImageRef = useRef<any>(null);
+  const playerMissileImageRef = useRef<any>(null);
   const spiderWebImageRef = useRef<any>(null);
   const diamondSpriteImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
@@ -2743,6 +2806,13 @@ export default function GameScreen() {
       if (!cancelled) sevenFireOrbImageRef.current = sevenFireOrbImage;
     };
     sevenFireOrbImage.src = resolvedSevenFireOrb?.uri ?? sevenFireOrbSource;
+    const resolvedPlayerMissile = (RNImage as any).resolveAssetSource?.(playerMissileSource);
+    const playerMissileImage = new (globalThis as any).Image();
+    playerMissileImage.decoding = 'async';
+    playerMissileImage.onload = () => {
+      if (!cancelled) playerMissileImageRef.current = playerMissileImage;
+    };
+    playerMissileImage.src = resolvedPlayerMissile?.uri ?? playerMissileSource;
     const resolvedSpiderWeb = (RNImage as any).resolveAssetSource?.(spiderWebSource);
     const spiderWebImage = new (globalThis as any).Image();
     spiderWebImage.decoding = 'async';
@@ -2787,6 +2857,7 @@ export default function GameScreen() {
       coreReactorImageRef.current = null;
       diamondSpriteImageRef.current = null;
       sevenFireOrbImageRef.current = null;
+      playerMissileImageRef.current = null;
       spiderWebImageRef.current = null;
       playerImageRef.current = null;
       cuttingSpriteImageRef.current = null;
@@ -2876,6 +2947,7 @@ export default function GameScreen() {
       diamonds: previousDiamonds,
       bombs,
       projectiles: [],
+      missiles: [],
       spiderThreads: [],
       particles: [],
       smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
@@ -3238,6 +3310,61 @@ export default function GameScreen() {
         g.smokePuffs.length = 0;
         g.smokeAccumulator = 0;
       }
+    };
+
+    const launchPlayerMissiles = (g: Game) => {
+      g.missiles.push(...createPlayerMissileVolley(g.player, g.cell));
+    };
+
+    const movePlayerMissiles = (g: Game, dt: number, now: number) => {
+      if (g.status !== 'PLAYING') return;
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      let activeMissileCount = 0;
+      for (let index = 0; index < g.missiles.length; index += 1) {
+        const missile = g.missiles[index];
+        const from = { x: missile.x, y: missile.y };
+        const to = {
+          x: missile.x + missile.vx * dt,
+          y: missile.y + missile.vy * dt,
+        };
+        missile.x = to.x;
+        missile.y = to.y;
+        missile.life -= dt;
+
+        let hitTarget = false;
+        for (const enemy of g.enemies) {
+          if (enemyIsDestroyed(enemy) || enemy.respawnAt > now) continue;
+          const touched = enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y).some(({ center, radius }) => (
+            distanceToSegment(center, from, to) <= radius + missile.radius
+          ));
+          if (touched) {
+            burstEnemy(g, enemy, now);
+            hitTarget = true;
+            break;
+          }
+        }
+        if (!hitTarget) {
+          const bomb = g.bombs.find((candidate) => (
+            !candidate.destroyed
+            && distanceToSegment(candidate, from, to)
+              <= bombRadius(g.cell) + missile.radius
+          ));
+          if (bomb) {
+            neutralizeBomb(g, bomb);
+            hitTarget = true;
+          }
+        }
+
+        if (
+          !hitTarget
+          && missile.life > 0
+          && !playerMissileTouchesBlueBoundary(missile, from, to, bounds)
+        ) {
+          g.missiles[activeMissileCount] = missile;
+          activeMissileCount += 1;
+        }
+      }
+      g.missiles.length = activeMissileCount;
     };
 
     const moveEnemies = (g: Game, dt: number, now: number) => {
@@ -3957,16 +4084,10 @@ export default function GameScreen() {
             });
             g.enemies.forEach((enemy) => {
               if (enemy.respawnAt > now) return;
-              const motion = enemyAnimationTransform(enemy, g.cell);
-              const enemyPoints = [
-                { x: enemy.x, y: enemy.y + motion.offsetY },
-                ...enemySpriteCorners(enemy, g.cell, enemy.x, enemy.y),
-              ];
+              const enemyPoints = enemySpriteFootprint(enemy, g.cell, enemy.x, enemy.y);
               const enemyInside = completedPolygons.some((polygon) => (
-                enemyPoints.some((point) => (
-                  pointInPolygon(point, polygon)
-                  || polygonBoundaryDistance(point, polygon) <= g.cell * 0.12
-                ))
+                enemyPoints.length > 0
+                && enemyPoints.every((point) => pointInPolygon(point, polygon))
               ));
               if (enemyInside) burstEnemy(g, enemy, now);
             });
@@ -3977,8 +4098,10 @@ export default function GameScreen() {
               playSectorTransition();
               g.level = nextLevel;
               resetGame(true, true);
+              launchPlayerMissiles(gameRef.current);
               return;
             }
+            launchPlayerMissiles(g);
           }
           g.fillQueue = [];
           g.fillCursor = 0;
@@ -4149,6 +4272,8 @@ export default function GameScreen() {
         }
       }
 
+      movePlayerMissiles(g, dt, now);
+      if (g.status !== 'PLAYING') return;
       moveProjectiles(g, dt, now);
       if (g.status !== 'PLAYING') return;
       checkBombContact(g, now);
@@ -4505,6 +4630,29 @@ export default function GameScreen() {
          });
          context.globalAlpha = 1;
        }
+       const playerMissileImage = playerMissileImageRef.current;
+       if (playerMissileImage) {
+         const missileSize = playerMissileSize(g.cell);
+         context.save();
+         context.globalCompositeOperation = 'lighter';
+         context.globalAlpha = 0.98;
+         context.shadowColor = '#00f3ff';
+         context.shadowBlur = g.cell * 0.22;
+         g.missiles.forEach((missile) => {
+           context.save();
+           context.translate(missile.x, missile.y);
+           context.rotate(missile.angle);
+           context.drawImage(
+             playerMissileImage,
+             -missileSize / 2,
+             -missileSize / 2,
+             missileSize,
+             missileSize,
+           );
+           context.restore();
+         });
+         context.restore();
+       }
       g.enemies.forEach((enemy) => {
         if (enemy.respawnAt > now) return;
         const frame = enemyFrameIndex(enemy);
@@ -4597,6 +4745,7 @@ export default function GameScreen() {
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
                projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
+              missiles: g.missiles.map((missile) => ({ ...missile })),
               spiderThreads: g.spiderThreads.map((thread) => ({
                 ...thread,
                 start: { ...thread.start },
