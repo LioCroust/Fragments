@@ -4102,7 +4102,6 @@ export default function GameScreen() {
               playSectorTransition();
               g.level = nextLevel;
               resetGame(true, true);
-              launchPlayerMissiles(gameRef.current);
               return;
             }
             launchPlayerMissiles(g);
