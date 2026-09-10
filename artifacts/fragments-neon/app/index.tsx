@@ -3274,7 +3274,7 @@ export default function GameScreen() {
         pathDistance,
         lateralOffset,
         lateralVelocity: (Math.random() - 0.5) * g.cell * (2.6 + Math.random() * 4.2) * initialSpread,
-        forwardSpeed: g.cell * (2.2 + Math.random() * 4.6),
+        forwardSpeed: g.cell * (1.1 + Math.random() * 2.9),
         life,
         maxLife: life,
         size: g.cell * (0.018 + Math.random() * 0.038),
@@ -3306,7 +3306,7 @@ export default function GameScreen() {
         path.push({ ...g.player });
       }
       const pathData = polylineMetrics(path);
-      const travelDuration = clamp(pathData.totalLength / 430, 0.42, 1.08);
+      const travelDuration = clamp(pathData.totalLength / 300, 0.58, 1.35);
       const sequence: FusionSequence = {
         path,
         cumulativeLengths: pathData.cumulativeLengths,
