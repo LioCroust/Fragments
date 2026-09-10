@@ -38,8 +38,7 @@ const PERIMETER_VERTICAL_INSET_CELLS = 2;
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
-const INITIAL_MAP_OPACITY = 0.07;
-const LATE_SECTOR_MAP_OPACITY = 0.035;
+const INITIAL_MAP_OPACITY = 0;
 const CAPTURED_ZONE_OPACITY = 0.15;
 const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
@@ -60,9 +59,6 @@ const HUD_COLORS = {
   panel: 'rgba(8, 10, 18, 0.92)',
   panelMuted: 'rgba(8, 10, 18, 0.78)',
 } as const;
-const initialMapOpacityForLevel = (level: number) => (
-  level >= 11 ? LATE_SECTOR_MAP_OPACITY : INITIAL_MAP_OPACITY
-);
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
@@ -2239,7 +2235,7 @@ const NativeArenaStatic = React.memo(({
         width={bounds.right - bounds.left}
         height={bounds.bottom - bounds.top}
         fill={ZONE_COLOR}
-        opacity={initialMapOpacityForLevel(level)}
+        opacity={INITIAL_MAP_OPACITY}
       />
       <G opacity={CAPTURED_ZONE_LAYER_OPACITY}>
         {claimedPolygons.slice(0, claimedCount).map((polygon, index) => (
@@ -4823,7 +4819,7 @@ export default function GameScreen() {
       }
 
        context.globalCompositeOperation = 'source-over';
-        context.globalAlpha = initialMapOpacityForLevel(g.level);
+        context.globalAlpha = INITIAL_MAP_OPACITY;
        context.fillStyle = ZONE_COLOR;
        context.fillRect(
          g.cell * PERIMETER_HORIZONTAL_INSET_CELLS,
