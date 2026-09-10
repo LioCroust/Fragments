@@ -2295,7 +2295,10 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
     <>
       {snapshot.diamonds.map((diamond, index) => (
         !diamond.collected && (
-          <G key={`diamond-${index}`} transform={`translate(${diamond.x} ${diamond.y})`}>
+          <G
+            key={`diamond-${index}`}
+            transform={`translate(${diamond.x} ${diamond.y + Math.sin(snapshot.frame * 0.05 + diamond.phase) * snapshot.cell * 0.08})`}
+          >
             <Defs>
               <ClipPath id={`diamond-sprite-clip-${index}`}>
                 <Rect
@@ -5115,7 +5118,10 @@ export default function GameScreen() {
          g.diamonds.forEach((diamond) => {
            if (diamond.collected) return;
            context.save();
-           context.translate(diamond.x, diamond.y);
+           context.translate(
+             diamond.x,
+             diamond.y + Math.sin(g.frame * 0.05 + diamond.phase) * g.cell * 0.08,
+           );
             context.globalCompositeOperation = 'lighter';
             context.shadowColor = '#ffffff';
             context.shadowBlur = g.cell * 0.22;
