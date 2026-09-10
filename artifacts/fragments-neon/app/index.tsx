@@ -6223,7 +6223,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
-    transform: [{ translateX: -7 }],
+    transform: [{ translateX: -7 }, { translateY: -9 }],
   },
   zoneCard: {
     width: '56%',
