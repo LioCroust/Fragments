@@ -1832,8 +1832,28 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
 };
 
 const createBombs = (width: number, height: number, cell: number, level: number): Bomb[] => {
-  if (isBossSector(level) || Math.random() >= (level < 5 ? 0.28 : 0.48)) return [];
-  const bombCount = 1;
+  if (isBossSector(level)) return [];
+
+  const spawnChance = level <= 4
+    ? 0.34
+    : level <= 9
+      ? 0.55
+      : level <= 19
+        ? 0.63
+        : level <= 29
+          ? 0.7
+          : level <= 39
+            ? 0.76
+            : 0.82;
+  if (Math.random() >= spawnChance) return [];
+
+  const bombCount = level < 15
+    ? 1
+    : level < 25
+      ? 1 + (Math.random() < 0.35 ? 1 : 0)
+      : level < 40
+        ? 1 + (Math.random() < 0.48 ? 1 : 0) + (Math.random() < 0.12 ? 1 : 0)
+        : 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.25 ? 1 : 0);
   const bounds = perimeterBounds(width, height, cell);
   const minX = bounds.left + bombVisualRadius(cell);
   const maxX = bounds.right - bombVisualRadius(cell);
