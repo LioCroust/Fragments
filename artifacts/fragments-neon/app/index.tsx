@@ -307,6 +307,13 @@ const ENEMY_KIND_PLURAL_LABELS: Record<EnemyKind, string> = {
   SPIDER: 'ARAIGNÉES',
 };
 
+const ENEMY_SPLIT_BANNER_LABELS: Record<EnemyKind, string> = {
+  SHIP: 'VAISSEAU FRACTURÉ',
+  DRAGON: 'DRAGON FRACTURÉ',
+  SEVEN: 'SEVEN FRACTURÉ',
+  SPIDER: 'ARAIGNÉE FRACTURÉE',
+};
+
 const isBossSector = (level: number) => Boolean(BOSS_SECTOR_KINDS[level]);
 const bossKindForSector = (level: number) => BOSS_SECTOR_KINDS[level];
 
@@ -508,7 +515,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'MINI' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -1247,7 +1254,7 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
 
 const shipSmokePosition = (enemy: Enemy, cell: number): Point => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
-  const shipScale = enemy.isMiniShip ? 0.5 : 1;
+  const shipScale = enemy.isMini ? 0.5 : 1;
   return {
     x: enemy.x - (enemy.vx / velocityLength) * cell * 0.92 * shipScale,
     y: enemy.y - (enemy.vy / velocityLength) * cell * 0.92 * shipScale,
@@ -1372,33 +1379,33 @@ const drawCuttingSpriteCanvas = (
   context.restore();
 };
 
-const enemySpriteSize = (kind: EnemyKind, cell: number, isMiniShip = false) => {
-  if (kind === 'DRAGON') return { width: cell * 2.25, height: cell * 2.25 };
-  if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
-  if (kind === 'SPIDER') return { width: cell * 2.2, height: cell * 2.2 };
-  const shipScale = isMiniShip ? 0.5 : 1;
-  return { width: cell * 1.9 * shipScale, height: cell * 1.9 * shipScale };
+const enemySpriteSize = (kind: EnemyKind, cell: number, isMini = false) => {
+  const miniScale = isMini ? 0.5 : 1;
+  if (kind === 'DRAGON') return { width: cell * 2.25 * miniScale, height: cell * 2.25 * miniScale };
+  if (kind === 'SEVEN') return { width: cell * 3.5 * miniScale, height: cell * 3.5 * miniScale };
+  if (kind === 'SPIDER') return { width: cell * 2.2 * miniScale, height: cell * 2.2 * miniScale };
+  return { width: cell * 1.9 * miniScale, height: cell * 1.9 * miniScale };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
-  const shipScale = enemy.kind === 'SHIP' && enemy.isMiniShip ? 0.5 : 1;
+  const miniScale = enemy.isMini ? 0.5 : 1;
   const baseRadius = enemy.kind === 'DRAGON'
-    ? cell * 0.78
+    ? cell * 0.78 * miniScale
     : enemy.kind === 'SPIDER'
-      ? cell * 0.88
+      ? cell * 0.88 * miniScale
       : enemy.kind === 'SEVEN'
-        ? cell * 1.32
-        : cell * 0.8 * shipScale;
+        ? cell * 1.32 * miniScale
+        : cell * 0.8 * miniScale;
   return baseRadius * (enemy.isBoss ? 1.08 : 1);
 };
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   return Math.max(enemyRadius(enemy, cell), Math.hypot(sprite.width, sprite.height) * 0.5) + PERIMETER_STROKE_WIDTH * 0.5;
 };
 
 const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
   const halfWidth = sprite.width * motion.scale * 0.5;
   const halfHeight = sprite.height * motion.scale * 0.5;
@@ -1419,7 +1426,7 @@ const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) 
 };
 
 const enemySpriteCorners = (enemy: Enemy, cell: number, x: number, y: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
   const halfWidth = sprite.width * motion.scale * 0.5;
   const halfHeight = sprite.height * motion.scale * 0.5;
@@ -1518,7 +1525,7 @@ const enemyCollisionCircles = (
   x: number,
   y: number,
 ): CollisionCircle[] => {
-  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
   const halfWidth = sprite.width * motion.scale * 0.5;
   const halfHeight = sprite.height * motion.scale * 0.5;
@@ -2035,7 +2042,7 @@ const placeBombsInOpenSurface = (
 
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
-  const shipScale = enemy.isMiniShip ? 0.5 : 1;
+  const shipScale = enemy.isMini ? 0.5 : 1;
   const backwardX = -enemy.vx / velocityLength;
   const backwardY = -enemy.vy / velocityLength;
   const sideX = -backwardY;
@@ -2293,7 +2300,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
             .map((enemy, index) => {
               const smokePosition = shipSmokePosition(enemy, snapshot.cell);
               const motion = enemyAnimationTransform(enemy, snapshot.cell);
-              const smokeSize = snapshot.cell * (enemy.isMiniShip ? 0.9 : 1.8);
+              const smokeSize = snapshot.cell * (enemy.isMini ? 0.9 : 1.8);
               const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
               return (
                 <G
@@ -2563,7 +2570,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
         const frame = enemyFrameIndex(enemy);
-        const size = enemySpriteSize(enemy.kind, snapshot.cell, enemy.isMiniShip);
+        const size = enemySpriteSize(enemy.kind, snapshot.cell, enemy.isMini);
         const motion = enemyAnimationTransform(enemy, snapshot.cell);
         const centerY = enemy.y + motion.offsetY;
         const rotationDegrees = motion.rotation * (180 / Math.PI);
@@ -3067,7 +3074,7 @@ export default function GameScreen() {
       ? previousEnemies
         .filter((enemy) => (
           enemy.kind === 'SHIP'
-          && (enemy.isMiniShip || enemy.splitLevel !== undefined)
+          && (enemy.isMini || enemy.splitLevel !== undefined)
           && !enemyIsDestroyed(enemy)
         ))
         .map((enemy) => ({ ...enemy }))
@@ -3080,7 +3087,7 @@ export default function GameScreen() {
     const enemies = createEnemies(width, height, cell, previousLevel);
     preserveDestroyedEnemies(
       enemies,
-      previousEnemies.filter((enemy) => !enemy.isMiniShip && enemy.splitLevel === undefined),
+      previousEnemies.filter((enemy) => !enemy.isMini && enemy.splitLevel === undefined),
     );
     if (previousSplitShips.length > 0) {
       enemies.push(...previousSplitShips);
@@ -3616,7 +3623,7 @@ export default function GameScreen() {
       return true;
     };
 
-    const splitShipIntoShips = (
+    const splitEnemyIntoEnemies = (
       g: Game,
       enemy: Enemy,
       childIsMiniShip: boolean,
@@ -3630,7 +3637,7 @@ export default function GameScreen() {
       const separation = g.cell * 0.72;
       const childTemplate = {
         ...enemy,
-        isMiniShip: childIsMiniShip,
+        isMini: childIsMiniShip,
         splitLevel: 1,
         isBoss: false,
         bossTier: undefined,
@@ -3677,8 +3684,7 @@ export default function GameScreen() {
       fromMissile = false,
     ) => {
       const splitOnMissile = fromMissile
-        && enemy.kind === 'SHIP'
-        && !enemy.isMiniShip;
+        && !enemy.isMini;
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
       for (let i = 0; i < 200; i += 1) {
         const angle = Math.random() * Math.PI * 2;
@@ -3699,7 +3705,7 @@ export default function GameScreen() {
       // A destroyed enemy stays permanently inactive for this sector. The
       // next sector creates a fresh enemy roster through resetGame.
       const splitShips = splitOnMissile
-        ? splitShipIntoShips(g, enemy, !enemy.isBoss)
+        ? splitEnemyIntoEnemies(g, enemy, !enemy.isBoss)
         : [];
       enemy.respawnAt = Number.POSITIVE_INFINITY;
       enemy.vx = 0;
@@ -3709,11 +3715,14 @@ export default function GameScreen() {
         enqueueBanner({
           kind: enemy.isBoss ? 'BOSS_SPLIT' : 'SPLIT',
           points: ENEMY_SCORE[enemy.kind],
+          enemyKind: enemy.kind,
         });
-      } else if (enemy.isMiniShip) {
-        enqueueBanner({ kind: 'MINI', points: ENEMY_SCORE[enemy.kind] });
       } else {
-        enqueueBanner({ kind: 'ENEMY', points: ENEMY_SCORE[enemy.kind] });
+        enqueueBanner({
+          kind: 'ENEMY',
+          points: ENEMY_SCORE[enemy.kind],
+          enemyKind: enemy.kind,
+        });
       }
       if (g.enemies.every((candidate) => enemyIsDestroyed(candidate))) {
         enqueueBanner({ kind: 'CLEAN' });
@@ -3901,7 +3910,7 @@ export default function GameScreen() {
         const maxY = bounds.bottom;
         const bodyRadius = Math.max(
           enemyRadius(enemy, g.cell) * 0.9,
-          g.cell * (enemy.isMiniShip ? 0.36 : 0.72),
+          g.cell * (enemy.isMini ? 0.36 : 0.72),
         );
         const trailTouchesEnemyBody = (trail: Point[], x: number, y: number) => {
           if (trail.length < 2) return false;
@@ -4993,7 +5002,7 @@ export default function GameScreen() {
              if (enemy.kind !== 'SHIP' || enemy.respawnAt > now) return;
              const smokePosition = shipSmokePosition(enemy, g.cell);
              const motion = enemyAnimationTransform(enemy, g.cell);
-              const smokeSize = g.cell * (enemy.isMiniShip ? 0.9 : 1.8);
+              const smokeSize = g.cell * (enemy.isMini ? 0.9 : 1.8);
              context.save();
              context.globalAlpha = 0.58;
              context.translate(smokePosition.x, smokePosition.y + motion.offsetY);
@@ -5157,7 +5166,7 @@ export default function GameScreen() {
         const frame = enemyFrameIndex(enemy);
         const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
         if (!image) return;
-         const size = enemySpriteSize(enemy.kind, g.cell, enemy.isMiniShip);
+         const size = enemySpriteSize(enemy.kind, g.cell, enemy.isMini);
         const motion = enemyAnimationTransform(enemy, g.cell);
         context.save();
         context.translate(enemy.x, enemy.y + motion.offsetY);
@@ -5389,7 +5398,6 @@ export default function GameScreen() {
               <Text
                 style={[
                   styles.bannerTitle,
-                  banner.kind === 'MINI' && styles.compactBannerTitle,
                 ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
@@ -5408,9 +5416,7 @@ export default function GameScreen() {
                         : banner.kind === 'BOSS_SPLIT'
                           ? 'BOSS FRACTURÉ'
                         : banner.kind === 'SPLIT'
-                          ? 'VAISSEAU FRACTURÉ'
-                        : banner.kind === 'MINI'
-                          ? 'MINI-VAISSEAU DÉTRUIT'
+                          ? ENEMY_SPLIT_BANNER_LABELS[banner.enemyKind ?? 'SHIP']
                         : banner.kind === 'CLEAN'
                           ? 'SECTEUR NETTOYÉ !'
                           : banner.kind === 'GAME_OVER'
@@ -5431,9 +5437,7 @@ export default function GameScreen() {
                       : banner.kind === 'BOSS_SPLIT'
                         ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 VAISSEAUX DÉPLOYÉS`
                       : banner.kind === 'SPLIT'
-                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-VAISSEAUX`
-                      : banner.kind === 'MINI'
-                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS`
+                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-${ENEMY_KIND_PLURAL_LABELS[banner.enemyKind ?? 'SHIP']}`
                       : banner.kind === 'CLEAN'
                           ? 'SÉCURISEZ 80%'
                           : banner.kind === 'GAME_OVER'
@@ -5866,10 +5870,6 @@ const styles = StyleSheet.create({
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 12,
     textShadowOffset: { width: 0, height: 0 },
-  },
-  compactBannerTitle: {
-    fontSize: 17,
-    lineHeight: 21,
   },
   bannerScore: {
     marginTop: 4,
