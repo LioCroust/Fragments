@@ -7,11 +7,11 @@ node_modules/
 .expo/
 dist/
 web-build/
+static-build/
 expo-env.d.ts
 
 # Native
 ios/
-android/
 *.orig.*
 *.jks
 *.p8
@@ -37,5 +37,6 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 .vercel
+*.apk
 
 .env

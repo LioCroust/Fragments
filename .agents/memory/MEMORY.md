@@ -21,3 +21,4 @@
 - [Published app billing suspension](published-app-billing-suspension.md) — A completed build can still show “This app isn’t live yet” when Replit suspends the live service for usage-based billing.
 - [Expo audio format](expo-audio-format.md) — Convert newly generated short effects to MP3 before passing them to useAudioPlayer; raw WAV can fail during Web loading.
 - [Boss sector rules](boss-sector-rules.md) — Boss sectors are single-enemy capture challenges with no active bonuses and visual scale separated from fair collision size.
+- [Windows Android APK build](android-apk-build.md) — Commit the generated Android project for Windows Gradle builds; Replit lacks the JDK needed to compile it locally.
