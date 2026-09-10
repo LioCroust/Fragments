@@ -3483,6 +3483,25 @@ export default function GameScreen() {
         const minY = bounds.top;
         const maxY = bounds.bottom;
         const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
+        const trailTouchesEnemyBody = (trail: Point[], x: number, y: number) => {
+          if (trail.length < 2) return false;
+          const collisionCircles = enemyCollisionCircles(enemy, g.cell, x, y);
+          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
+          return collisionCircles.some(({ center, radius }) => (
+            trail.slice(1).some((trailPoint, index) => (
+              distanceToSegment(
+                center,
+                trail[index],
+                trailPoint,
+              ) <= radius + trailStrokeRadius
+            ))
+          ));
+        };
+        const enemyTouchesProtectedBoundary = (x: number, y: number) => (
+          g.protectedTrails.some((protectedTrail) => (
+            trailTouchesEnemyBody(protectedTrail, x, y)
+          ))
+        );
         const spriteFitsInsidePerimeter = (x: number, y: number) => (
           enemySpriteCorners(enemy, g.cell, x, y).every((corner) => (
             corner.x >= bounds.left
@@ -3494,12 +3513,52 @@ export default function GameScreen() {
         const enemyFitsAt = (x: number, y: number) => {
           if (!spriteFitsInsidePerimeter(x, y)) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
+            && !enemyTouchesProtectedBoundary(x, y);
         };
         const enemyCanMoveAt = (x: number, y: number) => {
           if (!spriteFitsInsidePerimeter(x, y)) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
+            && !enemyTouchesProtectedBoundary(x, y);
+        };
+        const enemyTouchesActiveTrail = (x: number, y: number) => (
+          trailTouchesEnemyBody(g.trail, x, y)
+        );
+        const enemySweepTouchesTrail = (
+          trail: Point[],
+          fromX: number,
+          fromY: number,
+          toX: number,
+          toY: number,
+        ) => {
+          if (trail.length < 2) return false;
+          const fromCircles = enemyCollisionCircles(enemy, g.cell, fromX, fromY);
+          const toCircles = enemyCollisionCircles(enemy, g.cell, toX, toY);
+          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
+          return fromCircles.some((fromCircle, index) => {
+            const toCircle = toCircles[index];
+            return trail.slice(1).some((trailPoint, trailIndex) => (
+              distanceBetweenSegments(
+                fromCircle.center,
+                toCircle.center,
+                trail[trailIndex],
+                trailPoint,
+              ) <= fromCircle.radius + trailStrokeRadius
+            ));
+          });
+        };
+        const enemySweepTouchesProtectedTrail = (
+          fromX: number,
+          fromY: number,
+          toX: number,
+          toY: number,
+        ) => g.protectedTrails.some((protectedTrail) => (
+          enemySweepTouchesTrail(protectedTrail, fromX, fromY, toX, toY)
+        ));
+        if (enemyTouchesActiveTrail(enemy.x, enemy.y)) {
+          explode(g, now);
+          return;
         }
         const fullyEnclosedAt = (x: number, y: number) => (
           pointInsideClaimedSurface({ x, y }, g.claimedPolygons, g.cell * 0.08)
