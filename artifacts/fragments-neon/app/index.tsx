@@ -3647,11 +3647,41 @@ export default function GameScreen() {
       const impactPoint = { x: enemy.x, y: enemy.y };
       const metrics = polylineMetrics(g.trail);
       const closest = closestPointOnPolyline(impactPoint, g.trail);
-      // Keep the enemy alive, but snap its body to the exact contact point.
-      // The enemy is frozen with the fusion sequence, so the red cut visibly
-      // stays attached instead of leaving a small gap at the collision frame.
-      enemy.x = closest.point.x;
-      enemy.y = closest.point.y;
+      // Keep the enemy alive and preserve its center. Move only enough for the
+      // collision circle that touched the cut to meet the red stroke exactly.
+      // This keeps the actual nose/leg/wing contact attached instead of
+      // incorrectly placing the enemy's center on the cut.
+      const touchedBody = enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y)
+        .map((circle) => {
+          const nearest = closestPointOnPolyline(circle.center, g.trail);
+          const offsetX = nearest.point.x - circle.center.x;
+          const offsetY = nearest.point.y - circle.center.y;
+          const distance = Math.hypot(offsetX, offsetY);
+          const tangent = pointOnPolyline(
+            g.trail,
+            metrics.cumulativeLengths,
+            nearest.pathDistance,
+          ).tangent;
+          const normal = distance > 0.001
+            ? { x: offsetX / distance, y: offsetY / distance }
+            : { x: -tangent.y, y: tangent.x };
+          const contactPoint = {
+            x: circle.center.x + normal.x * circle.radius,
+            y: circle.center.y + normal.y * circle.radius,
+          };
+          return {
+            gap: distance - circle.radius,
+            correction: {
+              x: nearest.point.x - contactPoint.x,
+              y: nearest.point.y - contactPoint.y,
+            },
+          };
+        })
+        .sort((first, second) => first.gap - second.gap)[0];
+      if (touchedBody) {
+        enemy.x += touchedBody.correction.x;
+        enemy.y += touchedBody.correction.y;
+      }
       const path = [closest.point];
       for (let index = 1; index < g.trail.length; index += 1) {
         if (metrics.cumulativeLengths[index] > closest.pathDistance + 0.01) {
