@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   Image as RNImage,
   LayoutChangeEvent,
   PanResponder,
@@ -180,6 +181,9 @@ const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
+const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
+const GAME_SAVE_INTERVAL_MS = 1200;
+const GAME_SAVE_VERSION = 1 as const;
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
 const CUTTING_SPRITE_FRAME_WIDTH = 160;
@@ -518,6 +522,24 @@ type Game = {
   invincibleUntil: number;
 };
 
+type PersistedGame = Omit<
+  Game,
+  | 'particles'
+  | 'fusionSparks'
+  | 'fusion'
+  | 'smokePuffs'
+  | 'smokeAccumulator'
+  | 'frame'
+  | 'initialized'
+  | 'status'
+  | 'respawnAt'
+  | 'invincibleUntil'
+> & {
+  version: typeof GAME_SAVE_VERSION;
+  savedAt: number;
+  invincibleRemainingMs: number;
+};
+
 type Hud = {
   score: number;
   bestScore: number;
@@ -565,6 +587,71 @@ type Snapshot = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const isPersistedGame = (value: unknown): value is PersistedGame => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<PersistedGame>;
+  return (
+    candidate.version === GAME_SAVE_VERSION
+    && typeof candidate.savedAt === 'number'
+    && Number.isFinite(candidate.savedAt)
+    && typeof candidate.width === 'number'
+    && candidate.width > 0
+    && typeof candidate.height === 'number'
+    && candidate.height > 0
+    && candidate.player !== undefined
+    && Array.isArray(candidate.enemies)
+    && Array.isArray(candidate.diamonds)
+    && Array.isArray(candidate.bombs)
+    && Array.isArray(candidate.claimedPolygons)
+    && Array.isArray(candidate.pendingCapturePolygons)
+    && Array.isArray(candidate.fillQueue)
+  );
+};
+
+const serializeGame = (game: Game, now: number): PersistedGame => ({
+  version: GAME_SAVE_VERSION,
+  savedAt: now,
+  width: game.width,
+  height: game.height,
+  cell: game.cell,
+  rows: game.rows,
+  player: { ...game.player },
+  inputDir: { ...game.inputDir },
+  facingDir: { ...game.facingDir },
+  hasMoveCommand: game.hasMoveCommand,
+  cutDir: { ...game.cutDir },
+  cutCoordinate: game.cutCoordinate,
+  trail: game.trail.map((point) => ({ ...point })),
+  protectedTrails: game.protectedTrails.map((trail) => trail.map((point) => ({ ...point }))),
+  enemies: game.enemies.map((enemy) => ({ ...enemy })),
+  diamonds: game.diamonds.map((diamond) => ({ ...diamond })),
+  bombs: game.bombs.map((bomb) => ({ ...bomb })),
+  projectiles: game.projectiles.map((projectile) => ({ ...projectile })),
+  missiles: game.missiles.map((missile) => ({ ...missile })),
+  spiderThreads: game.spiderThreads.map((thread) => ({
+    ...thread,
+    start: { ...thread.start },
+    end: { ...thread.end },
+    target: { ...thread.target },
+  })),
+  claimedPolygons: game.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point }))),
+  pendingCapturePolygons: game.pendingCapturePolygons.map((polygon) => (
+    polygon.map((point) => ({ ...point }))
+  )),
+  fillQueue: [...game.fillQueue],
+  fillCursor: game.fillCursor,
+  scanY: game.scanY,
+  mode: game.mode,
+  score: game.score,
+  shields: game.shields,
+  capturedArea: game.capturedArea,
+  totalPlayableArea: game.totalPlayableArea,
+  pendingCaptureArea: game.pendingCaptureArea,
+  level: game.level,
+  trailScoreAccumulator: game.trailScoreAccumulator,
+  invincibleRemainingMs: Math.max(0, game.invincibleUntil - now),
+});
 
 const cardinalDirection = (dx: number, dy: number): Direction => {
   if (Math.abs(dx) >= Math.abs(dy)) return { x: dx >= 0 ? 1 : -1, y: 0 };
@@ -2750,11 +2837,34 @@ export default function GameScreen() {
   const sectorBackgroundImageRefs = useRef<Record<number, any>>({});
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
+  const savedGameRef = useRef<PersistedGame | null>(null);
+  const savedGameHydratedRef = useRef(false);
+  const saveQueueRef = useRef(Promise.resolve());
+  const lastGameSaveAtRef = useRef(0);
   const recordBannerShownRef = useRef(false);
   const bannerQueueRef = useRef<Banner[]>([]);
   const bannerAnimatingRef = useRef(false);
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
+  const saveGameProgress = useCallback(() => {
+    const game = gameRef.current;
+    if (!game.initialized || game.status !== 'PLAYING') return;
+    const serialized = JSON.stringify(serializeGame(game, Date.now()));
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(() => AsyncStorage.setItem(GAME_SAVE_STORAGE_KEY, serialized))
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to save game progress', error);
+      });
+  }, []);
+  const clearSavedGameProgress = useCallback(() => {
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(() => AsyncStorage.removeItem(GAME_SAVE_STORAGE_KEY))
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to clear saved game progress', error);
+      });
+  }, []);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
@@ -2894,6 +3004,42 @@ export default function GameScreen() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(GAME_SAVE_STORAGE_KEY)
+      .then((storedGame) => {
+        if (cancelled || !storedGame) return;
+        try {
+          const parsedGame: unknown = JSON.parse(storedGame);
+          if (isPersistedGame(parsedGame)) {
+            savedGameRef.current = parsedGame;
+          } else if (__DEV__) {
+            console.warn('Ignoring invalid saved game progress');
+          }
+        } catch (error) {
+          if (__DEV__) console.warn('Unable to parse saved game progress', error);
+        }
+      })
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to load saved game progress', error);
+      })
+      .finally(() => {
+        if (!cancelled) savedGameHydratedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        saveGameProgress();
+      }
+    });
+    return () => subscription.remove();
+  }, [saveGameProgress]);
 
   useEffect(() => {
     pickupChimePlayer.muted = false;
@@ -3205,6 +3351,121 @@ export default function GameScreen() {
       });
     }
   }, [enqueueBanner]);
+
+  const restoreSavedGame = useCallback((saved: PersistedGame) => {
+    const { width, height } = sizeRef.current;
+    if (width <= 0 || height <= 0) return;
+
+    resetGame(false);
+    const game = gameRef.current;
+    const scaleX = width / Math.max(1, saved.width);
+    const scaleY = height / Math.max(1, saved.height);
+    const scalePoint = (point: Point): Point => ({
+      x: point.x * scaleX,
+      y: point.y * scaleY,
+    });
+    const scaleTrail = (trail: Point[]) => trail.map(scalePoint);
+    const currentBounds = perimeterBounds(width, height, game.cell);
+    const totalPlayableArea = Math.max(
+      1,
+      (currentBounds.right - currentBounds.left) * (currentBounds.bottom - currentBounds.top),
+    );
+    const savedAreaRatio = saved.totalPlayableArea > 0
+      ? clamp(saved.capturedArea / saved.totalPlayableArea, 0, 1)
+      : 0;
+    const savedPendingAreaRatio = saved.totalPlayableArea > 0
+      ? Math.max(0, saved.pendingCaptureArea / saved.totalPlayableArea)
+      : 0;
+
+    game.level = Math.round(clamp(saved.level, 1, MAX_LEVEL));
+    game.player = scalePoint(saved.player);
+    game.inputDir = { ...saved.inputDir };
+    game.facingDir = { ...saved.facingDir };
+    game.hasMoveCommand = saved.hasMoveCommand;
+    game.cutDir = { ...saved.cutDir };
+    game.cutCoordinate = saved.cutCoordinate * scaleX;
+    game.trail = scaleTrail(saved.trail);
+    game.protectedTrails = saved.protectedTrails.map(scaleTrail);
+    game.enemies = saved.enemies.map((enemy) => ({
+      ...enemy,
+      x: enemy.x * scaleX,
+      y: enemy.y * scaleY,
+      targetX: enemy.targetX * scaleX,
+      targetY: enemy.targetY * scaleY,
+      lastSafeX: enemy.lastSafeX === undefined ? undefined : enemy.lastSafeX * scaleX,
+      lastSafeY: enemy.lastSafeY === undefined ? undefined : enemy.lastSafeY * scaleY,
+    }));
+    game.diamonds = saved.diamonds.map((diamond) => ({
+      ...diamond,
+      x: diamond.x * scaleX,
+      y: diamond.y * scaleY,
+    }));
+    game.bombs = saved.bombs.map((bomb) => ({
+      ...bomb,
+      x: bomb.x * scaleX,
+      y: bomb.y * scaleY,
+    }));
+    game.projectiles = saved.projectiles.map((projectile) => ({
+      ...projectile,
+      x: projectile.x * scaleX,
+      y: projectile.y * scaleY,
+      vx: projectile.vx * scaleX,
+      vy: projectile.vy * scaleY,
+      radius: projectile.radius * scaleX,
+    }));
+    game.missiles = saved.missiles.map((missile) => ({
+      ...missile,
+      x: missile.x * scaleX,
+      y: missile.y * scaleY,
+      vx: missile.vx * scaleX,
+      vy: missile.vy * scaleY,
+      radius: missile.radius * scaleX,
+    }));
+    game.spiderThreads = saved.spiderThreads.map((thread) => ({
+      ...thread,
+      start: scalePoint(thread.start),
+      end: scalePoint(thread.end),
+      target: scalePoint(thread.target),
+      vx: thread.vx * scaleX,
+      vy: thread.vy * scaleY,
+      projectileSpeed: thread.projectileSpeed * scaleX,
+    }));
+    game.claimedPolygons = saved.claimedPolygons.map(scaleTrail);
+    game.pendingCapturePolygons = saved.pendingCapturePolygons.map(scaleTrail);
+    game.fillQueue = [...saved.fillQueue];
+    game.fillCursor = clamp(Math.floor(saved.fillCursor), 0, game.fillQueue.length);
+    game.scanY = saved.scanY * scaleY;
+    game.mode = saved.mode;
+    game.score = Math.max(0, saved.score);
+    game.shields = Math.max(0, saved.shields);
+    game.totalPlayableArea = totalPlayableArea;
+    game.capturedArea = totalPlayableArea * savedAreaRatio;
+    game.pendingCaptureArea = totalPlayableArea * savedPendingAreaRatio;
+    game.trailScoreAccumulator = Math.max(0, saved.trailScoreAccumulator * scaleX);
+    game.frame = 0;
+    game.particles = [];
+    game.fusionSparks = [];
+    game.fusion = null;
+    game.smokePuffs = [];
+    game.smokeAccumulator = 0;
+    game.status = 'PLAYING';
+    game.respawnAt = 0;
+    game.invincibleUntil = Date.now() + Math.max(0, saved.invincibleRemainingMs);
+    game.initialized = true;
+    savedGameRef.current = null;
+    setHud({
+      score: game.score,
+      bestScore: bestScoreRef.current,
+      shields: game.shields,
+      capture: Math.min(
+        LEVEL_CAPTURE_TARGET,
+        Math.floor(clamp(game.capturedArea / game.totalPlayableArea, 0, 1) * 100),
+      ),
+      level: game.level,
+      mode: game.mode,
+      feedback: '',
+    });
+  }, [resetGame]);
 
   const teleportToSector = useCallback((sector: number) => {
     const g = gameRef.current;
@@ -4526,6 +4787,7 @@ export default function GameScreen() {
         if (now >= g.respawnAt) {
           if (g.shields <= 0) {
             enqueueBanner({ kind: 'GAME_OVER', score: g.score });
+            clearSavedGameProgress();
             resetGame(false);
           } else {
             resetGame(true);
@@ -5263,9 +5525,20 @@ export default function GameScreen() {
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
       const g = gameRef.current;
-      if (!g.initialized && sizeRef.current.width > 0) resetGame(false);
+      if (
+        !g.initialized
+        && sizeRef.current.width > 0
+        && savedGameHydratedRef.current
+      ) {
+        if (savedGameRef.current) restoreSavedGame(savedGameRef.current);
+        else resetGame(false);
+      }
       if (g.initialized) {
         update(g, dt, now);
+        if (now - lastGameSaveAtRef.current >= GAME_SAVE_INTERVAL_MS) {
+          lastGameSaveAtRef.current = now;
+          saveGameProgress();
+        }
         if (bestScoreHydratedRef.current && g.score > bestScoreRef.current) {
           const previousBestScore = bestScoreRef.current;
           if (
@@ -5349,12 +5622,15 @@ export default function GameScreen() {
     return () => cancelAnimationFrame(animationFrame);
   }, [
     enqueueBanner,
+    clearSavedGameProgress,
     playDiamondCapture,
     playPickupChime,
     playSevenFireShot,
     playSectorTransition,
     playShieldLossExplosion,
     resetGame,
+    restoreSavedGame,
+    saveGameProgress,
   ]);
 
   const renderNativeArena = () => {
