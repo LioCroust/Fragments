@@ -3651,6 +3651,7 @@ export default function GameScreen() {
       // collision circle that touched the cut to meet the red stroke exactly.
       // This keeps the actual nose/leg/wing contact attached instead of
       // incorrectly placing the enemy's center on the cut.
+      const visualContactPadding = g.cell * 0.14;
       const touchedBody = enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y)
         .map((circle) => {
           const nearest = closestPointOnPolyline(circle.center, g.trail);
@@ -3672,8 +3673,8 @@ export default function GameScreen() {
           return {
             gap: distance - circle.radius,
             correction: {
-              x: nearest.point.x - contactPoint.x,
-              y: nearest.point.y - contactPoint.y,
+              x: nearest.point.x - contactPoint.x + normal.x * visualContactPadding,
+              y: nearest.point.y - contactPoint.y + normal.y * visualContactPadding,
             },
           };
         })
