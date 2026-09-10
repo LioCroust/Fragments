@@ -272,7 +272,7 @@ type Enemy = Point & {
   spiderGrade?: number;
   isBoss?: boolean;
   bossTier?: number;
-  isMiniShip?: boolean;
+  isMini?: boolean;
   splitLevel?: number;
   lastSafeX?: number;
   lastSafeY?: number;
@@ -298,6 +298,13 @@ const BOSS_KIND_LABELS: Record<EnemyKind, string> = {
   DRAGON: 'DRAGON',
   SEVEN: 'SEVEN',
   SPIDER: 'ARAIGNÉE',
+};
+
+const ENEMY_KIND_PLURAL_LABELS: Record<EnemyKind, string> = {
+  SHIP: 'VAISSEAUX',
+  DRAGON: 'DRAGONS',
+  SEVEN: 'SEVEN',
+  SPIDER: 'ARAIGNÉES',
 };
 
 const isBossSector = (level: number) => Boolean(BOSS_SECTOR_KINDS[level]);
@@ -506,6 +513,7 @@ type Banner = {
   points?: number;
   level?: number;
   bossKind?: EnemyKind;
+  enemyKind?: EnemyKind;
 };
 
 type Snapshot = {
