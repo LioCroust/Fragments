@@ -3275,7 +3275,7 @@ export default function GameScreen() {
       : createBombs(width, height, cell, previousLevel);
     const respawnPlayer = {
       x: bounds.left + cell,
-      y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
+      y: bounds.top - cell * PLAYER_RADIUS_CELLS,
     };
     placeEnemiesInOpenSurface(
       enemies,
@@ -3309,7 +3309,7 @@ export default function GameScreen() {
       rows,
       player: respawnPlayer,
       inputDir: ZERO,
-      facingDir: { x: 0, y: -1 },
+      facingDir: { x: 0, y: 1 },
       hasMoveCommand: false,
       cutDir: ZERO,
       cutCoordinate: 0,
@@ -5812,7 +5812,12 @@ export default function GameScreen() {
                             ? 'GAME OVER'
                             : 'ENNEMI DÉTRUIT'}
               </Text>
-              <Text style={styles.bannerScore} numberOfLines={1}>
+              <Text
+                style={styles.bannerScore}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.68}
+              >
                 {banner.kind === 'RECORD'
                   ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
                   : banner.kind === 'DIAMOND'
@@ -5851,21 +5856,37 @@ export default function GameScreen() {
         </View>
 
         <View style={styles.hudDeck}>
-          <View style={[styles.hudCard, styles.sectorCard]}>
-            <Text
-              style={[
-                styles.cardLabel,
-                { color: HUD_COLORS.cyan },
-              ]}
-            >
-              SECTEUR
-            </Text>
-            <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
-              {hud.level.toString().padStart(2, '0')}
-            </Text>
-            {isBossSector(hud.level) && (
-              <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
-            )}
+          <View style={[styles.hudCardStack, styles.sectorStack]}>
+            <View style={[styles.hudCard, styles.sectorCard]}>
+              <Text
+                style={[
+                  styles.cardLabel,
+                  { color: HUD_COLORS.cyan },
+                ]}
+              >
+                SECTEUR
+              </Text>
+              <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
+                {hud.level.toString().padStart(2, '0')}
+              </Text>
+              {isBossSector(hud.level) && (
+                <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
+              )}
+            </View>
+            <View style={[styles.hudCard, styles.utilityCard, styles.optionsCard]}>
+              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole options">
+                <Circle cx="10" cy="9" r="3.2" fill="none" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="10" y1="1" x2="10" y2="4" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="10" y1="14" x2="10" y2="17" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="2" y1="9" x2="5" y2="9" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="15" y1="9" x2="18" y2="9" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="4.2" y1="3.2" x2="6.4" y2="5.4" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="13.6" y1="12.6" x2="15.8" y2="14.8" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="15.8" y1="3.2" x2="13.6" y2="5.4" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Line x1="6.4" y1="12.6" x2="4.2" y2="14.8" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+              </Svg>
+              <Text style={[styles.utilityLabel, { color: HUD_COLORS.magenta }]}>OPTIONS</Text>
+            </View>
           </View>
 
           <View style={[styles.hudCard, styles.scoreCard]}>
@@ -5878,23 +5899,35 @@ export default function GameScreen() {
             </Text>
           </View>
 
-          <View style={[styles.hudCard, styles.shieldCard]}>
-            <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
-            <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
-            <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
-              {shieldSegments.map((_, index) => (
-                <View
-                  key={`shield-${index}`}
-                  style={[
-                    styles.shieldSegment,
-                    index < hud.shields
-                      ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
-                      : styles.shieldSegmentInactive,
-                  ]}
-                />
-              ))}
+          <View style={[styles.hudCardStack, styles.shieldStack]}>
+            <View style={[styles.hudCard, styles.shieldCard]}>
+              <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
+              <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
+              <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
+                {shieldSegments.map((_, index) => (
+                  <View
+                    key={`shield-${index}`}
+                    style={[
+                      styles.shieldSegment,
+                      index < hud.shields
+                        ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
+                        : styles.shieldSegmentInactive,
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
             </View>
-            <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
+            <View style={[styles.hudCard, styles.utilityCard, styles.shopCard]}>
+              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole boutique">
+                <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.amber} strokeWidth="1.4" />
+                <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.amber} strokeWidth="1.4" />
+                <Rect x="4" y="6" width="12" height="9" fill="none" stroke={HUD_COLORS.amber} strokeWidth="1.4" />
+                <Rect x="8" y="10" width="4" height="5" fill="none" stroke={HUD_COLORS.amber} strokeWidth="1.2" />
+                <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.amber} strokeWidth="1" />
+              </Svg>
+              <Text style={[styles.utilityLabel, { color: HUD_COLORS.amber }]}>BOUTIQUE</Text>
+            </View>
           </View>
         </View>
 
@@ -6040,10 +6073,19 @@ const styles = StyleSheet.create({
   },
   hudDeck: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginTop: 6,
-    minHeight: 86,
+    minHeight: 101,
+  },
+  hudCardStack: {
+    alignItems: 'stretch',
+  },
+  sectorStack: {
+    width: '24%',
+  },
+  shieldStack: {
+    width: '27%',
   },
   hudCard: {
     borderWidth: 1,
@@ -6058,7 +6100,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   sectorCard: {
-    width: '24%',
+    width: '100%',
     minHeight: 60,
     borderColor: HUD_COLORS.cyan,
     transform: [{ translateY: 2 }, { rotate: '-1deg' }],
@@ -6073,10 +6115,36 @@ const styles = StyleSheet.create({
     transform: [{ translateY: 8 }],
   },
   shieldCard: {
-    width: '27%',
+    width: '100%',
     minHeight: 70,
     borderColor: HUD_COLORS.lime,
     transform: [{ translateY: 1 }, { rotate: '1deg' }],
+  },
+  utilityCard: {
+    width: '100%',
+    minHeight: 39,
+    marginTop: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  optionsCard: {
+    borderColor: HUD_COLORS.magenta,
+    backgroundColor: 'rgba(30, 5, 30, 0.9)',
+    transform: [{ rotate: '-1deg' }],
+  },
+  shopCard: {
+    borderColor: HUD_COLORS.amber,
+    backgroundColor: 'rgba(38, 15, 4, 0.9)',
+    transform: [{ rotate: '1deg' }],
+  },
+  utilityLabel: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 0.75,
   },
   cardLabel: {
     fontFamily: 'Inter_700Bold',
@@ -6198,10 +6266,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   arcadeBanner: {
-    width: '80%',
-    minHeight: 78,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    width: '74%',
+    minHeight: 68,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -6263,9 +6331,9 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   bannerAccent: {
-    width: 72,
-    height: 3,
-    marginBottom: 7,
+    width: 58,
+    height: 2,
+    marginBottom: 5,
     backgroundColor: HUD_COLORS.magenta,
     shadowColor: HUD_COLORS.magenta,
     shadowOpacity: 1,
@@ -6275,21 +6343,21 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     color: HUD_COLORS.warmWhite,
     fontFamily: 'Inter_700Bold',
-    fontSize: 22,
-    lineHeight: 26,
-    letterSpacing: 1.4,
+    fontSize: 19,
+    lineHeight: 22,
+    letterSpacing: 1.1,
     textAlign: 'center',
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 12,
     textShadowOffset: { width: 0, height: 0 },
   },
   bannerScore: {
-    marginTop: 4,
+    marginTop: 3,
     color: HUD_COLORS.cyan,
     fontFamily: 'Inter_700Bold',
-    fontSize: 13,
-    lineHeight: 17,
-    letterSpacing: 1.1,
+    fontSize: 11.5,
+    lineHeight: 15,
+    letterSpacing: 0.8,
     textAlign: 'center',
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 8,
