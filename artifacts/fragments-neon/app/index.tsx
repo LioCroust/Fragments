@@ -3969,17 +3969,21 @@ export default function GameScreen() {
             const planningCenter = isDragon ? predictedPlayer : g.player;
             const playerAngle = Math.atan2(planningCenter.y - enemy.y, planningCenter.x - enemy.x);
             const orbitDirection = enemy.kind === 'DRAGON' ? 1 : -1;
-            const idealDistance = Math.min(g.width, g.height) * (isDragon ? 0.2 : 0.18);
+            const idealDistance = Math.min(g.width, g.height) * (
+              isDragon
+                ? (g.trail.length > 0 ? 0.075 : 0.11)
+                : 0.18
+            );
             let bestScore = Number.POSITIVE_INFINITY;
             let bestTarget = { x: planningCenter.x, y: planningCenter.y };
 
             for (let candidateIndex = 0; candidateIndex < (isDragon ? 12 : 8); candidateIndex += 1) {
               const candidateAngle = playerAngle
-                + orbitDirection * (isDragon ? 0.28 + candidateIndex * 0.44 : 0.55 + candidateIndex * 0.62)
+                + orbitDirection * (isDragon ? 0.16 + candidateIndex * 0.28 : 0.55 + candidateIndex * 0.62)
                 + Math.sin(enemy.routePhase) * (isDragon ? 0.08 : 0.12);
               const candidateRadius = idealDistance * (
                 isDragon
-                  ? 0.76 + (candidateIndex % 4) * 0.1
+                  ? 0.52 + (candidateIndex % 4) * 0.07
                   : 0.82 + (candidateIndex % 3) * 0.13
               );
               const candidate = {
@@ -4016,7 +4020,7 @@ export default function GameScreen() {
             y: enemy.targetY - enemy.y,
           };
           const targetLength = Math.hypot(targetVector.x, targetVector.y) || 1;
-          const planningBias = enemy.kind === 'DRAGON' ? 0.82 : 0.76;
+          const planningBias = enemy.kind === 'DRAGON' ? 0.9 : 0.76;
           desiredVelocity = {
             x: (enemy.vx / currentLength) * (1 - planningBias) + (targetVector.x / targetLength) * planningBias,
             y: (enemy.vy / currentLength) * (1 - planningBias) + (targetVector.y / targetLength) * planningBias,
