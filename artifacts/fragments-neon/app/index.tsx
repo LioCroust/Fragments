@@ -1487,17 +1487,6 @@ const sevenProjectileTouchesBlueBoundary = (
   ));
 };
 
-const playerMissileTouchesBlueBoundary = (
-  missile: PlayerMissile,
-  from: Point,
-  to: Point,
-  bounds: ReturnType<typeof perimeterBounds>,
-) => (
-  !pointInsidePerimeter(to, bounds)
-  || distanceToPerimeter(to, bounds)
-    <= missile.radius + PERIMETER_STROKE_WIDTH * 0.5
-);
-
 const pointInPolygon = (point: Point, polygon: Point[]) => {
   let inside = false;
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
@@ -3373,7 +3362,10 @@ export default function GameScreen() {
         if (
           !hitTarget
           && missile.life > 0
-          && !playerMissileTouchesBlueBoundary(missile, from, to, bounds)
+          // Missiles pass through the blue perimeter. Discard them as soon
+          // as their next position is outside the arena so they are never
+          // rendered beyond the blue frame.
+          && pointInsidePerimeter(to, bounds)
         ) {
           g.missiles[activeMissileCount] = missile;
           activeMissileCount += 1;
