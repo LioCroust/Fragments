@@ -3483,12 +3483,6 @@ export default function GameScreen() {
         const minY = bounds.top;
         const maxY = bounds.bottom;
         const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
-        const enemyTouchesProtectedBoundary = (x: number, y: number) => {
-          const corners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.protectedTrails.some((protectedTrail) => (
-            pathTouchesPolygon(protectedTrail, corners, PERIMETER_STROKE_WIDTH * 0.5)
-          ));
-        };
         const spriteFitsInsidePerimeter = (x: number, y: number) => (
           enemySpriteCorners(enemy, g.cell, x, y).every((corner) => (
             corner.x >= bounds.left
@@ -3500,54 +3494,12 @@ export default function GameScreen() {
         const enemyFitsAt = (x: number, y: number) => {
           if (!spriteFitsInsidePerimeter(x, y)) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
-            && !enemyTouchesProtectedBoundary(x, y);
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
         };
         const enemyCanMoveAt = (x: number, y: number) => {
           if (!spriteFitsInsidePerimeter(x, y)) return false;
           const spriteCorners = enemySpriteCorners(enemy, g.cell, x, y);
-          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon))
-            && !enemyTouchesProtectedBoundary(x, y);
-        };
-        const enemyTouchesTrail = (x: number, y: number) => {
-          if (g.trail.length < 2) return false;
-          const collisionCircles = enemyCollisionCircles(enemy, g.cell, x, y);
-          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
-          return collisionCircles.some(({ center, radius }) => (
-            g.trail.slice(1).some((trailPoint, index) => (
-              distanceToSegment(
-                center,
-                g.trail[index],
-                trailPoint,
-              ) <= radius + trailStrokeRadius
-            ))
-          ));
-        };
-        const enemySweepTouchesTrail = (
-          fromX: number,
-          fromY: number,
-          toX: number,
-          toY: number,
-        ) => {
-          if (g.trail.length < 2) return false;
-          const fromCircles = enemyCollisionCircles(enemy, g.cell, fromX, fromY);
-          const toCircles = enemyCollisionCircles(enemy, g.cell, toX, toY);
-          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
-          return fromCircles.some((fromCircle, index) => {
-            const toCircle = toCircles[index];
-            return g.trail.slice(1).some((trailPoint, trailIndex) => (
-              distanceBetweenSegments(
-                fromCircle.center,
-                toCircle.center,
-                g.trail[trailIndex],
-                trailPoint,
-              ) <= fromCircle.radius + trailStrokeRadius
-            ));
-          });
-        };
-        if (enemyTouchesTrail(enemy.x, enemy.y)) {
-          explode(g, now);
-          return;
+          return g.claimedPolygons.every((polygon) => !polygonsIntersect(spriteCorners, polygon));
         }
         const fullyEnclosedAt = (x: number, y: number) => (
           pointInsideClaimedSurface({ x, y }, g.claimedPolygons, g.cell * 0.08)
@@ -3856,14 +3808,6 @@ export default function GameScreen() {
           explode(g, now);
           return;
         }
-        if (
-          enemyTouchesTrail(enemy.x, enemy.y)
-          || enemySweepTouchesTrail(previousEnemyX, previousEnemyY, enemy.x, enemy.y)
-        ) {
-          explode(g, now);
-          return;
-        }
-
         if (enemy.kind === 'SEVEN' && (enemy.sevenFireTimer ?? 0) <= 0) {
           g.projectiles.push(...createSevenVolley(enemy, g.cell));
           playSevenFireShot();
