@@ -315,8 +315,14 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
 const DIAMOND_SCORE = 750;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
-const DRAGON_NOMINAL_SPEED = 40;
-const DRAGON_ATTACK_SPEED = 105;
+const DRAGON_NOMINAL_SPEED = 32;
+const DRAGON_ATTACK_SPEED = 78;
+const dragonSpeedFor = (enemy: Enemy, attacking: boolean) => {
+  const bossMultiplier = enemy.isBoss
+    ? 1.16 + Math.min(0.16, (enemy.bossTier ?? 1) * 0.035)
+    : 1;
+  return (attacking ? DRAGON_ATTACK_SPEED : DRAGON_NOMINAL_SPEED) * bossMultiplier;
+};
 type SpiderDifficulty = {
   initialDelay: number;
   cooldown: number;
@@ -3496,7 +3502,7 @@ export default function GameScreen() {
         const isDragon = enemy.kind === 'DRAGON';
         const dragonIsCutting = isDragon && g.trail.length > 0;
         let desiredSpeed = isDragon
-          ? (dragonIsCutting ? DRAGON_ATTACK_SPEED : DRAGON_NOMINAL_SPEED)
+          ? dragonSpeedFor(enemy, dragonIsCutting)
           : enemy.speed;
         let desiredVelocity: Point;
 
@@ -3568,8 +3574,8 @@ export default function GameScreen() {
             x: (enemy.vx / currentLength) * (1 - planningBias) + (targetVector.x / targetLength) * planningBias,
             y: (enemy.vy / currentLength) * (1 - planningBias) + (targetVector.y / targetLength) * planningBias,
           };
-          // The Dragon keeps its normal speed while the drone is cruising and
-          // uses a deliberate 2x burst only while a red cut is active.
+          // The Dragon stays readable while cruising and only accelerates
+          // during a cut, without the extreme burst used by early tuning.
           if (!isDragon) desiredSpeed *= farSlowdown;
         } else {
           const currentHeading = Math.atan2(enemy.vy, enemy.vx);
