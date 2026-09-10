@@ -332,3 +332,17 @@ mtime_ms = 1788977041669
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/817f892a-a3e0-47a4-a114-c4bd6001df9c/d4b9055b-b3c2-4c18-989b-d6af3bb0cf3a"
 storage_version_token = "1788977197957477"
 content_type = "image/png"
+
+[[outputs]]
+id = "Di9aegx6Wm9Sww29g6ZrW"
+uri = "file://artifacts/fragments-neon/assets/images/shield-sprite-no-bg.png"
+type = "image"
+title = "Sprite de bouclier transparent"
+description = "PNG détouré en 1376×768, fond supprimé et sprite conservé pour une intégration ultérieure."
+logical_id = "b97914d9-f753-45b0-99d9-4b2dc5d87c18"
+content_hash = "sha256:87450fc87747bf8e3277347248173ea4a76eddaaf4a4001e971038927575c1c0"
+size = 1325943
+mtime_ms = 1789037576009
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/b97914d9-f753-45b0-99d9-4b2dc5d87c18/ec2936e9-8ef1-48e0-9320-257f372053cb"
+storage_version_token = "1789037582461336"
+content_type = "image/png"
