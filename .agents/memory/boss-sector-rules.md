@@ -3,8 +3,8 @@ name: Boss sector rules
 description: The gameplay constraints that keep the every-tenth-sector boss encounters readable and fair.
 ---
 
-Boss sectors contain exactly one boss, no active diamonds or bombs, and use the existing capture victory rather than a separate health-bar system. Boss artwork is enlarged for telegraphing, while collision geometry stays substantially smaller than the visual footprint.
+Boss sectors start with exactly one boss and no active diamonds or bombs. A boss ship hit by a missile branches into two standard ships, which can later branch into mini-ships; the encounter still uses capture victory rather than a health bar. Boss artwork is enlarged for telegraphing, while collision geometry stays substantially smaller than the visual footprint.
 
-**Why:** The game is built around readable continuous cuts; extra enemies, pickups, or a second defeat mechanic make the milestone sectors noisy and undermine fair timing.
+**Why:** The user explicitly chose a readable multi-stage ship split for the boss while keeping boss sectors free of pickups and health bars.
 
-**How to apply:** Preserve this structure for sectors 10, 20, 30, 40, and 50 whenever boss behavior, rewards, or visuals are changed.
+**How to apply:** Preserve the no-bonus/no-health-bar structure for sectors 10, 20, 30, 40, and 50. If the boss is a ship, preserve the boss → standard ships → mini-ships progression and keep collision geometry fair at every size.

@@ -5394,6 +5394,8 @@ export default function GameScreen() {
                         ? 'SECTEUR TERMINÉ'
                         : banner.kind === 'BOSS'
                           ? 'ALERTE BOSS'
+                        : banner.kind === 'BOSS_SPLIT'
+                          ? 'BOSS FRACTURÉ'
                         : banner.kind === 'SPLIT'
                           ? 'VAISSEAU FRACTURÉ'
                         : banner.kind === 'MINI'
@@ -5415,6 +5417,8 @@ export default function GameScreen() {
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
+                      : banner.kind === 'BOSS_SPLIT'
+                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 VAISSEAUX DÉPLOYÉS`
                       : banner.kind === 'SPLIT'
                         ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-VAISSEAUX`
                       : banner.kind === 'MINI'
