@@ -4020,8 +4020,13 @@ export default function GameScreen() {
           enemySweepTouchesTrail(protectedTrail, fromX, fromY, toX, toY)
         ));
         if (enemyTouchesActiveTrail(enemy.x, enemy.y)) {
-          if (!playerIsProtected(g, now)) startFusionDeath(g, enemy);
-          return;
+          if (!playerIsProtected(g, now)) {
+            startFusionDeath(g, enemy);
+            return;
+          }
+          // A protected drone can finish the cut. Do not return from the
+          // enemy update here, otherwise a mini ship can remain pinned to the
+          // active trail while the player is trying to close the region.
         }
         const fullyEnclosedAt = (x: number, y: number) => (
           pointInsideClaimedSurface({ x, y }, g.claimedPolygons, g.cell * 0.08)
@@ -4323,8 +4328,12 @@ export default function GameScreen() {
         }
 
         if (enemySweepTouchesTrail(g.trail, previousEnemyX, previousEnemyY, enemy.x, enemy.y)) {
-          if (!playerIsProtected(g, now)) startFusionDeath(g, enemy);
-          return;
+          if (!playerIsProtected(g, now)) {
+            startFusionDeath(g, enemy);
+            return;
+          }
+          // Protected trail contact is non-lethal and must not interrupt the
+          // rest of the enemy update or the player's capture flow.
         }
 
         const centerIsSafe = pointInsideClaimedSurface(
@@ -4345,8 +4354,10 @@ export default function GameScreen() {
         const droneIsActive = g.trail.length > 0 || pointInsidePerimeter(g.player, bounds);
         const collisionRadius = enemyRadius(enemy, g.cell) + playerBodyRadius(g.cell);
         if (droneIsActive && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
-          explode(g, now);
-          return;
+          if (!playerIsProtected(g, now)) {
+            explode(g, now);
+            return;
+          }
         }
         if (enemy.kind === 'SEVEN' && (enemy.sevenFireTimer ?? 0) <= 0) {
           g.projectiles.push(...createSevenVolley(enemy, g.cell));
