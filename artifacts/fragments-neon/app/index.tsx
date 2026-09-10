@@ -4876,8 +4876,10 @@ export default function GameScreen() {
                     ? styles.diamondBanner
                     : banner.kind === 'BOMB'
                       ? styles.bombBanner
-                    : banner.kind === 'SECTOR'
-                      ? styles.sectorBanner
+                      : banner.kind === 'SECTOR'
+                        ? styles.sectorBanner
+                        : banner.kind === 'BOSS'
+                          ? styles.bossBanner
                       : banner.kind === 'CLEAN'
                         ? styles.cleanBanner
                           : banner.kind === 'GAME_OVER'
@@ -4900,8 +4902,10 @@ export default function GameScreen() {
                     ? 'BONUS DIAMANT CAPTURÉ'
                     : banner.kind === 'BOMB'
                       ? 'BOMBE NEUTRALISÉE'
-                    : banner.kind === 'SECTOR'
-                      ? 'SECTEUR TERMINÉ'
+                      : banner.kind === 'SECTOR'
+                        ? 'SECTEUR TERMINÉ'
+                        : banner.kind === 'BOSS'
+                          ? 'ALERTE BOSS'
                         : banner.kind === 'CLEAN'
                           ? 'SECTEUR NETTOYÉ !'
                           : banner.kind === 'GAME_OVER'
@@ -4917,6 +4921,8 @@ export default function GameScreen() {
                       ? `+${banner.points ?? BOMB_SCORE} POINTS`
                     : banner.kind === 'SECTOR'
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
+                      : banner.kind === 'BOSS'
+                        ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'CLEAN'
                           ? 'SÉCURISEZ 80%'
                           : banner.kind === 'GAME_OVER'
@@ -5300,6 +5306,13 @@ const styles = StyleSheet.create({
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
     backgroundColor: 'rgba(24, 4, 24, 0.56)',
+  },
+  bossBanner: {
+    borderColor: '#ff2bb5',
+    backgroundColor: 'rgba(54, 4, 34, 0.72)',
+    shadowColor: '#ff2bb5',
+    shadowOpacity: 1,
+    shadowRadius: 24,
   },
   cleanBanner: {
     borderColor: HUD_COLORS.lime,
