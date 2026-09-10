@@ -2101,6 +2101,7 @@ const NativeArenaStatic = React.memo(({
 });
 
 const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
+  const arenaBounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
@@ -2370,6 +2371,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
         );
       })}
       {snapshot.missiles.map((missile, missileIndex) => {
+        if (!pointInsidePerimeter(missile, arenaBounds)) return null;
         const spriteSize = playerMissileSize(snapshot.cell);
         const rotationDegrees = missile.angle * (180 / Math.PI);
         return (
@@ -3322,7 +3324,6 @@ export default function GameScreen() {
 
     const movePlayerMissiles = (g: Game, dt: number, now: number) => {
       if (g.status !== 'PLAYING') return;
-      const bounds = perimeterBounds(g.width, g.height, g.cell);
       let activeMissileCount = 0;
       for (let index = 0; index < g.missiles.length; index += 1) {
         const missile = g.missiles[index];
@@ -3362,10 +3363,6 @@ export default function GameScreen() {
         if (
           !hitTarget
           && missile.life > 0
-          // Missiles pass through the blue perimeter. Discard them as soon
-          // as their next position is outside the arena so they are never
-          // rendered beyond the blue frame.
-          && pointInsidePerimeter(to, bounds)
         ) {
           g.missiles[activeMissileCount] = missile;
           activeMissileCount += 1;
@@ -4646,6 +4643,7 @@ export default function GameScreen() {
          context.shadowColor = '#00f3ff';
          context.shadowBlur = g.cell * 0.22;
          g.missiles.forEach((missile) => {
+           if (!pointInsidePerimeter(missile, bounds)) return;
            context.save();
            context.translate(missile.x, missile.y);
            context.rotate(missile.angle);
