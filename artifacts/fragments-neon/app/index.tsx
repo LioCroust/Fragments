@@ -272,6 +272,7 @@ type Enemy = Point & {
   spiderGrade?: number;
   isBoss?: boolean;
   bossTier?: number;
+  isMiniShip?: boolean;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -499,7 +500,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'SPLIT' | 'MINI' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -1237,9 +1238,10 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
 
 const shipSmokePosition = (enemy: Enemy, cell: number): Point => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
+  const shipScale = enemy.isMiniShip ? 0.5 : 1;
   return {
-    x: enemy.x - (enemy.vx / velocityLength) * cell * 0.92,
-    y: enemy.y - (enemy.vy / velocityLength) * cell * 0.92,
+    x: enemy.x - (enemy.vx / velocityLength) * cell * 0.92 * shipScale,
+    y: enemy.y - (enemy.vy / velocityLength) * cell * 0.92 * shipScale,
   };
 };
 
@@ -1361,31 +1363,33 @@ const drawCuttingSpriteCanvas = (
   context.restore();
 };
 
-const enemySpriteSize = (kind: EnemyKind, cell: number) => {
+const enemySpriteSize = (kind: EnemyKind, cell: number, isMiniShip = false) => {
   if (kind === 'DRAGON') return { width: cell * 2.25, height: cell * 2.25 };
   if (kind === 'SEVEN') return { width: cell * 3.5, height: cell * 3.5 };
   if (kind === 'SPIDER') return { width: cell * 2.2, height: cell * 2.2 };
-  return { width: cell * 1.9, height: cell * 1.9 };
+  const shipScale = isMiniShip ? 0.5 : 1;
+  return { width: cell * 1.9 * shipScale, height: cell * 1.9 * shipScale };
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
+  const shipScale = enemy.kind === 'SHIP' && enemy.isMiniShip ? 0.5 : 1;
   const baseRadius = enemy.kind === 'DRAGON'
     ? cell * 0.78
     : enemy.kind === 'SPIDER'
       ? cell * 0.88
       : enemy.kind === 'SEVEN'
         ? cell * 1.32
-        : cell * 0.8;
+        : cell * 0.8 * shipScale;
   return baseRadius * (enemy.isBoss ? 1.08 : 1);
 };
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
   return Math.max(enemyRadius(enemy, cell), Math.hypot(sprite.width, sprite.height) * 0.5) + PERIMETER_STROKE_WIDTH * 0.5;
 };
 
 const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
   const motion = enemyAnimationTransform(enemy, cell);
   const halfWidth = sprite.width * motion.scale * 0.5;
   const halfHeight = sprite.height * motion.scale * 0.5;
@@ -1406,7 +1410,7 @@ const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) 
 };
 
 const enemySpriteCorners = (enemy: Enemy, cell: number, x: number, y: number) => {
-  const sprite = enemySpriteSize(enemy.kind, cell);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
   const motion = enemyAnimationTransform(enemy, cell);
   const halfWidth = sprite.width * motion.scale * 0.5;
   const halfHeight = sprite.height * motion.scale * 0.5;
@@ -1505,7 +1509,7 @@ const enemyCollisionCircles = (
   x: number,
   y: number,
 ): CollisionCircle[] => {
-  const sprite = enemySpriteSize(enemy.kind, cell);
+  const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMiniShip);
   const motion = enemyAnimationTransform(enemy, cell);
   const halfWidth = sprite.width * motion.scale * 0.5;
   const halfHeight = sprite.height * motion.scale * 0.5;
@@ -2022,14 +2026,15 @@ const placeBombsInOpenSurface = (
 
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
+  const shipScale = enemy.isMiniShip ? 0.5 : 1;
   const backwardX = -enemy.vx / velocityLength;
   const backwardY = -enemy.vy / velocityLength;
   const sideX = -backwardY;
   const sideY = backwardX;
 
   return Array.from({ length: count }, (_, index) => {
-    const sideOffset = (Math.random() - 0.5) * cell * 0.34;
-    const trailOffset = cell * (0.92 + index * 0.2);
+    const sideOffset = (Math.random() - 0.5) * cell * 0.34 * shipScale;
+    const trailOffset = cell * (0.92 + index * 0.2) * shipScale;
     const maxLife = 0.43 + Math.random() * 0.17;
     const smokeSpeed = Math.max(20, velocityLength * (0.48 + Math.random() * 0.16));
     return {
@@ -2037,7 +2042,7 @@ const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[
       y: enemy.y + backwardY * trailOffset + sideY * sideOffset,
       life: maxLife,
       maxLife,
-      size: cell * (0.13 + Math.random() * 0.1),
+      size: cell * (0.13 + Math.random() * 0.1) * shipScale,
       driftX: backwardX * smokeSpeed + sideX * (Math.random() - 0.5) * 13,
       driftY: backwardY * smokeSpeed + sideY * (Math.random() - 0.5) * 13,
     };
@@ -2279,7 +2284,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
             .map((enemy, index) => {
               const smokePosition = shipSmokePosition(enemy, snapshot.cell);
               const motion = enemyAnimationTransform(enemy, snapshot.cell);
-              const smokeSize = snapshot.cell * 1.8;
+              const smokeSize = snapshot.cell * (enemy.isMiniShip ? 0.9 : 1.8);
               const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
               return (
                 <G
@@ -2549,7 +2554,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
         const frame = enemyFrameIndex(enemy);
-        const size = enemySpriteSize(enemy.kind, snapshot.cell);
+        const size = enemySpriteSize(enemy.kind, snapshot.cell, enemy.isMiniShip);
         const motion = enemyAnimationTransform(enemy, snapshot.cell);
         const centerY = enemy.y + motion.offsetY;
         const rotationDegrees = motion.rotation * (180 / Math.PI);
@@ -3049,13 +3054,24 @@ export default function GameScreen() {
     const previousBombs = preserveBombLayout
       ? g.bombs.map((bomb) => ({ ...bomb }))
       : [];
+    const previousMiniShips = preserveStats && !resetBoard
+      ? previousEnemies
+        .filter((enemy) => enemy.kind === 'SHIP' && enemy.isMiniShip && !enemyIsDestroyed(enemy))
+        .map((enemy) => ({ ...enemy }))
+      : [];
     if (!preserveStats) recordBannerShownRef.current = false;
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
     const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
     const enemies = createEnemies(width, height, cell, previousLevel);
-    preserveDestroyedEnemies(enemies, previousEnemies);
+    preserveDestroyedEnemies(
+      enemies,
+      previousEnemies.filter((enemy) => !enemy.isMiniShip),
+    );
+    if (previousMiniShips.length > 0) {
+      enemies.push(...previousMiniShips);
+    }
     // A respawn resumes the same sector state, including the exact bomb
     // roster and destroyed flags. Only a new sector/game creates a new draw.
     const bombs = preserveBombLayout
@@ -3587,7 +3603,65 @@ export default function GameScreen() {
       return true;
     };
 
-    const burstEnemy = (g: Game, enemy: Enemy, now: number) => {
+    const splitShipIntoMiniShips = (g: Game, enemy: Enemy): Enemy[] => {
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      const heading = Math.atan2(enemy.vy, enemy.vx);
+      const perpendicular = {
+        x: -Math.sin(heading),
+        y: Math.cos(heading),
+      };
+      const separation = g.cell * 0.72;
+      const miniTemplate = {
+        ...enemy,
+        isMiniShip: true,
+        isBoss: false,
+        bossTier: undefined,
+        respawnAt: 0,
+        blockedTime: 0,
+        edgeTurnTimer: 0,
+        edgeDirectionX: 0,
+        edgeDirectionY: 0,
+      };
+      const miniRadius = enemyVisualRadius(miniTemplate, g.cell);
+
+      return [-1, 1].map((side, index) => {
+        const x = clamp(
+          enemy.x + perpendicular.x * separation * side,
+          bounds.left + miniRadius,
+          bounds.right - miniRadius,
+        );
+        const y = clamp(
+          enemy.y + perpendicular.y * separation * side,
+          bounds.top + miniRadius,
+          bounds.bottom - miniRadius,
+        );
+        const miniHeading = heading + side * 0.42;
+        return {
+          ...miniTemplate,
+          x,
+          y,
+          vx: Math.cos(miniHeading) * enemy.speed,
+          vy: Math.sin(miniHeading) * enemy.speed,
+          phase: enemy.phase + 0.6 + index * 0.8,
+          spin: enemy.spin + side * 0.16,
+          routePhase: enemy.routePhase + side * 0.35,
+          targetX: x,
+          targetY: y,
+          visualRotation: miniHeading + Math.PI / 2,
+        };
+      });
+    };
+
+    const burstEnemy = (
+      g: Game,
+      enemy: Enemy,
+      now: number,
+      fromMissile = false,
+    ) => {
+      const splitOnMissile = fromMissile
+        && enemy.kind === 'SHIP'
+        && !enemy.isMiniShip
+        && !enemy.isBoss;
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
       for (let i = 0; i < 200; i += 1) {
         const angle = Math.random() * Math.PI * 2;
@@ -3604,13 +3678,21 @@ export default function GameScreen() {
         });
       }
       g.score += ENEMY_SCORE[enemy.kind];
-      enqueueBanner({ kind: 'ENEMY', points: ENEMY_SCORE[enemy.kind] });
       enemy.blockedTime = 0;
       // A destroyed enemy stays permanently inactive for this sector. The
       // next sector creates a fresh enemy roster through resetGame.
+      const miniShips = splitOnMissile ? splitShipIntoMiniShips(g, enemy) : [];
       enemy.respawnAt = Number.POSITIVE_INFINITY;
       enemy.vx = 0;
       enemy.vy = 0;
+      if (splitOnMissile) {
+        g.enemies.push(...miniShips);
+        enqueueBanner({ kind: 'SPLIT', points: ENEMY_SCORE[enemy.kind] });
+      } else if (enemy.isMiniShip) {
+        enqueueBanner({ kind: 'MINI', points: ENEMY_SCORE[enemy.kind] });
+      } else {
+        enqueueBanner({ kind: 'ENEMY', points: ENEMY_SCORE[enemy.kind] });
+      }
       if (g.enemies.every((candidate) => enemyIsDestroyed(candidate))) {
         enqueueBanner({ kind: 'CLEAN' });
       }
@@ -3619,6 +3701,11 @@ export default function GameScreen() {
         // is off-screen so it cannot remain at the previous spawn point.
         g.smokePuffs.length = 0;
         g.smokeAccumulator = 0;
+        if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && miniShips.length > 0) {
+          g.smokePuffs.push(...miniShips.flatMap((miniShip) => (
+            createShipSmokePuffs(miniShip, g.cell, 3)
+          )));
+        }
       }
     };
 
@@ -3651,7 +3738,7 @@ export default function GameScreen() {
             distanceToSegment(center, from, to) <= radius + missile.radius
           ));
           if (touched) {
-            burstEnemy(g, enemy, now);
+            burstEnemy(g, enemy, now, true);
             hitTarget = true;
             break;
           }
@@ -3790,7 +3877,10 @@ export default function GameScreen() {
         const maxX = bounds.right;
         const minY = bounds.top;
         const maxY = bounds.bottom;
-        const bodyRadius = Math.max(enemyRadius(enemy, g.cell) * 0.9, g.cell * 0.72);
+        const bodyRadius = Math.max(
+          enemyRadius(enemy, g.cell) * 0.9,
+          g.cell * (enemy.isMiniShip ? 0.36 : 0.72),
+        );
         const trailTouchesEnemyBody = (trail: Point[], x: number, y: number) => {
           if (trail.length < 2) return false;
           const collisionCircles = enemyCollisionCircles(enemy, g.cell, x, y);
@@ -4881,7 +4971,7 @@ export default function GameScreen() {
              if (enemy.kind !== 'SHIP' || enemy.respawnAt > now) return;
              const smokePosition = shipSmokePosition(enemy, g.cell);
              const motion = enemyAnimationTransform(enemy, g.cell);
-             const smokeSize = g.cell * 1.8;
+              const smokeSize = g.cell * (enemy.isMiniShip ? 0.9 : 1.8);
              context.save();
              context.globalAlpha = 0.58;
              context.translate(smokePosition.x, smokePosition.y + motion.offsetY);
@@ -5045,7 +5135,7 @@ export default function GameScreen() {
         const frame = enemyFrameIndex(enemy);
         const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
         if (!image) return;
-        const size = enemySpriteSize(enemy.kind, g.cell);
+         const size = enemySpriteSize(enemy.kind, g.cell, enemy.isMiniShip);
         const motion = enemyAnimationTransform(enemy, g.cell);
         context.save();
         context.translate(enemy.x, enemy.y + motion.offsetY);
@@ -5290,6 +5380,10 @@ export default function GameScreen() {
                         ? 'SECTEUR TERMINÉ'
                         : banner.kind === 'BOSS'
                           ? 'ALERTE BOSS'
+                        : banner.kind === 'SPLIT'
+                          ? 'VAISSEAU FRACTURÉ'
+                        : banner.kind === 'MINI'
+                          ? 'MINI-VAISSEAU DÉTRUIT'
                         : banner.kind === 'CLEAN'
                           ? 'SECTEUR NETTOYÉ !'
                           : banner.kind === 'GAME_OVER'
@@ -5307,6 +5401,10 @@ export default function GameScreen() {
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
+                      : banner.kind === 'SPLIT'
+                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-VAISSEAUX`
+                      : banner.kind === 'MINI'
+                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS`
                       : banner.kind === 'CLEAN'
                           ? 'SÉCURISEZ 80%'
                           : banner.kind === 'GAME_OVER'
