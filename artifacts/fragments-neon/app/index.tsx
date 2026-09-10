@@ -44,6 +44,7 @@ const CAPTURED_ZONE_OPACITY = 0.15;
 const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
+const EVEN_SECTOR_DARKNESS = 0.2;
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
 // Temporary QA control. __DEV__ hides it automatically from production builds.
@@ -2252,6 +2253,16 @@ const NativeArenaStatic = React.memo(({
         height={height}
         preserveAspectRatio="xMidYMid slice"
       />
+      {level % 2 === 0 && (
+        <Rect
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          fill="#000000"
+          opacity={EVEN_SECTOR_DARKNESS}
+        />
+      )}
       <Rect
         x={bounds.left}
         y={bounds.top}
@@ -5157,6 +5168,12 @@ export default function GameScreen() {
         context.fillStyle = '#000000';
         context.fillRect(0, 0, g.width, g.height);
       }
+       if (g.level % 2 === 0) {
+         context.globalAlpha = EVEN_SECTOR_DARKNESS;
+         context.fillStyle = '#000000';
+         context.fillRect(0, 0, g.width, g.height);
+         context.globalAlpha = 1;
+       }
 
        context.globalCompositeOperation = 'source-over';
         context.globalAlpha = INITIAL_MAP_OPACITY;
