@@ -273,6 +273,7 @@ type Enemy = Point & {
   isBoss?: boolean;
   bossTier?: number;
   isMiniShip?: boolean;
+  splitLevel?: number;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -500,7 +501,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'SPLIT' | 'MINI' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'MINI' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -3054,9 +3055,13 @@ export default function GameScreen() {
     const previousBombs = preserveBombLayout
       ? g.bombs.map((bomb) => ({ ...bomb }))
       : [];
-    const previousMiniShips = preserveStats && !resetBoard
+    const previousSplitShips = preserveStats && !resetBoard
       ? previousEnemies
-        .filter((enemy) => enemy.kind === 'SHIP' && enemy.isMiniShip && !enemyIsDestroyed(enemy))
+        .filter((enemy) => (
+          enemy.kind === 'SHIP'
+          && (enemy.isMiniShip || enemy.splitLevel !== undefined)
+          && !enemyIsDestroyed(enemy)
+        ))
         .map((enemy) => ({ ...enemy }))
       : [];
     if (!preserveStats) recordBannerShownRef.current = false;
@@ -3067,10 +3072,10 @@ export default function GameScreen() {
     const enemies = createEnemies(width, height, cell, previousLevel);
     preserveDestroyedEnemies(
       enemies,
-      previousEnemies.filter((enemy) => !enemy.isMiniShip),
+      previousEnemies.filter((enemy) => !enemy.isMiniShip && enemy.splitLevel === undefined),
     );
-    if (previousMiniShips.length > 0) {
-      enemies.push(...previousMiniShips);
+    if (previousSplitShips.length > 0) {
+      enemies.push(...previousSplitShips);
     }
     // A respawn resumes the same sector state, including the exact bomb
     // roster and destroyed flags. Only a new sector/game creates a new draw.
@@ -3603,7 +3608,11 @@ export default function GameScreen() {
       return true;
     };
 
-    const splitShipIntoMiniShips = (g: Game, enemy: Enemy): Enemy[] => {
+    const splitShipIntoShips = (
+      g: Game,
+      enemy: Enemy,
+      childIsMiniShip: boolean,
+    ): Enemy[] => {
       const bounds = perimeterBounds(g.width, g.height, g.cell);
       const heading = Math.atan2(enemy.vy, enemy.vx);
       const perpendicular = {
@@ -3611,9 +3620,10 @@ export default function GameScreen() {
         y: Math.cos(heading),
       };
       const separation = g.cell * 0.72;
-      const miniTemplate = {
+      const childTemplate = {
         ...enemy,
-        isMiniShip: true,
+        isMiniShip: childIsMiniShip,
+        splitLevel: 1,
         isBoss: false,
         bossTier: undefined,
         respawnAt: 0,
@@ -3622,22 +3632,22 @@ export default function GameScreen() {
         edgeDirectionX: 0,
         edgeDirectionY: 0,
       };
-      const miniRadius = enemyVisualRadius(miniTemplate, g.cell);
+      const childRadius = enemyVisualRadius(childTemplate, g.cell);
 
       return [-1, 1].map((side, index) => {
         const x = clamp(
           enemy.x + perpendicular.x * separation * side,
-          bounds.left + miniRadius,
-          bounds.right - miniRadius,
+          bounds.left + childRadius,
+          bounds.right - childRadius,
         );
         const y = clamp(
           enemy.y + perpendicular.y * separation * side,
-          bounds.top + miniRadius,
-          bounds.bottom - miniRadius,
+          bounds.top + childRadius,
+          bounds.bottom - childRadius,
         );
         const miniHeading = heading + side * 0.42;
         return {
-          ...miniTemplate,
+          ...childTemplate,
           x,
           y,
           vx: Math.cos(miniHeading) * enemy.speed,
@@ -3660,8 +3670,7 @@ export default function GameScreen() {
     ) => {
       const splitOnMissile = fromMissile
         && enemy.kind === 'SHIP'
-        && !enemy.isMiniShip
-        && !enemy.isBoss;
+        && !enemy.isMiniShip;
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
       for (let i = 0; i < 200; i += 1) {
         const angle = Math.random() * Math.PI * 2;
@@ -3681,13 +3690,18 @@ export default function GameScreen() {
       enemy.blockedTime = 0;
       // A destroyed enemy stays permanently inactive for this sector. The
       // next sector creates a fresh enemy roster through resetGame.
-      const miniShips = splitOnMissile ? splitShipIntoMiniShips(g, enemy) : [];
+      const splitShips = splitOnMissile
+        ? splitShipIntoShips(g, enemy, !enemy.isBoss)
+        : [];
       enemy.respawnAt = Number.POSITIVE_INFINITY;
       enemy.vx = 0;
       enemy.vy = 0;
       if (splitOnMissile) {
-        g.enemies.push(...miniShips);
-        enqueueBanner({ kind: 'SPLIT', points: ENEMY_SCORE[enemy.kind] });
+        g.enemies.push(...splitShips);
+        enqueueBanner({
+          kind: enemy.isBoss ? 'BOSS_SPLIT' : 'SPLIT',
+          points: ENEMY_SCORE[enemy.kind],
+        });
       } else if (enemy.isMiniShip) {
         enqueueBanner({ kind: 'MINI', points: ENEMY_SCORE[enemy.kind] });
       } else {
@@ -3701,9 +3715,9 @@ export default function GameScreen() {
         // is off-screen so it cannot remain at the previous spawn point.
         g.smokePuffs.length = 0;
         g.smokeAccumulator = 0;
-        if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && miniShips.length > 0) {
-          g.smokePuffs.push(...miniShips.flatMap((miniShip) => (
-            createShipSmokePuffs(miniShip, g.cell, 3)
+        if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && splitShips.length > 0) {
+          g.smokePuffs.push(...splitShips.flatMap((splitShip) => (
+            createShipSmokePuffs(splitShip, g.cell, 3)
           )));
         }
       }
