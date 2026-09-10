@@ -197,6 +197,8 @@ const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
 const DIAMOND_SPRITE_FRAME_COUNT = 4;
 const DIAMOND_SPRITE_FRAME_SIZE = 256;
 const DIAMOND_SPRITE_FRAME_DURATION = 7;
+const ENEMY_RENDER_SCALE = 0.92;
+const PICKUP_VISUAL_SIZE_CELLS = 1.34;
 const SEVEN_PROJECTILE_COUNT = 7;
 const SEVEN_PROJECTILE_INTERVAL = 7;
 const SEVEN_PROJECTILE_SPEED = 42;
@@ -1394,6 +1396,16 @@ const enemySpriteSize = (kind: EnemyKind, cell: number, isMini = false) => {
   return { width: cell * 1.9 * miniScale, height: cell * 1.9 * miniScale };
 };
 
+const enemyRenderSize = (kind: EnemyKind, cell: number, isMini = false) => {
+  const size = enemySpriteSize(kind, cell, isMini);
+  return {
+    width: size.width * ENEMY_RENDER_SCALE,
+    height: size.height * ENEMY_RENDER_SCALE,
+  };
+};
+
+const pickupVisualSize = (cell: number) => cell * PICKUP_VISUAL_SIZE_CELLS;
+
 const enemyRadius = (enemy: Enemy, cell: number) => {
   const miniScale = enemy.isMini ? 0.5 : 1;
   const baseRadius = enemy.kind === 'DRAGON'
@@ -2187,6 +2199,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
+  const pickupSize = pickupVisualSize(snapshot.cell);
   const activeCut = snapshot.trail.length > 0
     && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
   const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
@@ -2210,20 +2223,20 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
             <Defs>
               <ClipPath id={`diamond-sprite-clip-${index}`}>
                 <Rect
-                  x={-snapshot.cell * 0.75}
-                  y={-snapshot.cell * 0.75}
-                  width={snapshot.cell * 1.5}
-                  height={snapshot.cell * 1.5}
+                  x={-pickupSize / 2}
+                  y={-pickupSize / 2}
+                  width={pickupSize}
+                  height={pickupSize}
                 />
               </ClipPath>
             </Defs>
             <G clipPath={`url(#diamond-sprite-clip-${index})`}>
               <SvgImage
                 href={diamondSpriteSource}
-                x={-snapshot.cell * 0.75 - diamondFrame * snapshot.cell * 1.5}
-                y={-snapshot.cell * 0.75}
-                width={snapshot.cell * 1.5 * DIAMOND_SPRITE_FRAME_COUNT}
-                height={snapshot.cell * 1.5}
+                x={-pickupSize / 2 - diamondFrame * pickupSize}
+                y={-pickupSize / 2}
+                width={pickupSize * DIAMOND_SPRITE_FRAME_COUNT}
+                height={pickupSize}
                 opacity={0.98}
               />
             </G>
@@ -2457,7 +2470,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
         if (bomb.destroyed) return null;
         const frame = Math.floor(snapshot.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
           % CORE_REACTOR_SPRITE_FRAME_COUNT;
-        const spriteSize = snapshot.cell * 1.45;
+        const spriteSize = pickupSize;
         return (
           <G key={`bomb-${bombIndex}`} transform={`translate(${bomb.x} ${bomb.y})`}>
             <Defs>
@@ -2517,7 +2530,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       {snapshot.enemies.map((enemy, enemyIndex) => {
         if (enemy.respawnAt > Date.now()) return null;
         const frame = enemyFrameIndex(enemy);
-        const size = enemySpriteSize(enemy.kind, snapshot.cell, enemy.isMini);
+        const size = enemyRenderSize(enemy.kind, snapshot.cell, enemy.isMini);
         const motion = enemyAnimationTransform(enemy, snapshot.cell);
         const centerY = enemy.y + motion.offsetY;
         const rotationDegrees = motion.rotation * (180 / Math.PI);
@@ -4960,7 +4973,7 @@ export default function GameScreen() {
           });
         const diamondImage = diamondSpriteImageRef.current;
         if (diamondImage) {
-         const diamondSize = g.cell * 1.5;
+         const pickupSize = pickupVisualSize(g.cell);
           const diamondFrame = Math.floor(g.frame / DIAMOND_SPRITE_FRAME_DURATION)
             % DIAMOND_SPRITE_FRAME_COUNT;
          g.diamonds.forEach((diamond) => {
@@ -4979,10 +4992,10 @@ export default function GameScreen() {
               0,
               DIAMOND_SPRITE_FRAME_SIZE,
               DIAMOND_SPRITE_FRAME_SIZE,
-              -diamondSize / 2,
-              -diamondSize / 2,
-              diamondSize,
-              diamondSize,
+              -pickupSize / 2,
+              -pickupSize / 2,
+              pickupSize,
+              pickupSize,
             );
            context.restore();
          });
@@ -4991,7 +5004,7 @@ export default function GameScreen() {
        if (coreReactorImage) {
          const bombFrame = Math.floor(g.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
            % CORE_REACTOR_SPRITE_FRAME_COUNT;
-         const bombSize = g.cell * 1.45;
+         const bombSize = pickupVisualSize(g.cell);
          g.bombs.forEach((bomb) => {
            if (bomb.destroyed) return;
            context.save();
@@ -5056,7 +5069,7 @@ export default function GameScreen() {
         const frame = enemyFrameIndex(enemy);
         const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
         if (!image) return;
-         const size = enemySpriteSize(enemy.kind, g.cell, enemy.isMini);
+         const size = enemyRenderSize(enemy.kind, g.cell, enemy.isMini);
         const motion = enemyAnimationTransform(enemy, g.cell);
         context.save();
         context.translate(enemy.x, enemy.y + motion.offsetY);
