@@ -3565,7 +3565,7 @@ export default function GameScreen() {
           && enemySpriteFootprint(enemy, g.cell, x, y)
             .every((point) => pointInsideClaimedSurface(point, g.claimedPolygons, g.cell * 0.08))
         );
-        const recoverShipFromSoftContact = () => {
+        const recoverEnemyFromSoftContact = () => {
           if (enemyFitsAt(enemy.x, enemy.y) || fullyEnclosedAt(enemy.x, enemy.y)) return;
           const candidates: { x: number; y: number; distance: number }[] = [];
           if (
@@ -3601,7 +3601,7 @@ export default function GameScreen() {
         };
         const bounceShipRandomly = () => {
           if (fullyEnclosedAt(enemy.x, enemy.y)) return;
-          recoverShipFromSoftContact();
+          recoverEnemyFromSoftContact();
           const currentAngle = Math.atan2(enemy.vy, enemy.vx);
           const candidateDistances = [0.12, 0.24, 0.42, 0.68].map((ratio) => g.cell * ratio);
           const candidates = candidateDistances.flatMap((distance) => (
@@ -3632,6 +3632,12 @@ export default function GameScreen() {
           enemy.edgeTurnTimer = 0;
           enemy.routePhase += Math.PI * (0.55 + Math.random() * 0.7);
         };
+        if (!fullyEnclosedAt(enemy.x, enemy.y) && !enemyFitsAt(enemy.x, enemy.y)) {
+          // Protected red trails remain solid barriers, but never become a
+          // deadlock: move the enemy back to its last valid surface or to
+          // the nearest valid point beside the line.
+          recoverEnemyFromSoftContact();
+        }
         if (enemyFitsAt(enemy.x, enemy.y)) {
           enemy.lastSafeX = enemy.x;
           enemy.lastSafeY = enemy.y;
@@ -3743,11 +3749,16 @@ export default function GameScreen() {
         enemy.vx += ((desiredVelocity.x / desiredLength) * desiredSpeed - enemy.vx) * steering;
         enemy.vy += ((desiredVelocity.y / desiredLength) * desiredSpeed - enemy.vy) * steering;
 
+        const previousEnemyX = enemy.x;
+        const previousEnemyY = enemy.y;
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
-        const canMoveFull = enemyCanMoveAt(nextX, nextY);
-        const canMoveX = enemyCanMoveAt(nextX, enemy.y);
-        const canMoveY = enemyCanMoveAt(enemy.x, nextY);
+        const canMoveFull = enemyCanMoveAt(nextX, nextY)
+          && !enemySweepTouchesProtectedTrail(enemy.x, enemy.y, nextX, nextY);
+        const canMoveX = enemyCanMoveAt(nextX, enemy.y)
+          && !enemySweepTouchesProtectedTrail(enemy.x, enemy.y, nextX, enemy.y);
+        const canMoveY = enemyCanMoveAt(enemy.x, nextY)
+          && !enemySweepTouchesProtectedTrail(enemy.x, enemy.y, enemy.x, nextY);
         const blockedX = nextX < minX || nextX > maxX || !canMoveX;
         const blockedY = nextY < minY || nextY > maxY || !canMoveY;
         const turnAwayFromBlueEdge = (hitX: boolean, hitY: boolean) => {
@@ -3842,6 +3853,11 @@ export default function GameScreen() {
                 SHIP_ROTATION_SPEED * dt,
               );
           }
+        }
+
+        if (enemySweepTouchesTrail(g.trail, previousEnemyX, previousEnemyY, enemy.x, enemy.y)) {
+          explode(g, now);
+          return;
         }
 
         const centerIsSafe = pointInsideClaimedSurface(
