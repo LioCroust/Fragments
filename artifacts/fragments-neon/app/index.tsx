@@ -3571,7 +3571,7 @@ export default function GameScreen() {
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 0.3 + Math.random() * 0.24,
-        size: 1 + Math.random() * 1.8,
+        size: (1 + Math.random() * 1.8) * 0.88,
         color: colorsForSpark[Math.floor(Math.random() * colorsForSpark.length)],
         streak: true,
       });
