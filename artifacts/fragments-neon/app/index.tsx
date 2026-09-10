@@ -299,6 +299,8 @@ type SpiderThread = {
   webSizeCells: number;
   webRadiusCells: number;
   slowFactor: number;
+  threadLengthCells: number;
+  activeDuration: number;
   ownerIndex: number;
   remaining: number;
   anchored: boolean;
@@ -1061,7 +1063,8 @@ const createDiamonds = (width: number, height: number, cell: number, count: numb
 };
 
 const diamondCountForLevel = (level: number) => {
-  return Math.min(5, Math.max(1, 1 + Math.floor(level / 2)));
+  if (isBossSector(level)) return 0;
+  return level <= 2 ? 0 : level <= 12 ? 1 : level <= 24 ? 2 : 1;
 };
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
@@ -1089,7 +1092,8 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
       : 0;
   return {
     rotation: directionRotation + sway,
-    scale: 1 + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
+    scale: (enemy.isBoss ? 1.58 : 1)
+      + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
     offsetY: Math.sin(phase * 1.05) * cell * 0.08,
   };
 };
@@ -1228,10 +1232,14 @@ const enemySpriteSize = (kind: EnemyKind, cell: number) => {
 };
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
-  if (enemy.kind === 'DRAGON') return cell * 0.78;
-  if (enemy.kind === 'SPIDER') return cell * 0.88;
-  if (enemy.kind === 'SEVEN') return cell * 1.32;
-  return cell * 0.8;
+  const baseRadius = enemy.kind === 'DRAGON'
+    ? cell * 0.78
+    : enemy.kind === 'SPIDER'
+      ? cell * 0.88
+      : enemy.kind === 'SEVEN'
+        ? cell * 1.32
+        : cell * 0.8;
+  return baseRadius * (enemy.isBoss ? 1.08 : 1);
 };
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
@@ -1576,42 +1584,69 @@ const pathTouchesPolygon = (path: Point[], polygon: Point[], strokeRadius: numbe
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
-  const levelSpeed = 1 + Math.min(level - 1, 4) * 0.045;
+  const clampedLevel = Math.min(MAX_LEVEL, Math.max(1, level));
+  const levelSpeed = 1 + Math.min(clampedLevel - 1, 24) * 0.018;
   const enemies: Enemy[] = [
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'SWEEP', x: safeX(0.28), y: safeY(0.28), vx: 56 * levelSpeed, vy: 38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.92, phase: 0.4, spin: 0.2, routePhase: 0.3, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'DRAGON', behavior: 'PLANNED', pattern: 'SWEEP', x: safeX(0.73), y: safeY(0.31), vx: -25.69, vy: 30.66, speed: DRAGON_NOMINAL_SPEED, agility: 0.66, phase: 2.1, spin: -0.15, routePhase: 1.4, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SHIP', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.3), vx: -49 * levelSpeed, vy: 32 * levelSpeed, speed: 62 * levelSpeed, agility: 0.9, phase: 1.6, spin: -0.22, routePhase: 1.1, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0 },
     { kind: 'SEVEN', behavior: 'PRESET', pattern: 'ZIGZAG', x: safeX(0.30), y: safeY(0.64), vx: 48 * levelSpeed, vy: -38 * levelSpeed, speed: 64 * levelSpeed, agility: 0.78, phase: 4.3, spin: 0.35, routePhase: 2.6, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, sevenFireTimer: SEVEN_PROJECTILE_INTERVAL },
-    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, spiderThreadTimer: SPIDER_THREAD_INITIAL_DELAY },
+    { kind: 'SPIDER', behavior: 'PLANNED', pattern: 'ZIGZAG', x: safeX(0.72), y: safeY(0.68), vx: -25 * levelSpeed, vy: -19 * levelSpeed, speed: 36 * levelSpeed, agility: 0.82, phase: 5.7, spin: -0.28, routePhase: 4.2, thinkTimer: 0, targetX: 0, targetY: 0, blockedTime: 0, respawnAt: 0, edgeTurnTimer: 0, edgeDirectionX: 0, edgeDirectionY: 0, spiderThreadTimer: SPIDER_GRADE_CONFIG[1].initialDelay, spiderGrade: 1 },
   ];
-  const rosterByLevel: Record<number, number[]> = {
-    1: [0, 4],
-    2: [0, 2],
-    3: [0, 1],
-    4: [0, 2, 3],
-    5: [0, 1, 2],
-    6: [0, 1, 3],
-    7: [0, 1, 2, 4],
-    8: [0, 1, 3, 4],
-    9: [0, 1, 2, 3, 4],
-    10: [0, 1, 2, 3, 4],
-  };
-  return (rosterByLevel[Math.min(MAX_LEVEL, Math.max(1, level))] ?? rosterByLevel[1])
-    .map((enemyIndex) => {
-      const enemy = enemies[enemyIndex];
-      return enemy.kind === 'SHIP'
-        ? {
-            ...enemy,
-            visualRotation: Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2,
-          }
-        : enemy;
-    });
+  const rosterByLevel: Record<number, EnemySpawnSpec[]> = {};
+  for (let sector = 1; sector <= MAX_LEVEL; sector += 1) {
+    const bossKind = bossKindForSector(sector);
+    if (bossKind) {
+      const baseIndex = enemies.findIndex((enemy) => enemy.kind === bossKind);
+      rosterByLevel[sector] = [{
+        baseIndex,
+        isBoss: true,
+        bossTier: sector / 10,
+        spiderGrade: bossKind === 'SPIDER' ? (sector === 10 ? 3 : 5) : undefined,
+      }];
+      continue;
+    }
+    const cycle = sector % 10;
+    const spiderGrade = sector < 10 ? undefined : sector < 20 ? 2 : sector < 30 ? 3 : 5;
+    const spider = sector >= 5
+      ? [{ baseIndex: 4, spiderGrade: Math.max(1, Math.min(5, spiderGrade ?? 1)) }]
+      : [];
+    rosterByLevel[sector] = cycle <= 2
+      ? [{ baseIndex: 0 }]
+      : cycle === 3
+        ? [{ baseIndex: 1 }]
+        : cycle === 4
+          ? [{ baseIndex: 0 }, { baseIndex: 1 }]
+          : cycle === 5
+            ? [{ baseIndex: 0 }, ...spider]
+            : cycle === 6
+              ? [{ baseIndex: 1 }, { baseIndex: 3 }]
+              : cycle === 7
+                ? [{ baseIndex: 0 }, { baseIndex: 1 }, ...spider]
+                : cycle === 8
+                  ? [{ baseIndex: 0 }, { baseIndex: 3 }]
+                  : [{ baseIndex: 1 }, { baseIndex: 3 }, ...spider];
+  }
+  return (rosterByLevel[clampedLevel] ?? rosterByLevel[1]).map((spec) => {
+    const enemy = { ...enemies[spec.baseIndex], ...spec };
+    const bossSpeed = spec.isBoss ? 1.24 + (spec.bossTier ?? 1) * 0.035 : 1;
+    const spiderDifficulty = enemy.kind === 'SPIDER'
+      ? spiderDifficultyFor(spec.spiderGrade ?? enemy.spiderGrade ?? 1, spec.bossTier)
+      : undefined;
+    return {
+      ...enemy,
+      speed: enemy.speed * bossSpeed,
+      vx: enemy.vx * bossSpeed,
+      vy: enemy.vy * bossSpeed,
+      spiderThreadTimer: spiderDifficulty?.initialDelay,
+      visualRotation: enemy.kind === 'SHIP' ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2 : undefined,
+    };
+  });
 };
 
 const createBombs = (width: number, height: number, cell: number, level: number): Bomb[] => {
-  if (Math.random() >= 0.5) return [];
-
-  const bombCount = level >= 5 && Math.random() < 0.5 ? 2 : 1;
+  if (isBossSector(level) || Math.random() >= (level < 5 ? 0.28 : 0.48)) return [];
+  const bombCount = 1;
   const bounds = perimeterBounds(width, height, cell);
   const minX = bounds.left + bombVisualRadius(cell);
   const maxX = bounds.right - bombVisualRadius(cell);
@@ -2190,7 +2225,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       ))}
       {snapshot.spiderThreads.map((thread, index) => {
         const active = spiderThreadIsActive(thread);
-        const webSize = snapshot.cell * SPIDER_WEB_SIZE_CELLS;
+        const webSize = snapshot.cell * thread.webSizeCells;
         return (
           <G key={`spider-thread-${index}`} opacity={active ? 0.82 : 0.92}>
             {!thread.anchored && (
@@ -3207,7 +3242,7 @@ export default function GameScreen() {
         const thread = g.spiderThreads[index];
         const owner = g.enemies[thread.ownerIndex];
         if (!thread.anchored) {
-          const travelDistance = SPIDER_THREAD_SPEED * dt;
+          const travelDistance = thread.projectileSpeed * dt;
           const distanceToTarget = Math.hypot(
             thread.target.x - thread.end.x,
             thread.target.y - thread.end.y,
@@ -3216,7 +3251,7 @@ export default function GameScreen() {
             const directionLength = Math.hypot(thread.vx, thread.vy) || 1;
             const perpendicularX = -thread.vy / directionLength;
             const perpendicularY = thread.vx / directionLength;
-            const halfLength = g.cell * SPIDER_THREAD_LENGTH_CELLS * 0.5;
+            const halfLength = g.cell * thread.threadLengthCells * 0.5;
             const clampThreadPoint = (point: Point): Point => ({
               x: clamp(point.x, bounds.left + g.cell * 0.16, bounds.right - g.cell * 0.16),
               y: clamp(point.y, bounds.top + g.cell * 0.16, bounds.bottom - g.cell * 0.16),
@@ -3230,7 +3265,7 @@ export default function GameScreen() {
               y: thread.target.y + perpendicularY * halfLength,
             });
             thread.anchored = true;
-            thread.remaining = SPIDER_THREAD_ACTIVE_DURATION;
+            thread.remaining = thread.activeDuration;
           } else {
             thread.end = {
               x: thread.end.x + thread.vx * dt,
@@ -3280,7 +3315,7 @@ export default function GameScreen() {
           enemy.vx = enemy.kind === 'DRAGON' ? -enemy.speed * 0.55 : enemy.speed * 0.55;
           enemy.vy = enemy.kind === 'SPIDER' ? -enemy.speed * 0.45 : enemy.speed * 0.45;
           if (enemy.kind === 'SPIDER') {
-            enemy.spiderThreadTimer = SPIDER_THREAD_INITIAL_DELAY;
+            enemy.spiderThreadTimer = spiderDifficultyFor(enemy.spiderGrade, enemy.bossTier).initialDelay;
           }
           enemy.targetX = enemy.x;
           enemy.targetY = enemy.y;
@@ -3297,7 +3332,10 @@ export default function GameScreen() {
           enemy.sevenFireTimer = (enemy.sevenFireTimer ?? SEVEN_PROJECTILE_INTERVAL) - dt;
         }
         if (enemy.kind === 'SPIDER') {
-          enemy.spiderThreadTimer = (enemy.spiderThreadTimer ?? SPIDER_THREAD_INITIAL_DELAY) - dt;
+          enemy.spiderThreadTimer = (
+            enemy.spiderThreadTimer
+            ?? spiderDifficultyFor(enemy.spiderGrade, enemy.bossTier).initialDelay
+          ) - dt;
         }
         enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
 
@@ -3713,7 +3751,9 @@ export default function GameScreen() {
           const offsetX = g.player.x - enemy.x;
           const offsetY = g.player.y - enemy.y;
           const velocitySquared = droneVelocity.x ** 2 + droneVelocity.y ** 2;
-          const projectileSquared = SPIDER_THREAD_SPEED ** 2;
+          const spiderDifficulty = spiderDifficultyFor(enemy.spiderGrade, enemy.bossTier);
+          const projectileSpeed = spiderDifficulty.projectileSpeed;
+          const projectileSquared = projectileSpeed ** 2;
           const quadraticA = velocitySquared - projectileSquared;
           const quadraticB = 2 * (offsetX * droneVelocity.x + offsetY * droneVelocity.y);
           const quadraticC = offsetX ** 2 + offsetY ** 2;
@@ -3726,10 +3766,10 @@ export default function GameScreen() {
             : [];
           const interceptTime = roots.length > 0
             ? Math.min(...roots)
-            : Math.max(0, Math.hypot(offsetX, offsetY) / SPIDER_THREAD_SPEED);
+            : Math.max(0, Math.hypot(offsetX, offsetY) / projectileSpeed);
           const isDroneMoving = droneVelocity.x !== 0 || droneVelocity.y !== 0;
           const flightTime = clamp(
-            interceptTime + (isDroneMoving ? SPIDER_THREAD_EXTRA_LEAD_TIME : 0),
+            interceptTime + (isDroneMoving ? spiderDifficulty.extraLeadTime : 0),
             0.22,
             1.15,
           );
@@ -3740,24 +3780,24 @@ export default function GameScreen() {
           const clampThreadPoint = (point: Point): Point => ({
             x: clamp(
               point.x,
-              bounds.left + g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
-              bounds.right - g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
+              bounds.left + g.cell * spiderDifficulty.webSizeCells * 0.5,
+              bounds.right - g.cell * spiderDifficulty.webSizeCells * 0.5,
             ),
             y: clamp(
               point.y,
-              bounds.top + g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
-              bounds.bottom - g.cell * SPIDER_WEB_SIZE_CELLS * 0.5,
+              bounds.top + g.cell * spiderDifficulty.webSizeCells * 0.5,
+              bounds.bottom - g.cell * spiderDifficulty.webSizeCells * 0.5,
             ),
           });
           const clampedTarget = clampThreadPoint(target);
           const launchX = clampedTarget.x - enemy.x;
           const launchY = clampedTarget.y - enemy.y;
           const launchLength = Math.hypot(launchX, launchY) || 1;
-          const launchVx = (launchX / launchLength) * SPIDER_THREAD_SPEED;
-          const launchVy = (launchY / launchLength) * SPIDER_THREAD_SPEED;
+          const launchVx = (launchX / launchLength) * projectileSpeed;
+          const launchVy = (launchY / launchLength) * projectileSpeed;
           const actualFlightTime = Math.max(
             0.2,
-            Math.hypot(launchX, launchY) / SPIDER_THREAD_SPEED,
+            Math.hypot(launchX, launchY) / projectileSpeed,
           );
           g.spiderThreads.push({
             start: { x: enemy.x, y: enemy.y },
@@ -3765,11 +3805,17 @@ export default function GameScreen() {
             target: clampedTarget,
             vx: launchVx,
             vy: launchVy,
+            projectileSpeed,
+            webSizeCells: spiderDifficulty.webSizeCells,
+            webRadiusCells: spiderDifficulty.webRadiusCells,
+            slowFactor: spiderDifficulty.slowFactor,
+            threadLengthCells: spiderDifficulty.threadLengthCells,
+            activeDuration: spiderDifficulty.activeDuration,
             ownerIndex: enemyIndex,
-            remaining: SPIDER_THREAD_ACTIVE_DURATION + actualFlightTime,
+            remaining: spiderDifficulty.activeDuration + actualFlightTime,
             anchored: false,
           });
-          enemy.spiderThreadTimer = SPIDER_THREAD_COOLDOWN;
+          enemy.spiderThreadTimer = spiderDifficulty.cooldown;
         }
 
         if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
@@ -3964,7 +4010,7 @@ export default function GameScreen() {
             && (
               thread.anchored
                 ? Math.hypot(probe.x - thread.target.x, probe.y - thread.target.y)
-                  <= playerBodyRadius(g.cell) + g.cell * SPIDER_WEB_RADIUS_CELLS
+                  <= playerBodyRadius(g.cell) + g.cell * thread.webRadiusCells
                 : distanceBetweenSegments(
                   g.player,
                   probe,
@@ -3974,7 +4020,13 @@ export default function GameScreen() {
             )
           ));
           const movementDistance = (
-            (caughtInSpiderWeb ? baseSpeed * SPIDER_THREAD_SLOW_FACTOR : baseSpeed) * dt
+            (caughtInSpiderWeb ? baseSpeed * (
+              g.spiderThreads.find((thread) => spiderThreadIsActive(thread)
+                && thread.anchored
+                && Math.hypot(probe.x - thread.target.x, probe.y - thread.target.y)
+                  <= playerBodyRadius(g.cell) + g.cell * thread.webRadiusCells
+              )?.slowFactor ?? 0.25
+            ) : baseSpeed) * dt
           ) / steps;
           const stepX = direction.x * movementDistance;
           const stepY = direction.y * movementDistance;
@@ -4338,7 +4390,7 @@ export default function GameScreen() {
           g.spiderThreads.forEach((thread) => {
             const active = spiderThreadIsActive(thread);
             if (thread.anchored && spiderWebImage) {
-              const webSize = g.cell * SPIDER_WEB_SIZE_CELLS;
+              const webSize = g.cell * thread.webSizeCells;
               context.save();
               context.globalAlpha = clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88);
               context.shadowColor = '#00f3ff';
