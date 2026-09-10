@@ -5379,7 +5379,10 @@ export default function GameScreen() {
               <View style={styles.bannerGloss} />
               <View style={styles.bannerAccent} />
               <Text
-                style={styles.bannerTitle}
+                style={[
+                  styles.bannerTitle,
+                  banner.kind === 'MINI' && styles.compactBannerTitle,
+                ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.62}
@@ -5855,6 +5858,10 @@ const styles = StyleSheet.create({
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 12,
     textShadowOffset: { width: 0, height: 0 },
+  },
+  compactBannerTitle: {
+    fontSize: 17,
+    lineHeight: 21,
   },
   bannerScore: {
     marginTop: 4,
