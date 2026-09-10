@@ -1822,6 +1822,11 @@ const createBombs = (width: number, height: number, cell: number, level: number)
 
 const enemyIsDestroyed = (enemy: Enemy) => enemy.respawnAt === Number.POSITIVE_INFINITY;
 
+const sectorHasLiveTargets = (enemies: Enemy[], bombs: Bomb[]) => (
+  enemies.some((enemy) => !enemyIsDestroyed(enemy))
+  || bombs.some((bomb) => !bomb.destroyed)
+);
+
 const preserveDestroyedEnemies = (enemies: Enemy[], previousEnemies: Enemy[]) => {
   const destroyedByKind: Record<EnemyKind, boolean[]> = {
     SHIP: [],
@@ -3618,6 +3623,10 @@ export default function GameScreen() {
     };
 
     const launchPlayerMissiles = (g: Game) => {
+      if (!sectorHasLiveTargets(g.enemies, g.bombs)) {
+        g.missiles.length = 0;
+        return;
+      }
       g.missiles.push(...createPlayerMissileVolley(g.player, g.cell));
     };
 
@@ -4429,7 +4438,11 @@ export default function GameScreen() {
               resetGame(true, true);
               return;
             }
-            launchPlayerMissiles(g);
+            if (sectorHasLiveTargets(g.enemies, g.bombs)) {
+              launchPlayerMissiles(g);
+            } else {
+              g.missiles.length = 0;
+            }
           }
           g.fillQueue = [];
           g.fillCursor = 0;
