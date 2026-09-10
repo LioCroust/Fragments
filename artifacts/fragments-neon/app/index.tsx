@@ -4576,15 +4576,22 @@ export default function GameScreen() {
                 });
               }
             });
-            g.enemies.forEach((enemy) => {
-              if (enemy.respawnAt > now) return;
+            const capturedEnemies = g.enemies.filter((enemy) => {
+              if (enemy.respawnAt > now) return false;
               const enemyPoints = enemySpriteFootprint(enemy, g.cell, enemy.x, enemy.y);
-              const enemyInside = completedPolygons.some((polygon) => (
+              return completedPolygons.some((polygon) => (
                 enemyPoints.length > 0
                 && enemyPoints.every((point) => pointInPolygon(point, polygon))
               ));
-              if (enemyInside) burstEnemy(g, enemy, now, false, true);
             });
+            if (capturedEnemies.length > 0) {
+              // Activate protection for the whole captured roster, including
+              // mini enemies, before any individual burst is processed.
+              activateCaptureProtection(g, now);
+              capturedEnemies.forEach((enemy) => {
+                burstEnemy(g, enemy, now, false, true);
+              });
+            }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (g.level < MAX_LEVEL && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
               const nextLevel = Math.min(MAX_LEVEL, g.level + 1);
