@@ -3279,9 +3279,22 @@ export default function GameScreen() {
       });
     };
 
+    const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
+
+    const activateCaptureProtection = (g: Game, now: number) => {
+      const protectionWasInactive = !playerIsProtected(g, now);
+      g.invincibleUntil = Math.max(
+        g.invincibleUntil,
+        now + CAPTURE_INVINCIBILITY_DURATION * 1000,
+      );
+      if (protectionWasInactive) {
+        enqueueBanner({ kind: 'SHIELD' });
+      }
+    };
+
     const explode = (g: Game, now: number) => {
       if (g.status !== 'PLAYING') return;
-      if (g.invincibleUntil > now) return;
+      if (playerIsProtected(g, now)) return;
       for (let i = 0; i < 170; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 300;
@@ -3338,7 +3351,7 @@ export default function GameScreen() {
 
     const startFusionDeath = (g: Game, impactPoint: Point) => {
       if (g.status !== 'PLAYING') return;
-      if (g.invincibleUntil > Date.now()) return;
+      if (playerIsProtected(g, Date.now())) return;
       if (g.trail.length < 2) {
         explode(g, Date.now());
         return;
@@ -3717,14 +3730,10 @@ export default function GameScreen() {
       const enemyPoints = ENEMY_SCORE[enemy.kind] * (fromCapture ? 2 : 1);
       g.score += enemyPoints;
       if (fromCapture) {
-        const protectionWasInactive = g.invincibleUntil <= now;
-        g.invincibleUntil = Math.max(
-          g.invincibleUntil,
-          now + CAPTURE_INVINCIBILITY_DURATION * 1000,
-        );
-        if (protectionWasInactive) {
-          enqueueBanner({ kind: 'SHIELD' });
-        }
+        // This applies to every enemy type, including the mini ships created
+        // by a split. The capture completion path also activates it once
+        // before bursting the captured roster.
+        activateCaptureProtection(g, now);
       }
       enemy.blockedTime = 0;
       // A destroyed enemy stays permanently inactive for this sector. The
@@ -4011,7 +4020,7 @@ export default function GameScreen() {
           enemySweepTouchesTrail(protectedTrail, fromX, fromY, toX, toY)
         ));
         if (enemyTouchesActiveTrail(enemy.x, enemy.y)) {
-          startFusionDeath(g, enemy);
+          if (!playerIsProtected(g, now)) startFusionDeath(g, enemy);
           return;
         }
         const fullyEnclosedAt = (x: number, y: number) => (
@@ -4314,7 +4323,7 @@ export default function GameScreen() {
         }
 
         if (enemySweepTouchesTrail(g.trail, previousEnemyX, previousEnemyY, enemy.x, enemy.y)) {
-          startFusionDeath(g, enemy);
+          if (!playerIsProtected(g, now)) startFusionDeath(g, enemy);
           return;
         }
 
