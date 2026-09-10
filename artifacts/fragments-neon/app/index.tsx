@@ -3636,7 +3636,7 @@ export default function GameScreen() {
       });
     };
 
-    const startFusionDeath = (g: Game, impactPoint: Point) => {
+    const startFusionDeath = (g: Game, enemy: Enemy) => {
       if (g.status !== 'PLAYING') return;
       if (playerIsProtected(g, Date.now())) return;
       if (g.trail.length < 2) {
@@ -3644,8 +3644,14 @@ export default function GameScreen() {
         return;
       }
 
+      const impactPoint = { x: enemy.x, y: enemy.y };
       const metrics = polylineMetrics(g.trail);
       const closest = closestPointOnPolyline(impactPoint, g.trail);
+      // Keep the enemy alive, but snap its body to the exact contact point.
+      // The enemy is frozen with the fusion sequence, so the red cut visibly
+      // stays attached instead of leaving a small gap at the collision frame.
+      enemy.x = closest.point.x;
+      enemy.y = closest.point.y;
       const path = [closest.point];
       for (let index = 1; index < g.trail.length; index += 1) {
         if (metrics.cumulativeLengths[index] > closest.pathDistance + 0.01) {
