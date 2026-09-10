@@ -1431,7 +1431,7 @@ const sevenProjectileSize = (cell: number) => cell * SEVEN_PROJECTILE_SIZE_CELLS
 const PLAYER_MISSILE_SPEED = 270;
 const PLAYER_MISSILE_MAX_LIFE = 3.5;
 const PLAYER_MISSILE_RADIUS_CELLS = 0.2;
-const PLAYER_MISSILE_SIZE_CELLS = 0.72;
+const PLAYER_MISSILE_SIZE_CELLS = 1.12;
 const playerMissileRadius = (cell: number) => cell * PLAYER_MISSILE_RADIUS_CELLS;
 const playerMissileSize = (cell: number) => cell * PLAYER_MISSILE_SIZE_CELLS;
 
