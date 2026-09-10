@@ -529,7 +529,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -3717,10 +3717,14 @@ export default function GameScreen() {
       const enemyPoints = ENEMY_SCORE[enemy.kind] * (fromCapture ? 2 : 1);
       g.score += enemyPoints;
       if (fromCapture) {
+        const protectionWasInactive = g.invincibleUntil <= now;
         g.invincibleUntil = Math.max(
           g.invincibleUntil,
           now + CAPTURE_INVINCIBILITY_DURATION * 1000,
         );
+        if (protectionWasInactive) {
+          enqueueBanner({ kind: 'SHIELD' });
+        }
       }
       enemy.blockedTime = 0;
       // A destroyed enemy stays permanently inactive for this sector. The
@@ -5395,6 +5399,8 @@ export default function GameScreen() {
                     ? styles.diamondBanner
                     : banner.kind === 'BOMB'
                       ? styles.bombBanner
+                          : banner.kind === 'SHIELD'
+                            ? styles.shieldBanner
                       : banner.kind === 'SECTOR'
                         ? styles.sectorBanner
                         : banner.kind === 'BOSS'
@@ -5423,6 +5429,8 @@ export default function GameScreen() {
                     ? 'BONUS DIAMANT CAPTURÉ'
                     : banner.kind === 'BOMB'
                       ? 'BOMBE NEUTRALISÉE'
+                    : banner.kind === 'SHIELD'
+                      ? 'BOUCLIER ACTIVÉ'
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR TERMINÉ'
                         : banner.kind === 'BOSS'
@@ -5444,6 +5452,8 @@ export default function GameScreen() {
                     ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
                     : banner.kind === 'BOMB'
                       ? `+${banner.points ?? BOMB_SCORE} POINTS`
+                    : banner.kind === 'SHIELD'
+                      ? 'INVINCIBILITÉ  •  10 SECONDES'
                     : banner.kind === 'SECTOR'
                       ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
                       : banner.kind === 'BOSS'
@@ -5847,6 +5857,12 @@ const styles = StyleSheet.create({
   bombBanner: {
     borderColor: '#ff6a22',
     backgroundColor: 'rgba(48, 12, 4, 0.52)',
+  },
+  shieldBanner: {
+    borderColor: HUD_COLORS.cyan,
+    backgroundColor: 'rgba(0, 24, 34, 0.24)',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.7,
   },
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
