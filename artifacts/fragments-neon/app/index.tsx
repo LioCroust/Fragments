@@ -202,6 +202,7 @@ const BOSS_RENDER_SCALE = 1.72;
 const PICKUP_VISUAL_SIZE_CELLS = 1.34;
 const PLAYER_MOVE_SPEED = 126;
 const BOSS_SPEED_BOOST = 1.06;
+const CAPTURE_INVINCIBILITY_DURATION = 6;
 const SEVEN_PROJECTILE_COUNT = 7;
 const SEVEN_PROJECTILE_INTERVAL = 7;
 const SEVEN_PROJECTILE_SPEED = 42;
@@ -514,6 +515,7 @@ type Game = {
   initialized: boolean;
   status: 'PLAYING' | 'FUSING' | 'RESPAWN';
   respawnAt: number;
+  invincibleUntil: number;
 };
 
 type Hud = {
@@ -559,6 +561,7 @@ type Snapshot = {
   claimedPolygons: Point[][];
   pendingCapturePolygons: Point[][];
   scanY: number;
+  invincibleUntil: number;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -2205,6 +2208,8 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
   const pickupSize = pickupVisualSize(snapshot.cell);
+  const invincibilityRemaining = Math.max(0, snapshot.invincibleUntil - Date.now());
+  const protectionPulse = 0.5 + Math.sin(Date.now() * 0.012) * 0.16;
   const activeCut = snapshot.trail.length > 0
     && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
   const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
@@ -2575,6 +2580,35 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           </G>
         );
       })}
+      {invincibilityRemaining > 0 && (
+        <G pointerEvents="none">
+          <Circle
+            cx={snapshot.player.x}
+            cy={snapshot.player.y}
+            r={snapshot.cell * (0.92 + protectionPulse * 0.12)}
+            fill="none"
+            stroke="#00f3ff"
+            strokeWidth={snapshot.cell * 0.12}
+            opacity={0.5 + protectionPulse * 0.42}
+          />
+          <Circle
+            cx={snapshot.player.x}
+            cy={snapshot.player.y}
+            r={snapshot.cell * (0.62 + protectionPulse * 0.08)}
+            fill="#00f3ff"
+            opacity={0.08 + protectionPulse * 0.08}
+          />
+          <Circle
+            cx={snapshot.player.x}
+            cy={snapshot.player.y}
+            r={snapshot.cell * 1.16}
+            fill="none"
+            stroke="#fff5cf"
+            strokeWidth={snapshot.cell * 0.035}
+            opacity={0.42 + protectionPulse * 0.28}
+          />
+        </G>
+      )}
       <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
         <SvgImage
           href={playerSource}
@@ -2683,6 +2717,7 @@ export default function GameScreen() {
     initialized: false,
     status: 'PLAYING',
     respawnAt: 0,
+    invincibleUntil: 0,
   });
 
   const [hud, setHud] = useState<Hud>({
@@ -3019,6 +3054,9 @@ export default function GameScreen() {
 
     const previousScore = preserveStats ? g.score : 0;
     const previousShields = preserveStats ? g.shields : 3;
+    const previousInvincibleUntil = preserveStats && resetBoard
+      ? (g.invincibleUntil ?? 0)
+      : 0;
     const previousLevel = preserveStats ? g.level : 1;
     const previousClaimedPolygons = preserveStats && !resetBoard
       ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
@@ -3136,6 +3174,7 @@ export default function GameScreen() {
       initialized: true,
       status: 'PLAYING',
       respawnAt: 0,
+      invincibleUntil: previousInvincibleUntil,
     };
     setHud({
       score: previousScore,
@@ -3235,6 +3274,7 @@ export default function GameScreen() {
 
     const explode = (g: Game, now: number) => {
       if (g.status !== 'PLAYING') return;
+      if (g.invincibleUntil > now) return;
       for (let i = 0; i < 170; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 300;
@@ -3291,6 +3331,7 @@ export default function GameScreen() {
 
     const startFusionDeath = (g: Game, impactPoint: Point) => {
       if (g.status !== 'PLAYING') return;
+      if (g.invincibleUntil > Date.now()) return;
       if (g.trail.length < 2) {
         explode(g, Date.now());
         return;
@@ -3647,6 +3688,7 @@ export default function GameScreen() {
       enemy: Enemy,
       now: number,
       fromMissile = false,
+      fromCapture = false,
     ) => {
       const splitOnMissile = fromMissile
         && !enemy.isMini;
@@ -3665,7 +3707,14 @@ export default function GameScreen() {
           color: colors[i % colors.length],
         });
       }
-      g.score += ENEMY_SCORE[enemy.kind];
+      const enemyPoints = ENEMY_SCORE[enemy.kind] * (fromCapture ? 2 : 1);
+      g.score += enemyPoints;
+      if (fromCapture) {
+        g.invincibleUntil = Math.max(
+          g.invincibleUntil,
+          now + CAPTURE_INVINCIBILITY_DURATION * 1000,
+        );
+      }
       enemy.blockedTime = 0;
       // A destroyed enemy stays permanently inactive for this sector. The
       // next sector creates a fresh enemy roster through resetGame.
@@ -3685,7 +3734,7 @@ export default function GameScreen() {
       } else {
         enqueueBanner({
           kind: 'ENEMY',
-          points: ENEMY_SCORE[enemy.kind],
+          points: enemyPoints,
           enemyKind: enemy.kind,
         });
       }
@@ -4058,8 +4107,8 @@ export default function GameScreen() {
               ? (g.trail.length > 0 ? 0.42 : 0.68)
               : 0;
             const predictedPlayer = {
-              x: clamp(g.player.x + playerDirection.x * 118 * predictionTime, minX, maxX),
-              y: clamp(g.player.y + playerDirection.y * 118 * predictionTime, minY, maxY),
+              x: clamp(g.player.x + playerDirection.x * PLAYER_MOVE_SPEED * predictionTime, minX, maxX),
+              y: clamp(g.player.y + playerDirection.y * PLAYER_MOVE_SPEED * predictionTime, minY, maxY),
             };
             const planningCenter = isDragon ? predictedPlayer : g.player;
             const playerAngle = Math.atan2(planningCenter.y - enemy.y, planningCenter.x - enemy.x);
@@ -4421,6 +4470,7 @@ export default function GameScreen() {
       g.frame += 1;
       // Keep hot-reloaded sessions compatible with the new web state.
       g.spiderThreads ??= [];
+      g.invincibleUntil ??= 0;
       let activeParticleCount = 0;
       for (let index = 0; index < g.particles.length; index += 1) {
         const particle = g.particles[index];
@@ -4513,7 +4563,7 @@ export default function GameScreen() {
                 enemyPoints.length > 0
                 && enemyPoints.every((point) => pointInPolygon(point, polygon))
               ));
-              if (enemyInside) burstEnemy(g, enemy, now);
+              if (enemyInside) burstEnemy(g, enemy, now, false, true);
             });
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (g.level < MAX_LEVEL && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
@@ -5085,6 +5135,47 @@ export default function GameScreen() {
       });
       context.shadowBlur = 0;
 
+      const invincibilityRemaining = Math.max(0, g.invincibleUntil - now);
+      if (invincibilityRemaining > 0) {
+        const protectionPulse = 0.5 + Math.sin(now * 0.012) * 0.16;
+        context.save();
+        context.globalCompositeOperation = 'lighter';
+        context.globalAlpha = 0.5 + protectionPulse * 0.42;
+        context.strokeStyle = '#00f3ff';
+        context.shadowColor = '#00f3ff';
+        context.shadowBlur = g.cell * 0.2;
+        context.lineWidth = g.cell * 0.12;
+        context.beginPath();
+        context.arc(
+          g.player.x,
+          g.player.y,
+          g.cell * (0.92 + protectionPulse * 0.12),
+          0,
+          Math.PI * 2,
+        );
+        context.stroke();
+        context.globalAlpha = 0.08 + protectionPulse * 0.08;
+        context.fillStyle = '#00f3ff';
+        context.beginPath();
+        context.arc(
+          g.player.x,
+          g.player.y,
+          g.cell * (0.62 + protectionPulse * 0.08),
+          0,
+          Math.PI * 2,
+        );
+        context.fill();
+        context.globalAlpha = 0.42 + protectionPulse * 0.28;
+        context.shadowColor = '#fff5cf';
+        context.shadowBlur = g.cell * 0.08;
+        context.strokeStyle = '#fff5cf';
+        context.lineWidth = g.cell * 0.035;
+        context.beginPath();
+        context.arc(g.player.x, g.player.y, g.cell * 1.16, 0, Math.PI * 2);
+        context.stroke();
+        context.restore();
+      }
+
       if (g.fillQueue.length > 0) {
         const scanIntervals = g.pendingCapturePolygons.flatMap((polygon) => (
           polygonHorizontalIntervals(polygon, g.scanY)
@@ -5188,6 +5279,7 @@ export default function GameScreen() {
              claimedPolygons: g.claimedPolygons,
              pendingCapturePolygons: g.pendingCapturePolygons,
             scanY: g.scanY,
+            invincibleUntil: g.invincibleUntil,
           });
         }
         if (g.frame % 6 === 0) {
