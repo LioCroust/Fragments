@@ -3686,8 +3686,6 @@ export default function GameScreen() {
 
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
-        const previousEnemyX = enemy.x;
-        const previousEnemyY = enemy.y;
         const canMoveFull = enemyCanMoveAt(nextX, nextY);
         const canMoveX = enemyCanMoveAt(nextX, enemy.y);
         const canMoveY = enemyCanMoveAt(enemy.x, nextY);
