@@ -5875,15 +5875,15 @@ export default function GameScreen() {
             </View>
             <View style={[styles.hudCard, styles.utilityCard, styles.optionsCard]}>
               <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole options">
-                <Circle cx="10" cy="9" r="3.2" fill="none" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="10" y1="1" x2="10" y2="4" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="10" y1="14" x2="10" y2="17" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="2" y1="9" x2="5" y2="9" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="15" y1="9" x2="18" y2="9" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="4.2" y1="3.2" x2="6.4" y2="5.4" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="13.6" y1="12.6" x2="15.8" y2="14.8" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="15.8" y1="3.2" x2="13.6" y2="5.4" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
-                <Line x1="6.4" y1="12.6" x2="4.2" y2="14.8" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Polygon
+                  points="8,0.4 10,1.2 11.8,0.5 12.7,2.2 14.7,2.5 14.9,4.4 16.6,5.5 15.9,7.3 17.2,8.8 15.9,10.3 16.5,12.1 14.8,13.1 14.6,15 12.7,15.2 11.7,16.8 10,16.1 8.2,16.8 7.3,15.1 5.3,14.8 5.1,13 3.4,11.9 4.1,10.2 2.8,8.7 4.1,7.2 3.5,5.4 5.2,4.4 5.4,2.5 7.3,2.2"
+                  fill="none"
+                  stroke={HUD_COLORS.magenta}
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <Circle cx="10" cy="8.7" r="3.1" fill="none" stroke={HUD_COLORS.magenta} strokeWidth="1.5" />
+                <Circle cx="10" cy="8.7" r="1" fill={HUD_COLORS.magenta} />
               </Svg>
               <Text style={[styles.utilityLabel, { color: HUD_COLORS.magenta }]}>OPTIONS</Text>
             </View>
@@ -6082,10 +6082,10 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   sectorStack: {
-    width: '24%',
+    width: '26%',
   },
   shieldStack: {
-    width: '27%',
+    width: '29%',
   },
   hudCard: {
     borderWidth: 1,
@@ -6106,7 +6106,7 @@ const styles = StyleSheet.create({
     transform: [{ translateY: 2 }, { rotate: '-1deg' }],
   },
   scoreCard: {
-    width: '48%',
+    width: '44%',
     minHeight: 92,
     marginHorizontal: -5,
     zIndex: 2,
@@ -6206,6 +6206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
+    transform: [{ translateX: -7 }],
   },
   zoneCard: {
     width: '56%',
