@@ -5848,9 +5848,8 @@ const styles = StyleSheet.create({
   bossBanner: {
     borderColor: '#ff2bb5',
     backgroundColor: 'rgba(54, 4, 34, 0.62)',
-    shadowColor: '#ff2bb5',
-    shadowOpacity: 1,
-    shadowRadius: 24,
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   cleanBanner: {
     borderColor: HUD_COLORS.lime,
