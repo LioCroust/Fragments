@@ -5122,9 +5122,9 @@ export default function GameScreen() {
              diamond.x,
              diamond.y + Math.sin(g.frame * 0.05 + diamond.phase) * g.cell * 0.08,
            );
-            context.globalCompositeOperation = 'lighter';
-            context.shadowColor = '#ffffff';
-            context.shadowBlur = g.cell * 0.22;
+            context.globalCompositeOperation = 'source-over';
+            context.shadowColor = 'transparent';
+            context.shadowBlur = 0;
             context.drawImage(
               diamondImage,
               diamondFrame * DIAMOND_SPRITE_FRAME_SIZE,
