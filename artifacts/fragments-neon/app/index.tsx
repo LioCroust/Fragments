@@ -83,7 +83,7 @@ const level8SpaceBackgroundSource = require('../assets/images/level-8-space-back
 const level9GridBackgroundSource = require('../assets/images/level-9-grid-background.png');
 const level10SpaceBackgroundSource = require('../assets/images/level-10-space-background.png');
 const sector11BackgroundSource = require('../assets/images/sector-11-zone.png');
-const sector12BackgroundSource = require('../assets/images/sector-12-zone.png');
+const sector12BackgroundSource = require('../assets/images/sector-12-zone-warm.png');
 const sector13BackgroundSource = require('../assets/images/sector-13-zone.png');
 const sector14BackgroundSource = require('../assets/images/sector-14-zone.png');
 const sector15BackgroundSource = require('../assets/images/sector-15-zone.png');
@@ -2848,20 +2848,20 @@ export default function GameScreen() {
       Animated.sequence([
         Animated.timing(bannerTranslateX, {
           toValue: 0,
-          duration: 170,
+          duration: 145,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(1000),
+        Animated.delay(820),
         Animated.timing(bannerTranslateX, {
           toValue: -30,
-          duration: 72,
+          duration: 60,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(bannerTranslateX, {
           toValue: Math.max(sizeRef.current.width, 360) + 120,
-          duration: 170,
+          duration: 145,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -5831,38 +5831,38 @@ const styles = StyleSheet.create({
   },
   recordBanner: {
     borderColor: HUD_COLORS.amber,
-    backgroundColor: 'rgba(38, 15, 4, 0.54)',
+    backgroundColor: 'rgba(38, 15, 4, 0.44)',
   },
   diamondBanner: {
     borderColor: HUD_COLORS.cyan,
-    backgroundColor: 'rgba(0, 24, 34, 0.56)',
+    backgroundColor: 'rgba(0, 24, 34, 0.46)',
   },
   bombBanner: {
     borderColor: '#ff6a22',
-    backgroundColor: 'rgba(48, 12, 4, 0.62)',
+    backgroundColor: 'rgba(48, 12, 4, 0.52)',
   },
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
-    backgroundColor: 'rgba(24, 4, 24, 0.56)',
+    backgroundColor: 'rgba(24, 4, 24, 0.46)',
   },
   bossBanner: {
     borderColor: '#ff2bb5',
-    backgroundColor: 'rgba(54, 4, 34, 0.72)',
+    backgroundColor: 'rgba(54, 4, 34, 0.62)',
     shadowColor: '#ff2bb5',
     shadowOpacity: 1,
     shadowRadius: 24,
   },
   cleanBanner: {
     borderColor: HUD_COLORS.lime,
-    backgroundColor: 'rgba(18, 34, 8, 0.56)',
+    backgroundColor: 'rgba(18, 34, 8, 0.46)',
   },
   gameOverBanner: {
     borderColor: '#ff5500',
-    backgroundColor: 'rgba(42, 8, 3, 0.62)',
+    backgroundColor: 'rgba(42, 8, 3, 0.52)',
   },
   enemyBanner: {
     borderColor: HUD_COLORS.lime,
-    backgroundColor: 'rgba(18, 34, 8, 0.56)',
+    backgroundColor: 'rgba(18, 34, 8, 0.46)',
   },
   bannerGloss: {
     position: 'absolute',
