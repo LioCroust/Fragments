@@ -216,6 +216,27 @@ type Particle = Point & {
   color: string;
   streak?: boolean;
 };
+type FusionSpark = Point & {
+  previousX: number;
+  previousY: number;
+  pathDistance: number;
+  lateralOffset: number;
+  lateralVelocity: number;
+  forwardSpeed: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+  streak: boolean;
+};
+type FusionSequence = {
+  path: Point[];
+  cumulativeLengths: number[];
+  totalLength: number;
+  elapsed: number;
+  travelDuration: number;
+  impact: Point;
+};
 type SmokePuff = Point & {
   life: number;
   maxLife: number;
@@ -444,6 +465,8 @@ type Game = {
   missiles: PlayerMissile[];
   spiderThreads: SpiderThread[];
   particles: Particle[];
+  fusionSparks: FusionSpark[];
+  fusion: FusionSequence | null;
   smokePuffs: SmokePuff[];
   smokeAccumulator: number;
   claimedPolygons: Point[][];
@@ -461,7 +484,7 @@ type Game = {
   frame: number;
   trailScoreAccumulator: number;
   initialized: boolean;
-  status: 'PLAYING' | 'RESPAWN';
+  status: 'PLAYING' | 'FUSING' | 'RESPAWN';
   respawnAt: number;
 };
 
@@ -501,6 +524,8 @@ type Snapshot = {
   missiles: PlayerMissile[];
   spiderThreads: SpiderThread[];
   particles: Particle[];
+  fusionSparks: FusionSpark[];
+  fusionHead: Point | null;
   smokePuffs: SmokePuff[];
   claimedPolygons: Point[][];
   pendingCapturePolygons: Point[][];
@@ -521,6 +546,93 @@ const distanceToSegment = (point: Point, a: Point, b: Point) => {
   const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared, 0, 1);
   const closest = { x: a.x + t * dx, y: a.y + t * dy };
   return Math.hypot(point.x - closest.x, point.y - closest.y);
+};
+
+const polylineMetrics = (points: Point[]) => {
+  const cumulativeLengths = [0];
+  for (let index = 1; index < points.length; index += 1) {
+    cumulativeLengths.push(
+      cumulativeLengths[index - 1] + Math.hypot(
+        points[index].x - points[index - 1].x,
+        points[index].y - points[index - 1].y,
+      ),
+    );
+  }
+  return {
+    cumulativeLengths,
+    totalLength: cumulativeLengths[cumulativeLengths.length - 1] ?? 0,
+  };
+};
+
+const pointOnPolyline = (
+  points: Point[],
+  cumulativeLengths: number[],
+  distance: number,
+) => {
+  if (points.length === 0) return { point: { x: 0, y: 0 }, tangent: { x: 1, y: 0 } };
+  if (points.length === 1) return { point: { ...points[0] }, tangent: { x: 1, y: 0 } };
+  const totalLength = cumulativeLengths[cumulativeLengths.length - 1] ?? 0;
+  const targetDistance = clamp(distance, 0, totalLength);
+  let segmentIndex = 1;
+  while (
+    segmentIndex < cumulativeLengths.length - 1
+    && cumulativeLengths[segmentIndex] < targetDistance
+  ) {
+    segmentIndex += 1;
+  }
+  const start = points[segmentIndex - 1];
+  const end = points[segmentIndex];
+  const segmentLength = cumulativeLengths[segmentIndex] - cumulativeLengths[segmentIndex - 1] || 1;
+  const progress = clamp(
+    (targetDistance - cumulativeLengths[segmentIndex - 1]) / segmentLength,
+    0,
+    1,
+  );
+  const tangentLength = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+  return {
+    point: {
+      x: start.x + (end.x - start.x) * progress,
+      y: start.y + (end.y - start.y) * progress,
+    },
+    tangent: {
+      x: (end.x - start.x) / tangentLength,
+      y: (end.y - start.y) / tangentLength,
+    },
+  };
+};
+
+const closestPointOnPolyline = (point: Point, points: Point[]) => {
+  const metrics = polylineMetrics(points);
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestPoint = points[0] ?? point;
+  let bestPathDistance = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy || 1;
+    const progress = clamp(
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+      0,
+      1,
+    );
+    const candidate = {
+      x: start.x + dx * progress,
+      y: start.y + dy * progress,
+    };
+    const candidateDistance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+    if (candidateDistance < bestDistance) {
+      bestDistance = candidateDistance;
+      bestPoint = candidate;
+      bestPathDistance = metrics.cumulativeLengths[index - 1]
+        + Math.sqrt(lengthSquared) * progress;
+    }
+  }
+  return {
+    point: bestPoint,
+    pathDistance: bestPathDistance,
+  };
 };
 
 const distanceBetweenSegments = (firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point) => (
@@ -2272,6 +2384,48 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         )
       ))}
+      {snapshot.fusionHead && (
+        <>
+          <Circle
+            cx={snapshot.fusionHead.x}
+            cy={snapshot.fusionHead.y}
+            r={snapshot.cell * 0.23}
+            fill="#ff6a16"
+            opacity={0.28}
+          />
+          <Circle
+            cx={snapshot.fusionHead.x}
+            cy={snapshot.fusionHead.y}
+            r={snapshot.cell * 0.1}
+            fill="#fff5bd"
+            opacity={0.92}
+          />
+        </>
+      )}
+      {snapshot.fusionSparks.map((spark, index) => (
+        spark.streak ? (
+          <Line
+            key={`fusion-spark-${index}`}
+            x1={spark.x}
+            y1={spark.y}
+            x2={spark.previousX}
+            y2={spark.previousY}
+            stroke={spark.color}
+            strokeWidth={spark.size}
+            strokeLinecap="round"
+            opacity={clamp(spark.life / spark.maxLife, 0, 1)}
+          />
+        ) : (
+          <Circle
+            key={`fusion-spark-${index}`}
+            cx={spark.x}
+            cy={spark.y}
+            r={spark.size}
+            fill={spark.color}
+            opacity={clamp(spark.life / spark.maxLife, 0, 1)}
+          />
+        )
+      ))}
       {snapshot.spiderThreads.map((thread, index) => {
         const active = spiderThreadIsActive(thread);
         const webSize = snapshot.cell * thread.webSizeCells;
@@ -2517,6 +2671,8 @@ export default function GameScreen() {
     missiles: [],
     spiderThreads: [],
     particles: [],
+    fusionSparks: [],
+    fusion: null,
     smokePuffs: [],
     smokeAccumulator: 0,
     claimedPolygons: [],
@@ -2949,6 +3105,8 @@ export default function GameScreen() {
       missiles: [],
       spiderThreads: [],
       particles: [],
+      fusionSparks: [],
+      fusion: null,
       smokePuffs: SHIP_SMOKE_RENDER_MODE === 'PARTICLES'
         ? enemies
           .filter((enemy) => enemy.kind === 'SHIP' && !enemyIsDestroyed(enemy))
@@ -3089,6 +3247,147 @@ export default function GameScreen() {
       g.respawnAt = now + CONTACT_FREEZE_DURATION;
       playShieldLossExplosion();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    };
+
+    const addFusionSpark = (
+      g: Game,
+      sequence: FusionSequence,
+      pathDistance: number,
+      initialSpread = 1,
+    ) => {
+      if (g.fusionSparks.length >= 180) return;
+      const sample = pointOnPolyline(
+        sequence.path,
+        sequence.cumulativeLengths,
+        pathDistance,
+      );
+      const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+      const lateralOffset = (Math.random() - 0.5) * g.cell * 0.2 * initialSpread;
+      const life = 0.22 + Math.random() * 0.38;
+      const x = sample.point.x + normal.x * lateralOffset;
+      const y = sample.point.y + normal.y * lateralOffset;
+      g.fusionSparks.push({
+        x,
+        y,
+        previousX: x,
+        previousY: y,
+        pathDistance,
+        lateralOffset,
+        lateralVelocity: (Math.random() - 0.5) * g.cell * (2.6 + Math.random() * 4.2) * initialSpread,
+        forwardSpeed: g.cell * (2.2 + Math.random() * 4.6),
+        life,
+        maxLife: life,
+        size: g.cell * (0.018 + Math.random() * 0.038),
+        color: ['#ffffff', '#fff5b0', '#ffd447', '#ff8a22', '#ff4b16'][Math.floor(Math.random() * 5)],
+        streak: Math.random() > 0.22,
+      });
+    };
+
+    const startFusionDeath = (g: Game, impactPoint: Point) => {
+      if (g.status !== 'PLAYING') return;
+      if (g.trail.length < 2) {
+        explode(g, Date.now());
+        return;
+      }
+
+      const metrics = polylineMetrics(g.trail);
+      const closest = closestPointOnPolyline(impactPoint, g.trail);
+      const path = [closest.point];
+      for (let index = 1; index < g.trail.length; index += 1) {
+        if (metrics.cumulativeLengths[index] > closest.pathDistance + 0.01) {
+          path.push({ ...g.trail[index] });
+        }
+      }
+      const lastPathPoint = path[path.length - 1];
+      if (
+        !lastPathPoint
+        || Math.hypot(lastPathPoint.x - g.player.x, lastPathPoint.y - g.player.y) > g.cell * 0.08
+      ) {
+        path.push({ ...g.player });
+      }
+      const pathData = polylineMetrics(path);
+      const travelDuration = clamp(pathData.totalLength / 430, 0.42, 1.08);
+      const sequence: FusionSequence = {
+        path,
+        cumulativeLengths: pathData.cumulativeLengths,
+        totalLength: pathData.totalLength,
+        elapsed: 0,
+        travelDuration,
+        impact: { ...closest.point },
+      };
+
+      g.fusion = sequence;
+      g.fusionSparks = [];
+      g.inputDir = ZERO;
+      g.hasMoveCommand = false;
+      g.facingDir = g.cutDir;
+      g.status = 'FUSING';
+      for (let index = 0; index < 32; index += 1) {
+        addFusionSpark(
+          g,
+          sequence,
+          Math.random() * Math.min(g.cell * 0.55, sequence.totalLength),
+          1.7,
+        );
+      }
+    };
+
+    const updateFusionDeath = (g: Game, dt: number, now: number) => {
+      const sequence = g.fusion;
+      if (!sequence) {
+        g.status = 'PLAYING';
+        return;
+      }
+      sequence.elapsed += dt;
+      const headDistance = sequence.totalLength * clamp(
+        sequence.elapsed / sequence.travelDuration,
+        0,
+        1,
+      );
+
+      let activeSparkCount = 0;
+      for (let index = 0; index < g.fusionSparks.length; index += 1) {
+        const spark = g.fusionSparks[index];
+        spark.previousX = spark.x;
+        spark.previousY = spark.y;
+        spark.pathDistance = Math.min(
+          sequence.totalLength,
+          spark.pathDistance + spark.forwardSpeed * dt,
+        );
+        spark.lateralOffset += spark.lateralVelocity * dt;
+        spark.lateralVelocity *= 0.93;
+        spark.life -= dt;
+        const sample = pointOnPolyline(
+          sequence.path,
+          sequence.cumulativeLengths,
+          spark.pathDistance,
+        );
+        const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+        spark.x = sample.point.x + normal.x * spark.lateralOffset;
+        spark.y = sample.point.y + normal.y * spark.lateralOffset;
+        if (spark.life > 0) {
+          g.fusionSparks[activeSparkCount] = spark;
+          activeSparkCount += 1;
+        }
+      }
+      g.fusionSparks.length = activeSparkCount;
+
+      const sparksToEmit = sequence.elapsed < sequence.travelDuration ? 7 : 2;
+      for (let index = 0; index < sparksToEmit; index += 1) {
+        addFusionSpark(
+          g,
+          sequence,
+          Math.max(0, headDistance - Math.random() * g.cell * 0.62),
+          1,
+        );
+      }
+
+      if (sequence.elapsed >= sequence.travelDuration + 0.24) {
+        g.fusion = null;
+        g.fusionSparks = [];
+        g.status = 'PLAYING';
+        explode(g, now);
+      }
     };
 
     const neutralizeBomb = (g: Game, bomb: Bomb) => {
@@ -3557,7 +3856,7 @@ export default function GameScreen() {
           enemySweepTouchesTrail(protectedTrail, fromX, fromY, toX, toY)
         ));
         if (enemyTouchesActiveTrail(enemy.x, enemy.y)) {
-          explode(g, now);
+          startFusionDeath(g, enemy);
           return;
         }
         const fullyEnclosedAt = (x: number, y: number) => (
@@ -3856,7 +4155,7 @@ export default function GameScreen() {
         }
 
         if (enemySweepTouchesTrail(g.trail, previousEnemyX, previousEnemyY, enemy.x, enemy.y)) {
-          explode(g, now);
+          startFusionDeath(g, enemy);
           return;
         }
 
@@ -4037,6 +4336,11 @@ export default function GameScreen() {
         }
       }
       g.particles.length = activeParticleCount;
+
+      if (g.status === 'FUSING') {
+        updateFusionDeath(g, dt, now);
+        return;
+      }
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
@@ -4489,6 +4793,51 @@ export default function GameScreen() {
           context.fillRect(particle.x, particle.y, particle.size, particle.size);
         }
       });
+      if (g.fusion) {
+        const headDistance = g.fusion.totalLength * clamp(
+          g.fusion.elapsed / g.fusion.travelDuration,
+          0,
+          1,
+        );
+        const fusionHead = pointOnPolyline(
+          g.fusion.path,
+          g.fusion.cumulativeLengths,
+          headDistance,
+        ).point;
+        context.shadowColor = '#ff6a16';
+        context.shadowBlur = g.cell * 0.28;
+        context.fillStyle = '#ff6a16';
+        context.globalAlpha = 0.3;
+        context.beginPath();
+        context.arc(fusionHead.x, fusionHead.y, g.cell * 0.23, 0, Math.PI * 2);
+        context.fill();
+        context.shadowBlur = g.cell * 0.08;
+        context.fillStyle = '#fff5bd';
+        context.globalAlpha = 0.92;
+        context.beginPath();
+        context.arc(fusionHead.x, fusionHead.y, g.cell * 0.1, 0, Math.PI * 2);
+        context.fill();
+      }
+      g.fusionSparks.forEach((spark) => {
+        context.globalAlpha = clamp(spark.life / spark.maxLife, 0, 1);
+        context.strokeStyle = spark.color;
+        context.fillStyle = spark.color;
+        if (spark.streak) {
+          context.lineWidth = spark.size;
+          context.lineCap = 'round';
+          context.beginPath();
+          context.moveTo(spark.x, spark.y);
+          context.lineTo(spark.previousX, spark.previousY);
+          context.stroke();
+        } else {
+          context.fillRect(
+            spark.x - spark.size * 0.5,
+            spark.y - spark.size * 0.5,
+            spark.size,
+            spark.size,
+          );
+        }
+      });
       context.lineCap = 'butt';
       context.globalAlpha = 1;
 
@@ -4774,6 +5123,18 @@ export default function GameScreen() {
                 target: { ...thread.target },
               })),
               particles: g.particles.slice(-200),
+              fusionSparks: g.fusionSparks.map((spark) => ({ ...spark })),
+              fusionHead: g.fusion
+                ? pointOnPolyline(
+                    g.fusion.path,
+                    g.fusion.cumulativeLengths,
+                    g.fusion.totalLength * clamp(
+                      g.fusion.elapsed / g.fusion.travelDuration,
+                      0,
+                      1,
+                    ),
+                  ).point
+                : null,
              // Keep native SVG state immutable between frames. The game loop
              // mutates live puff objects in place, which can otherwise leave
              // Expo Go rendering the previous coordinates on Android.

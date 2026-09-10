@@ -10,6 +10,7 @@
 - [Enemy smoke sprite](enemy-smoke-sprite.md) — Use barely visible dark diffuse smoke; avoid neon colors and tubular shapes.
 - [Spider thread prototype](spider-web-prototype.md) — The spider fires a fast predictive thread toward the drone's future position, tested alone with the ship in sector 1.
 - [Torch cut effect](torch-cut-effect.md) — The cutting tool must sit directly behind the drone with a narrow nozzle touching the red line; avoid dominant circular halos.
+- [Fusion trail death](fusion-trail-death.md) — An enemy touching an active red cut freezes gameplay, sends molten sparks along the cut, then detonates the drone at its end.
 - [Continuous cut geometry](continuous-cut-geometry.md) — Cyan keeps gameplay meaning, but the player's red cut must end at its continuous position rather than a cell boundary.
 - [Capture union geometry](capture-union-geometry.md) — Resolve exact orthogonal components before/after each cut; never reconstruct captures from sampled boundary loops.
 - [Capture fill visual rules](capture-fill-visual-rules.md) — Use 7%/15% cyan, animate only a white scan line, and always commit the smallest region without exceptions.
