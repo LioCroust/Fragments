@@ -307,6 +307,13 @@ const ENEMY_KIND_PLURAL_LABELS: Record<EnemyKind, string> = {
   SPIDER: 'ARAIGNÉES',
 };
 
+const ENEMY_DEPLOYED_BANNER_LABELS: Record<EnemyKind, string> = {
+  SHIP: '2 VAISSEAUX DÉPLOYÉS',
+  DRAGON: '2 DRAGONS DÉPLOYÉS',
+  SEVEN: '2 SEVEN DÉPLOYÉS',
+  SPIDER: '2 ARAIGNÉES DÉPLOYÉES',
+};
+
 const ENEMY_SPLIT_BANNER_LABELS: Record<EnemyKind, string> = {
   SHIP: 'VAISSEAU FRACTURÉ',
   DRAGON: 'DRAGON FRACTURÉ',
@@ -5435,7 +5442,7 @@ export default function GameScreen() {
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'BOSS_SPLIT'
-                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 VAISSEAUX DÉPLOYÉS`
+                        ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  ${ENEMY_DEPLOYED_BANNER_LABELS[banner.enemyKind ?? 'SHIP']}`
                       : banner.kind === 'SPLIT'
                         ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-${ENEMY_KIND_PLURAL_LABELS[banner.enemyKind ?? 'SHIP']}`
                       : banner.kind === 'CLEAN'
