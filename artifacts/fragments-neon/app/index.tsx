@@ -5488,7 +5488,7 @@ export default function GameScreen() {
                 { color: HUD_COLORS.cyan },
               ]}
             >
-              VECTOR / LOCK
+              {isBossSector(hud.level) ? 'BOSS' : 'VECTOR / LOCK'}
             </Text>
           </View>
 
