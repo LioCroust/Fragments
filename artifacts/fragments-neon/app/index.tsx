@@ -1851,9 +1851,18 @@ const createBombs = (width: number, height: number, cell: number, level: number)
     ? 1
     : level < 25
       ? 1 + (Math.random() < 0.35 ? 1 : 0)
-      : level < 40
+      : level < 30
         ? 1 + (Math.random() < 0.48 ? 1 : 0) + (Math.random() < 0.12 ? 1 : 0)
-        : 1 + (Math.random() < 0.6 ? 1 : 0) + (Math.random() < 0.25 ? 1 : 0);
+        : level < 40
+          ? 1
+            + (Math.random() < 0.58 ? 1 : 0)
+            + (Math.random() < 0.34 ? 1 : 0)
+            + (Math.random() < 0.18 ? 1 : 0)
+          : 1
+            + (Math.random() < 0.64 ? 1 : 0)
+            + (Math.random() < 0.48 ? 1 : 0)
+            + (Math.random() < 0.3 ? 1 : 0)
+            + (Math.random() < 0.16 ? 1 : 0);
   const bounds = perimeterBounds(width, height, cell);
   const minX = bounds.left + bombVisualRadius(cell);
   const maxX = bounds.right - bombVisualRadius(cell);
