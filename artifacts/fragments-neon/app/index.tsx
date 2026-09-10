@@ -44,7 +44,6 @@ const CAPTURED_ZONE_OPACITY = 0.15;
 const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
-const EVEN_SECTOR_DARKNESS = 0.2;
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
 // Temporary QA control. __DEV__ hides it automatically from production builds.
@@ -182,7 +181,7 @@ const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
-const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v2';
+const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
 const GAME_SAVE_INTERVAL_MS = 1200;
 const GAME_SAVE_VERSION = 2 as const;
 const CUTTING_SPRITE_ENABLED = true;
@@ -2253,16 +2252,6 @@ const NativeArenaStatic = React.memo(({
         height={height}
         preserveAspectRatio="xMidYMid slice"
       />
-      {level % 2 === 0 && (
-        <Rect
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          fill="#000000"
-          opacity={EVEN_SECTOR_DARKNESS}
-        />
-      )}
       <Rect
         x={bounds.left}
         y={bounds.top}
@@ -2876,18 +2865,12 @@ export default function GameScreen() {
         if (__DEV__) console.warn('Unable to save game progress', error);
       });
   }, []);
-  const saveSectorCheckpoint = useCallback((level: number) => {
-    const game = gameRef.current;
-    if (!game.initialized) return;
-    const checkpoint = serializeGame(game, Date.now());
-    checkpoint.resumeType = 'SECTOR';
-    checkpoint.resumeLevel = Math.round(clamp(level, 1, MAX_LEVEL));
-    const serialized = JSON.stringify(checkpoint);
+  const clearSavedGameProgress = useCallback(() => {
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
-      .then(() => AsyncStorage.setItem(GAME_SAVE_STORAGE_KEY, serialized))
+      .then(() => AsyncStorage.removeItem(GAME_SAVE_STORAGE_KEY))
       .catch((error: unknown) => {
-        if (__DEV__) console.warn('Unable to save sector checkpoint', error);
+        if (__DEV__) console.warn('Unable to clear saved game progress', error);
       });
   }, []);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
@@ -3225,11 +3208,7 @@ export default function GameScreen() {
     };
   }, []);
 
-  const resetGame = useCallback((
-    preserveStats = false,
-    resetBoard = false,
-    startingLevel?: number,
-  ) => {
+  const resetGame = useCallback((preserveStats = false, resetBoard = false) => {
     const g = gameRef.current;
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
@@ -3239,9 +3218,7 @@ export default function GameScreen() {
     const previousInvincibleUntil = preserveStats && resetBoard
       ? (g.invincibleUntil ?? 0)
       : 0;
-    const previousLevel = preserveStats
-      ? g.level
-      : Math.round(clamp(startingLevel ?? 1, 1, MAX_LEVEL));
+    const previousLevel = preserveStats ? g.level : 1;
     const previousClaimedPolygons = preserveStats && !resetBoard
       ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
       : [];
@@ -3286,7 +3263,7 @@ export default function GameScreen() {
       : createBombs(width, height, cell, previousLevel);
     const respawnPlayer = {
       x: bounds.left + cell,
-      y: bounds.top - cell * PLAYER_RADIUS_CELLS,
+      y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
     };
     placeEnemiesInOpenSurface(
       enemies,
@@ -3320,7 +3297,7 @@ export default function GameScreen() {
       rows,
       player: respawnPlayer,
       inputDir: ZERO,
-      facingDir: { x: 0, y: 1 },
+      facingDir: { x: 0, y: -1 },
       hasMoveCommand: false,
       cutDir: ZERO,
       cutCoordinate: 0,
@@ -3386,12 +3363,6 @@ export default function GameScreen() {
   const restoreSavedGame = useCallback((saved: PersistedGame) => {
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
-
-    if (saved.resumeType === 'SECTOR') {
-      resetGame(false, true, saved.resumeLevel);
-      savedGameRef.current = null;
-      return;
-    }
 
     resetGame(false);
     const game = gameRef.current;
@@ -3571,7 +3542,7 @@ export default function GameScreen() {
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 0.3 + Math.random() * 0.24,
-        size: (1 + Math.random() * 1.8) * 0.88,
+        size: 1 + Math.random() * 1.8,
         color: colorsForSpark[Math.floor(Math.random() * colorsForSpark.length)],
         streak: true,
       });
@@ -3647,7 +3618,7 @@ export default function GameScreen() {
       });
     };
 
-    const startFusionDeath = (g: Game, enemy: Enemy) => {
+    const startFusionDeath = (g: Game, impactPoint: Point) => {
       if (g.status !== 'PLAYING') return;
       if (playerIsProtected(g, Date.now())) return;
       if (g.trail.length < 2) {
@@ -3655,45 +3626,8 @@ export default function GameScreen() {
         return;
       }
 
-      const impactPoint = { x: enemy.x, y: enemy.y };
       const metrics = polylineMetrics(g.trail);
       const closest = closestPointOnPolyline(impactPoint, g.trail);
-      // Keep the enemy alive and preserve its center. Move only enough for the
-      // collision circle that touched the cut to meet the red stroke exactly.
-      // This keeps the actual nose/leg/wing contact attached instead of
-      // incorrectly placing the enemy's center on the cut.
-      const visualContactPadding = g.cell * 0.14;
-      const touchedBody = enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y)
-        .map((circle) => {
-          const nearest = closestPointOnPolyline(circle.center, g.trail);
-          const offsetX = nearest.point.x - circle.center.x;
-          const offsetY = nearest.point.y - circle.center.y;
-          const distance = Math.hypot(offsetX, offsetY);
-          const tangent = pointOnPolyline(
-            g.trail,
-            metrics.cumulativeLengths,
-            nearest.pathDistance,
-          ).tangent;
-          const normal = distance > 0.001
-            ? { x: offsetX / distance, y: offsetY / distance }
-            : { x: -tangent.y, y: tangent.x };
-          const contactPoint = {
-            x: circle.center.x + normal.x * circle.radius,
-            y: circle.center.y + normal.y * circle.radius,
-          };
-          return {
-            gap: distance - circle.radius,
-            correction: {
-              x: nearest.point.x - contactPoint.x + normal.x * visualContactPadding,
-              y: nearest.point.y - contactPoint.y + normal.y * visualContactPadding,
-            },
-          };
-        })
-        .sort((first, second) => first.gap - second.gap)[0];
-      if (touchedBody) {
-        enemy.x += touchedBody.correction.x;
-        enemy.y += touchedBody.correction.y;
-      }
       const path = [closest.point];
       for (let index = 1; index < g.trail.length; index += 1) {
         if (metrics.cumulativeLengths[index] > closest.pathDistance + 0.01) {
@@ -4860,10 +4794,9 @@ export default function GameScreen() {
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
           if (g.shields <= 0) {
-            const defeatedLevel = g.level;
-            saveSectorCheckpoint(defeatedLevel);
             enqueueBanner({ kind: 'GAME_OVER', score: g.score });
-            resetGame(false, true, defeatedLevel);
+            clearSavedGameProgress();
+            resetGame(false);
           } else {
             resetGame(true);
           }
@@ -5168,12 +5101,6 @@ export default function GameScreen() {
         context.fillStyle = '#000000';
         context.fillRect(0, 0, g.width, g.height);
       }
-       if (g.level % 2 === 0) {
-         context.globalAlpha = EVEN_SECTOR_DARKNESS;
-         context.fillStyle = '#000000';
-         context.fillRect(0, 0, g.width, g.height);
-         context.globalAlpha = 1;
-       }
 
        context.globalCompositeOperation = 'source-over';
         context.globalAlpha = INITIAL_MAP_OPACITY;
@@ -5703,6 +5630,7 @@ export default function GameScreen() {
     return () => cancelAnimationFrame(animationFrame);
   }, [
     enqueueBanner,
+    clearSavedGameProgress,
     playDiamondCapture,
     playPickupChime,
     playSevenFireShot,
@@ -5710,7 +5638,6 @@ export default function GameScreen() {
     playShieldLossExplosion,
     resetGame,
     restoreSavedGame,
-    saveSectorCheckpoint,
     saveGameProgress,
   ]);
 
@@ -5718,7 +5645,7 @@ export default function GameScreen() {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
     return (
-      <Svg style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}>
+      <Svg style={StyleSheet.absoluteFill}>
         <NativeArenaStatic
           width={snapshot.width}
           height={snapshot.height}
@@ -5730,45 +5657,18 @@ export default function GameScreen() {
           claimedCount={snapshot.claimedPolygons.length}
           protectedTrailCount={snapshot.protectedTrails.length}
         />
+        {snapshot.trail.length > 1 && (
+          <Polyline
+            points={pointsToString(snapshot.trail)}
+            fill="none"
+            stroke="#ff5500"
+            strokeWidth={5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+        <NativeArenaDynamic snapshot={snapshot} />
       </Svg>
-    );
-  };
-
-  const renderNativeDynamicArena = () => {
-    if (Platform.OS === 'web' || !nativeSnapshot) return null;
-    const snapshot = nativeSnapshot;
-    const renderMargin = Math.max(snapshot.cell * 2.2, 28);
-    const expandedWidth = snapshot.width + renderMargin * 2;
-    const expandedHeight = snapshot.height + renderMargin * 2;
-    return (
-      <View style={styles.nativeArenaDynamicLayer} pointerEvents="none">
-        <Svg
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              left: -renderMargin,
-              top: -renderMargin,
-              width: expandedWidth,
-              height: expandedHeight,
-              overflow: 'visible',
-            },
-          ]}
-          viewBox={`${-renderMargin} ${-renderMargin} ${expandedWidth} ${expandedHeight}`}
-          preserveAspectRatio="none"
-        >
-          {snapshot.trail.length > 1 && (
-            <Polyline
-              points={pointsToString(snapshot.trail)}
-              fill="none"
-              stroke="#ff5500"
-              strokeWidth={5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-          <NativeArenaDynamic snapshot={snapshot} />
-        </Svg>
-      </View>
     );
   };
 
@@ -5856,12 +5756,7 @@ export default function GameScreen() {
                             ? 'GAME OVER'
                             : 'ENNEMI DÉTRUIT'}
               </Text>
-              <Text
-                style={styles.bannerScore}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.68}
-              >
+              <Text style={styles.bannerScore} numberOfLines={1}>
                 {banner.kind === 'RECORD'
                   ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
                   : banner.kind === 'DIAMOND'
@@ -5889,8 +5784,6 @@ export default function GameScreen() {
         )}
       </View>
 
-      {renderNativeDynamicArena()}
-
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
@@ -5902,37 +5795,21 @@ export default function GameScreen() {
         </View>
 
         <View style={styles.hudDeck}>
-          <View style={[styles.hudCardStack, styles.sectorStack]}>
-            <View style={[styles.hudCard, styles.sectorCard]}>
-              <Text
-                style={[
-                  styles.cardLabel,
-                  { color: HUD_COLORS.cyan },
-                ]}
-              >
-                SECTEUR
-              </Text>
-              <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
-                {hud.level.toString().padStart(2, '0')}
-              </Text>
-              {isBossSector(hud.level) && (
-                <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
-              )}
-            </View>
-            <View style={[styles.hudCard, styles.utilityCard, styles.optionsCard]}>
-              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole options">
-                <Polygon
-                  points="8,0.4 10,1.2 11.8,0.5 12.7,2.2 14.7,2.5 14.9,4.4 16.6,5.5 15.9,7.3 17.2,8.8 15.9,10.3 16.5,12.1 14.8,13.1 14.6,15 12.7,15.2 11.7,16.8 10,16.1 8.2,16.8 7.3,15.1 5.3,14.8 5.1,13 3.4,11.9 4.1,10.2 2.8,8.7 4.1,7.2 3.5,5.4 5.2,4.4 5.4,2.5 7.3,2.2"
-                  fill="none"
-                  stroke={HUD_COLORS.cyan}
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <Circle cx="10" cy="8.7" r="3.1" fill="none" stroke={HUD_COLORS.cyan} strokeWidth="1.5" />
-                <Circle cx="10" cy="8.7" r="1" fill={HUD_COLORS.cyan} />
-              </Svg>
-              <Text style={[styles.utilityLabel, { color: HUD_COLORS.cyan }]}>OPTIONS</Text>
-            </View>
+          <View style={[styles.hudCard, styles.sectorCard]}>
+            <Text
+              style={[
+                styles.cardLabel,
+                { color: HUD_COLORS.cyan },
+              ]}
+            >
+              SECTEUR
+            </Text>
+            <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
+              {hud.level.toString().padStart(2, '0')}
+            </Text>
+            {isBossSector(hud.level) && (
+              <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
+            )}
           </View>
 
           <View style={[styles.hudCard, styles.scoreCard]}>
@@ -5945,35 +5822,23 @@ export default function GameScreen() {
             </Text>
           </View>
 
-          <View style={[styles.hudCardStack, styles.shieldStack]}>
-            <View style={[styles.hudCard, styles.shieldCard]}>
-              <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
-              <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
-              <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
-                {shieldSegments.map((_, index) => (
-                  <View
-                    key={`shield-${index}`}
-                    style={[
-                      styles.shieldSegment,
-                      index < hud.shields
-                        ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
-                        : styles.shieldSegmentInactive,
-                    ]}
-                  />
-                ))}
-              </View>
-              <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
+          <View style={[styles.hudCard, styles.shieldCard]}>
+            <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
+            <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
+            <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
+              {shieldSegments.map((_, index) => (
+                <View
+                  key={`shield-${index}`}
+                  style={[
+                    styles.shieldSegment,
+                    index < hud.shields
+                      ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
+                      : styles.shieldSegmentInactive,
+                  ]}
+                />
+              ))}
             </View>
-            <View style={[styles.hudCard, styles.utilityCard, styles.shopCard]}>
-              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole boutique">
-                <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
-                <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
-                <Rect x="4" y="6" width="12" height="9" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
-                <Rect x="8" y="10" width="4" height="5" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.2" />
-                <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.lime} strokeWidth="1" />
-              </Svg>
-              <Text style={[styles.utilityLabel, { color: HUD_COLORS.lime }]}>BOUTIQUE</Text>
-            </View>
+            <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
           </View>
         </View>
 
@@ -6018,7 +5883,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 4,
     backgroundColor: '#000000',
-    overflow: 'visible',
+    overflow: 'hidden',
   },
   debugSectorSelector: {
     position: 'absolute',
@@ -6093,16 +5958,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 18,
     right: 18,
-    zIndex: 3,
-  },
-  nativeArenaDynamicLayer: {
-    position: 'absolute',
-    top: 174,
-    left: 0,
-    right: 0,
-    bottom: 4,
     zIndex: 2,
-    overflow: 'visible',
   },
   hudSignalRail: {
     flexDirection: 'row',
@@ -6128,19 +5984,10 @@ const styles = StyleSheet.create({
   },
   hudDeck: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
     marginTop: 6,
-    minHeight: 101,
-  },
-  hudCardStack: {
-    alignItems: 'stretch',
-  },
-  sectorStack: {
-    width: '26%',
-  },
-  shieldStack: {
-    width: '29%',
+    minHeight: 86,
   },
   hudCard: {
     borderWidth: 1,
@@ -6155,13 +6002,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   sectorCard: {
-    width: '100%',
+    width: '24%',
     minHeight: 60,
     borderColor: HUD_COLORS.cyan,
     transform: [{ translateY: 2 }, { rotate: '-1deg' }],
   },
   scoreCard: {
-    width: '44%',
+    width: '48%',
     minHeight: 92,
     marginHorizontal: -5,
     zIndex: 2,
@@ -6170,36 +6017,10 @@ const styles = StyleSheet.create({
     transform: [{ translateY: 8 }],
   },
   shieldCard: {
-    width: '100%',
+    width: '27%',
     minHeight: 70,
     borderColor: HUD_COLORS.lime,
     transform: [{ translateY: 1 }, { rotate: '1deg' }],
-  },
-  utilityCard: {
-    width: '100%',
-    minHeight: 39,
-    marginTop: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  optionsCard: {
-    borderColor: HUD_COLORS.cyan,
-    backgroundColor: 'rgba(0, 24, 34, 0.9)',
-    transform: [{ translateY: 0 }, { rotate: '-1deg' }],
-  },
-  shopCard: {
-    borderColor: HUD_COLORS.lime,
-    backgroundColor: 'rgba(18, 34, 8, 0.9)',
-    transform: [{ translateY: 0 }, { rotate: '1deg' }],
-  },
-  utilityLabel: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 7,
-    letterSpacing: 0.75,
   },
   cardLabel: {
     fontFamily: 'Inter_700Bold',
@@ -6261,7 +6082,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
-    transform: [{ translateX: -7 }, { translateY: -29 }],
   },
   zoneCard: {
     width: '56%',
@@ -6322,10 +6142,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   arcadeBanner: {
-    width: '74%',
-    minHeight: 68,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    width: '80%',
+    minHeight: 78,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -6387,9 +6207,9 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   bannerAccent: {
-    width: 58,
-    height: 2,
-    marginBottom: 5,
+    width: 72,
+    height: 3,
+    marginBottom: 7,
     backgroundColor: HUD_COLORS.magenta,
     shadowColor: HUD_COLORS.magenta,
     shadowOpacity: 1,
@@ -6399,21 +6219,21 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     color: HUD_COLORS.warmWhite,
     fontFamily: 'Inter_700Bold',
-    fontSize: 19,
-    lineHeight: 22,
-    letterSpacing: 1.1,
+    fontSize: 22,
+    lineHeight: 26,
+    letterSpacing: 1.4,
     textAlign: 'center',
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 12,
     textShadowOffset: { width: 0, height: 0 },
   },
   bannerScore: {
-    marginTop: 3,
+    marginTop: 4,
     color: HUD_COLORS.cyan,
     fontFamily: 'Inter_700Bold',
-    fontSize: 11.5,
-    lineHeight: 15,
-    letterSpacing: 0.8,
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: 1.1,
     textAlign: 'center',
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 8,
