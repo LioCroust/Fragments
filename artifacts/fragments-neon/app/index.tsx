@@ -181,9 +181,9 @@ const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
-const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
+const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v2';
 const GAME_SAVE_INTERVAL_MS = 1200;
-const GAME_SAVE_VERSION = 1 as const;
+const GAME_SAVE_VERSION = 2 as const;
 const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
 const CUTTING_SPRITE_FRAME_WIDTH = 160;
@@ -537,6 +537,8 @@ type PersistedGame = Omit<
 > & {
   version: typeof GAME_SAVE_VERSION;
   savedAt: number;
+  resumeType: 'EXACT' | 'SECTOR';
+  resumeLevel: number;
   invincibleRemainingMs: number;
 };
 
@@ -595,6 +597,10 @@ const isPersistedGame = (value: unknown): value is PersistedGame => {
     candidate.version === GAME_SAVE_VERSION
     && typeof candidate.savedAt === 'number'
     && Number.isFinite(candidate.savedAt)
+    && (candidate.resumeType === 'EXACT' || candidate.resumeType === 'SECTOR')
+    && typeof candidate.resumeLevel === 'number'
+    && Number.isFinite(candidate.resumeLevel)
+    && candidate.resumeLevel >= 1
     && typeof candidate.width === 'number'
     && candidate.width > 0
     && typeof candidate.height === 'number'
@@ -612,6 +618,8 @@ const isPersistedGame = (value: unknown): value is PersistedGame => {
 const serializeGame = (game: Game, now: number): PersistedGame => ({
   version: GAME_SAVE_VERSION,
   savedAt: now,
+  resumeType: 'EXACT',
+  resumeLevel: game.level,
   width: game.width,
   height: game.height,
   cell: game.cell,
@@ -2857,6 +2865,20 @@ export default function GameScreen() {
         if (__DEV__) console.warn('Unable to save game progress', error);
       });
   }, []);
+  const saveSectorCheckpoint = useCallback((level: number) => {
+    const game = gameRef.current;
+    if (!game.initialized) return;
+    const checkpoint = serializeGame(game, Date.now());
+    checkpoint.resumeType = 'SECTOR';
+    checkpoint.resumeLevel = Math.round(clamp(level, 1, MAX_LEVEL));
+    const serialized = JSON.stringify(checkpoint);
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(() => AsyncStorage.setItem(GAME_SAVE_STORAGE_KEY, serialized))
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to save sector checkpoint', error);
+      });
+  }, []);
   const clearSavedGameProgress = useCallback(() => {
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
@@ -3200,7 +3222,11 @@ export default function GameScreen() {
     };
   }, []);
 
-  const resetGame = useCallback((preserveStats = false, resetBoard = false) => {
+  const resetGame = useCallback((
+    preserveStats = false,
+    resetBoard = false,
+    startingLevel?: number,
+  ) => {
     const g = gameRef.current;
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
@@ -3210,7 +3236,9 @@ export default function GameScreen() {
     const previousInvincibleUntil = preserveStats && resetBoard
       ? (g.invincibleUntil ?? 0)
       : 0;
-    const previousLevel = preserveStats ? g.level : 1;
+    const previousLevel = preserveStats
+      ? g.level
+      : Math.round(clamp(startingLevel ?? 1, 1, MAX_LEVEL));
     const previousClaimedPolygons = preserveStats && !resetBoard
       ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
       : [];
@@ -3355,6 +3383,12 @@ export default function GameScreen() {
   const restoreSavedGame = useCallback((saved: PersistedGame) => {
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
+
+    if (saved.resumeType === 'SECTOR') {
+      resetGame(false, true, saved.resumeLevel);
+      savedGameRef.current = null;
+      return;
+    }
 
     resetGame(false);
     const game = gameRef.current;
