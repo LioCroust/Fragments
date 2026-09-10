@@ -5468,20 +5468,27 @@ export default function GameScreen() {
 
         <View style={styles.hudDeck}>
           <View style={[styles.hudCard, styles.sectorCard]}>
-            <Text style={[styles.cardLabel, { color: HUD_COLORS.cyan }]}>SECTEUR</Text>
+            <Text
+              style={[
+                styles.cardLabel,
+                isBossSector(hud.level) && styles.bossSectorLabel,
+                { color: HUD_COLORS.cyan },
+              ]}
+            >
+              {isBossSector(hud.level)
+                ? `SECTEUR ${hud.level.toString().padStart(2, '0')} • BOSS`
+                : 'SECTEUR'}
+            </Text>
             <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
               {hud.level.toString().padStart(2, '0')}
             </Text>
             <Text
               style={[
                 styles.cardMeta,
-                styles.sectorMeta,
                 { color: HUD_COLORS.cyan },
               ]}
             >
-              {isBossSector(hud.level)
-                ? `SECTEUR ${hud.level.toString().padStart(2, '0')} • BOSS`
-                : 'VECTOR / LOCK'}
+              VECTOR / LOCK
             </Text>
           </View>
 
@@ -5706,9 +5713,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginTop: 3,
   },
-  sectorMeta: {
-    fontSize: 6.2,
-    letterSpacing: 0.45,
+  bossSectorLabel: {
+    fontSize: 6.1,
+    letterSpacing: 0.35,
   },
   sectorValue: {
     fontFamily: 'Inter_700Bold',
