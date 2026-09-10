@@ -1,4 +1,67 @@
-# Compiler Fragments Neon en APK depuis Windows
+# Compiler Fragments Neon en APK sans Android Studio
+
+La méthode la plus simple consiste à utiliser **GitHub Desktop pour envoyer le
+projet**, puis **GitHub Actions pour compiler automatiquement l’APK**. Android
+Studio, Java et le SDK Android ne sont alors pas nécessaires sur ton PC.
+
+## Méthode recommandée : GitHub Desktop + GitHub Actions
+
+### 1. Envoyer le projet avec GitHub Desktop
+
+1. Ouvrir le dépôt dans GitHub Desktop.
+2. Vérifier que les fichiers suivants apparaissent dans les changements :
+   - `.github/workflows/build-fragments-neon-apk.yml` ;
+   - `artifacts/fragments-neon/android/` ;
+   - `artifacts/fragments-neon/README-APK-WINDOWS.md`.
+3. Écrire un message de commit, par exemple :
+   `Préparer la compilation APK`.
+4. Cliquer sur **Commit to main**.
+5. Cliquer sur **Push origin**.
+
+### 2. Laisser GitHub compiler l’APK
+
+Après le push, la compilation démarre automatiquement.
+
+1. Ouvrir le dépôt sur GitHub.com.
+2. Cliquer sur l’onglet **Actions**.
+3. Ouvrir **Build Fragments Neon APK**.
+4. Attendre que l’exécution affiche une coche verte.
+5. Ouvrir l’exécution terminée.
+6. Dans la section **Artifacts**, télécharger :
+   `fragments-neon-apk-...`.
+7. Décompresser le fichier téléchargé.
+
+L’APK à installer est :
+
+```text
+app-release.apk
+```
+
+Pour lancer une compilation manuellement sans modifier le code :
+
+1. Aller dans **Actions**.
+2. Choisir **Build Fragments Neon APK**.
+3. Cliquer sur **Run workflow**.
+4. Cliquer à nouveau sur **Run workflow**.
+
+Cette méthode utilise les outils Android et Java sur la machine GitHub Actions.
+Ton PC n’a donc besoin que de GitHub Desktop et d’un navigateur.
+
+## Installer l’APK sur le téléphone
+
+1. Envoyer `app-release.apk` sur le téléphone, par câble USB, Drive ou un
+   autre moyen de transfert.
+2. Ouvrir le fichier APK sur le téléphone.
+3. Si Android le demande, autoriser l’installation depuis cette source.
+4. Confirmer l’installation.
+
+L’APK est signé avec la clé debug générée pour les tests. Il est adapté à une
+installation directe sur ton téléphone. Une signature release personnelle sera
+nécessaire pour une publication Google Play.
+
+---
+
+## Alternative locale : Android Studio ou Gradle sous Windows
 
 Le projet Android natif est déjà généré dans `android/`. Il peut être ouvert
 dans Android Studio ou compilé directement avec le wrapper Gradle fourni.
