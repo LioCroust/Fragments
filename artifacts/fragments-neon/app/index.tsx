@@ -202,7 +202,7 @@ const BOSS_RENDER_SCALE = 1.72;
 const PICKUP_VISUAL_SIZE_CELLS = 1.34;
 const PLAYER_MOVE_SPEED = 126;
 const BOSS_SPEED_BOOST = 1.06;
-const CAPTURE_INVINCIBILITY_DURATION = 6;
+const CAPTURE_INVINCIBILITY_DURATION = 10;
 const SEVEN_PROJECTILE_COUNT = 7;
 const SEVEN_PROJECTILE_INTERVAL = 7;
 const SEVEN_PROJECTILE_SPEED = 42;
@@ -2209,7 +2209,14 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   const playerSize = playerSpriteSize(snapshot.cell);
   const pickupSize = pickupVisualSize(snapshot.cell);
   const invincibilityRemaining = Math.max(0, snapshot.invincibleUntil - Date.now());
-  const protectionPulse = 0.5 + Math.sin(Date.now() * 0.012) * 0.16;
+  const protectionPulse = clamp(
+    0.5
+      + Math.sin(Date.now() * 0.014) * 0.24
+      + Math.sin(Date.now() * 0.041) * 0.15
+      + Math.sin(Date.now() * 0.083) * 0.1,
+    0,
+    1,
+  );
   const activeCut = snapshot.trail.length > 0
     && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
   const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
@@ -2588,15 +2595,15 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
             r={snapshot.cell * (0.92 + protectionPulse * 0.12)}
             fill="none"
             stroke="#00f3ff"
-            strokeWidth={snapshot.cell * 0.12}
-            opacity={0.5 + protectionPulse * 0.42}
+            strokeWidth={snapshot.cell * 0.065}
+            opacity={0.1 + protectionPulse * 0.22}
           />
           <Circle
             cx={snapshot.player.x}
             cy={snapshot.player.y}
             r={snapshot.cell * (0.62 + protectionPulse * 0.08)}
             fill="#00f3ff"
-            opacity={0.08 + protectionPulse * 0.08}
+            opacity={0.015 + protectionPulse * 0.045}
           />
           <Circle
             cx={snapshot.player.x}
@@ -2604,8 +2611,8 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
             r={snapshot.cell * 1.16}
             fill="none"
             stroke="#fff5cf"
-            strokeWidth={snapshot.cell * 0.035}
-            opacity={0.42 + protectionPulse * 0.28}
+            strokeWidth={snapshot.cell * 0.02}
+            opacity={0.06 + protectionPulse * 0.16}
           />
         </G>
       )}
@@ -5137,14 +5144,21 @@ export default function GameScreen() {
 
       const invincibilityRemaining = Math.max(0, g.invincibleUntil - now);
       if (invincibilityRemaining > 0) {
-        const protectionPulse = 0.5 + Math.sin(now * 0.012) * 0.16;
+        const protectionPulse = clamp(
+          0.5
+            + Math.sin(now * 0.014) * 0.24
+            + Math.sin(now * 0.041) * 0.15
+            + Math.sin(now * 0.083) * 0.1,
+          0,
+          1,
+        );
         context.save();
         context.globalCompositeOperation = 'lighter';
-        context.globalAlpha = 0.5 + protectionPulse * 0.42;
+        context.globalAlpha = 0.1 + protectionPulse * 0.22;
         context.strokeStyle = '#00f3ff';
         context.shadowColor = '#00f3ff';
         context.shadowBlur = g.cell * 0.2;
-        context.lineWidth = g.cell * 0.12;
+        context.lineWidth = g.cell * 0.065;
         context.beginPath();
         context.arc(
           g.player.x,
@@ -5154,7 +5168,7 @@ export default function GameScreen() {
           Math.PI * 2,
         );
         context.stroke();
-        context.globalAlpha = 0.08 + protectionPulse * 0.08;
+        context.globalAlpha = 0.015 + protectionPulse * 0.045;
         context.fillStyle = '#00f3ff';
         context.beginPath();
         context.arc(
@@ -5165,11 +5179,11 @@ export default function GameScreen() {
           Math.PI * 2,
         );
         context.fill();
-        context.globalAlpha = 0.42 + protectionPulse * 0.28;
+        context.globalAlpha = 0.06 + protectionPulse * 0.16;
         context.shadowColor = '#fff5cf';
         context.shadowBlur = g.cell * 0.08;
         context.strokeStyle = '#fff5cf';
-        context.lineWidth = g.cell * 0.035;
+        context.lineWidth = g.cell * 0.02;
         context.beginPath();
         context.arc(g.player.x, g.player.y, g.cell * 1.16, 0, Math.PI * 2);
         context.stroke();
