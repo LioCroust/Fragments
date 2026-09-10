@@ -5718,7 +5718,7 @@ export default function GameScreen() {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
     return (
-      <Svg style={StyleSheet.absoluteFill}>
+      <Svg style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}>
         <NativeArenaStatic
           width={snapshot.width}
           height={snapshot.height}
@@ -5989,7 +5989,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 4,
     backgroundColor: '#000000',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   debugSectorSelector: {
     position: 'absolute',
@@ -6151,12 +6151,12 @@ const styles = StyleSheet.create({
   optionsCard: {
     borderColor: HUD_COLORS.cyan,
     backgroundColor: 'rgba(0, 24, 34, 0.9)',
-    transform: [{ translateY: 3 }, { rotate: '-1deg' }],
+    transform: [{ translateY: 0 }, { rotate: '-1deg' }],
   },
   shopCard: {
     borderColor: HUD_COLORS.lime,
     backgroundColor: 'rgba(18, 34, 8, 0.9)',
-    transform: [{ translateY: 3 }, { rotate: '1deg' }],
+    transform: [{ translateY: 0 }, { rotate: '1deg' }],
   },
   utilityLabel: {
     fontFamily: 'Inter_700Bold',
