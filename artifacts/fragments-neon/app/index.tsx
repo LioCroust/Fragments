@@ -6151,12 +6151,12 @@ const styles = StyleSheet.create({
   optionsCard: {
     borderColor: HUD_COLORS.cyan,
     backgroundColor: 'rgba(0, 24, 34, 0.9)',
-    transform: [{ translateY: -7 }, { rotate: '-1deg' }],
+    transform: [{ translateY: 3 }, { rotate: '-1deg' }],
   },
   shopCard: {
     borderColor: HUD_COLORS.lime,
     backgroundColor: 'rgba(18, 34, 8, 0.9)',
-    transform: [{ translateY: -7 }, { rotate: '1deg' }],
+    transform: [{ translateY: 3 }, { rotate: '1deg' }],
   },
   utilityLabel: {
     fontFamily: 'Inter_700Bold',
