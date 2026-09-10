@@ -2879,14 +2879,6 @@ export default function GameScreen() {
         if (__DEV__) console.warn('Unable to save sector checkpoint', error);
       });
   }, []);
-  const clearSavedGameProgress = useCallback(() => {
-    saveQueueRef.current = saveQueueRef.current
-      .catch(() => undefined)
-      .then(() => AsyncStorage.removeItem(GAME_SAVE_STORAGE_KEY))
-      .catch((error: unknown) => {
-        if (__DEV__) console.warn('Unable to clear saved game progress', error);
-      });
-  }, []);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
@@ -4820,9 +4812,10 @@ export default function GameScreen() {
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
           if (g.shields <= 0) {
+            const defeatedLevel = g.level;
+            saveSectorCheckpoint(defeatedLevel);
             enqueueBanner({ kind: 'GAME_OVER', score: g.score });
-            clearSavedGameProgress();
-            resetGame(false);
+            resetGame(false, true, defeatedLevel);
           } else {
             resetGame(true);
           }
@@ -5656,7 +5649,6 @@ export default function GameScreen() {
     return () => cancelAnimationFrame(animationFrame);
   }, [
     enqueueBanner,
-    clearSavedGameProgress,
     playDiamondCapture,
     playPickupChime,
     playSevenFireShot,
@@ -5664,6 +5656,7 @@ export default function GameScreen() {
     playShieldLossExplosion,
     resetGame,
     restoreSavedGame,
+    saveSectorCheckpoint,
     saveGameProgress,
   ]);
 
