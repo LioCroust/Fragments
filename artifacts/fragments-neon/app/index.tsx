@@ -263,11 +263,18 @@ type EnemySpawnSpec = {
 };
 
 const BOSS_SECTOR_KINDS: Record<number, EnemyKind> = {
-  10: 'SPIDER',
+  10: 'SHIP',
   20: 'DRAGON',
   30: 'SEVEN',
-  40: 'SHIP',
+  40: 'SPIDER',
   50: 'SPIDER',
+};
+
+const BOSS_KIND_LABELS: Record<EnemyKind, string> = {
+  SHIP: 'VAISSEAU',
+  DRAGON: 'DRAGON',
+  SEVEN: 'SEVEN',
+  SPIDER: 'ARAIGNÉE',
 };
 
 const isBossSector = (level: number) => Boolean(BOSS_SECTOR_KINDS[level]);
@@ -469,10 +476,11 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'ENEMY' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'ENEMY' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
+  bossKind?: EnemyKind;
 };
 
 type Snapshot = {
@@ -2988,7 +2996,14 @@ export default function GameScreen() {
       mode: 'SLOW',
       feedback: '',
     });
-  }, []);
+    if (resetBoard && isBossSector(previousLevel)) {
+      enqueueBanner({
+        kind: 'BOSS',
+        level: previousLevel,
+        bossKind: bossKindForSector(previousLevel),
+      });
+    }
+  }, [enqueueBanner]);
 
   const teleportToSector = useCallback((sector: number) => {
     const g = gameRef.current;
