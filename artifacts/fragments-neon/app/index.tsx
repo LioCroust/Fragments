@@ -5644,8 +5644,21 @@ export default function GameScreen() {
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
+    const renderMargin = Math.max(24, snapshot.cell * 2.1);
+    const nativeWidth = snapshot.width + renderMargin * 2;
+    const nativeHeight = snapshot.height + renderMargin * 2;
     return (
-      <Svg style={StyleSheet.absoluteFill}>
+      <Svg
+        style={{
+          position: 'absolute',
+          left: -renderMargin,
+          top: -renderMargin,
+          width: nativeWidth,
+          height: nativeHeight,
+          overflow: 'visible',
+        }}
+        viewBox={`${-renderMargin} ${-renderMargin} ${nativeWidth} ${nativeHeight}`}
+      >
         <NativeArenaStatic
           width={snapshot.width}
           height={snapshot.height}
@@ -5883,7 +5896,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 4,
     backgroundColor: '#000000',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   debugSectorSelector: {
     position: 'absolute',
