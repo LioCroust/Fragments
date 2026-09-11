@@ -3204,7 +3204,6 @@ export default function GameScreen() {
         sevenFireOrbSource,
         diamondSpriteSource,
         spiderWebSource,
-        ...Object.values(LEVEL_BACKGROUND_SOURCES),
       ];
       const uniqueAssetModules = Array.from(new Set(imageModules));
       allGameAssetsPromiseRef.current = Promise.allSettled(
@@ -3361,10 +3360,6 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
-    Object.keys(LEVEL_BACKGROUND_SOURCES).forEach((level) => {
-      void loadWebBackground(Number(level));
-    });
-
     return () => {
       cancelled = true;
       spriteImagesRef.current = {};
@@ -3379,7 +3374,7 @@ export default function GameScreen() {
       sectorBackgroundImageRefs.current = {};
       sectorBackgroundLoadPromisesRef.current = {};
     };
-  }, [loadWebBackground]);
+  }, []);
 
   const resetGame = useCallback((preserveStats = false, resetBoard = false) => {
     const g = gameRef.current;
@@ -3407,11 +3402,10 @@ export default function GameScreen() {
     const previousBombs = preserveBombLayout
       ? g.bombs.map((bomb) => ({ ...bomb }))
       : [];
-    const previousSplitShips = preserveStats && !resetBoard
+    const previousSplitEnemies = preserveStats && !resetBoard
       ? previousEnemies
         .filter((enemy) => (
-          enemy.kind === 'SHIP'
-          && (enemy.isMini || enemy.splitLevel !== undefined)
+          (enemy.isMini || enemy.splitLevel !== undefined)
           && !enemyIsDestroyed(enemy)
         ))
         .map((enemy) => ({ ...enemy }))
@@ -3426,8 +3420,8 @@ export default function GameScreen() {
       enemies,
       previousEnemies.filter((enemy) => !enemy.isMini && enemy.splitLevel === undefined),
     );
-    if (previousSplitShips.length > 0) {
-      enemies.push(...previousSplitShips);
+    if (previousSplitEnemies.length > 0) {
+      enemies.push(...previousSplitEnemies);
     }
     // A respawn resumes the same sector state, including the exact bomb
     // roster and destroyed flags. Only a new sector/game creates a new draw.
@@ -3515,7 +3509,12 @@ export default function GameScreen() {
       preserveStats,
       resetBoard,
       enemyCount: enemies.length,
-      miniShipCount: enemies.filter((enemy) => enemy.kind === 'SHIP' && enemy.isMini).length,
+      splitEnemyCount: enemies.filter((enemy) => enemy.splitLevel !== undefined).length,
+      miniEnemyKinds: Array.from(new Set(
+        enemies
+          .filter((enemy) => enemy.isMini)
+          .map((enemy) => enemy.kind),
+      )).join(','),
       initialSmokePuffCount: gameRef.current.smokePuffs.length,
     });
     setHud({

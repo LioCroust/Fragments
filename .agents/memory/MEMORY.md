@@ -25,3 +25,4 @@
 - [Windows Android APK build](android-apk-build.md) — Commit the generated Android project for Windows Gradle builds; Replit lacks the JDK needed to compile it locally.
 - [Native drone clipping](native-drone-clipping.md) — Native SVG needs transparent viewport margin plus visible arena overflow when the drone starts outside the blue frame.
 - [Sector loading gate](sector-loading-gate.md) — Hide the complete game behind black until local images actually finish decoding, then reveal before the sector banner.
+- [Split enemy respawn](split-enemy-respawn.md) — Same-sector collision restarts preserve all live split enemy kinds and keep already destroyed ones absent.
