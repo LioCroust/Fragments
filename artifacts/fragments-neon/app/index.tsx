@@ -618,7 +618,7 @@ const isPersistedGame = (value: unknown): value is PersistedGame => {
 const serializeGame = (game: Game, now: number): PersistedGame => ({
   version: GAME_SAVE_VERSION,
   savedAt: now,
-  resumeType: 'EXACT',
+  resumeType: 'SECTOR',
   resumeLevel: game.level,
   width: game.width,
   height: game.height,
@@ -3365,6 +3365,17 @@ export default function GameScreen() {
     if (width <= 0 || height <= 0) return;
 
     resetGame(false);
+    // Resume at the beginning of the saved sector. Older saves used EXACT
+    // position restoration, which could put the drone back inside the arena
+    // and bypass the intended top-entry start.
+    const resumeGame = gameRef.current;
+    resumeGame.level = Math.round(clamp(saved.resumeLevel, 1, MAX_LEVEL));
+    resumeGame.score = Math.max(0, saved.score);
+    resumeGame.shields = Math.max(0, saved.shields);
+    resetGame(true, true);
+    savedGameRef.current = null;
+    return;
+
     const game = gameRef.current;
     const scaleX = width / Math.max(1, saved.width);
     const scaleY = height / Math.max(1, saved.height);
