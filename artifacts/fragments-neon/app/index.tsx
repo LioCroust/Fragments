@@ -60,6 +60,11 @@ const HUD_COLORS = {
   panel: 'rgba(8, 10, 18, 0.92)',
   panelMuted: 'rgba(8, 10, 18, 0.78)',
 } as const;
+const diagnosticLog = (event: string, details: Record<string, unknown> = {}) => {
+  if (__DEV__) {
+    console.log(`[FragmentsNeon][diagnostic] ${event}`, details);
+  }
+};
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
@@ -2195,7 +2200,7 @@ const placeBombsInOpenSurface = (
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
   const shipScale = enemy.isMini ? 0.5 : 1;
-  const smokeCount = enemy.isMini ? 1 : count;
+  const smokeCount = enemy.isMini ? 3 : count;
   const backwardX = -enemy.vx / velocityLength;
   const backwardY = -enemy.vy / velocityLength;
   const sideX = -backwardY;
@@ -2371,28 +2376,41 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           </Defs>
           {snapshot.enemies
             .filter((enemy) => enemy.kind === 'SHIP' && enemy.respawnAt <= Date.now())
-            .map((enemy, index) => {
+            .flatMap((enemy, index) => {
               const smokePosition = shipSmokePosition(enemy, snapshot.cell);
               const motion = enemyAnimationTransform(enemy, snapshot.cell);
               const smokeSize = snapshot.cell * (enemy.isMini ? 0.9 : 1.8);
               const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
-              return (
-                <G
-                  key={`ship-smoke-sprite-${index}`}
-                  transform={`translate(${smokePosition.x} ${smokePosition.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
-                  opacity={0.58}
-                >
-                  <G clipPath="url(#ship-smoke-sprite-frame-clip)">
-                    <SvgImage
-                      href={shipSmokeSpriteSource}
-                      x={-smokeSize / 2 - frame * smokeSize}
-                      y={-smokeSize / 2}
-                      width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
-                      height={smokeSize}
-                    />
+              const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
+              const backwardX = -enemy.vx / velocityLength;
+              const backwardY = -enemy.vy / velocityLength;
+              const smokeCount = enemy.isMini ? 3 : 1;
+              return Array.from({ length: smokeCount }, (_, smokeIndex) => {
+                const smokeOffset = enemy.isMini
+                  ? snapshot.cell * 0.34 * smokeIndex
+                  : 0;
+                const positionedSmoke = {
+                  x: smokePosition.x + backwardX * smokeOffset,
+                  y: smokePosition.y + backwardY * smokeOffset,
+                };
+                return (
+                  <G
+                    key={`ship-smoke-sprite-${index}-${smokeIndex}`}
+                    transform={`translate(${positionedSmoke.x} ${positionedSmoke.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
+                    opacity={enemy.isMini ? 0.34 : 0.58}
+                  >
+                    <G clipPath="url(#ship-smoke-sprite-frame-clip)">
+                      <SvgImage
+                        href={shipSmokeSpriteSource}
+                        x={-smokeSize / 2 - frame * smokeSize}
+                        y={-smokeSize / 2}
+                        width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
+                        height={smokeSize}
+                      />
+                    </G>
                   </G>
-                </G>
-              );
+                );
+              });
             })}
         </>
       )}
@@ -2856,6 +2874,18 @@ export default function GameScreen() {
   const bannerAnimatingRef = useRef(false);
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
+
+  useEffect(() => {
+    diagnosticLog('game-screen-mounted', {
+      platform: Platform.OS,
+      smokeRenderMode: SHIP_SMOKE_RENDER_MODE,
+      miniShipSmokeCount: 3,
+    });
+    return () => {
+      diagnosticLog('game-screen-unmounted');
+    };
+  }, []);
+
   const saveGameProgress = useCallback(() => {
     const game = gameRef.current;
     if (!game.initialized || game.status !== 'PLAYING') return;
@@ -3340,6 +3370,14 @@ export default function GameScreen() {
       respawnAt: 0,
       invincibleUntil: previousInvincibleUntil,
     };
+    diagnosticLog('game-reset', {
+      level: previousLevel,
+      preserveStats,
+      resetBoard,
+      enemyCount: enemies.length,
+      miniShipCount: enemies.filter((enemy) => enemy.kind === 'SHIP' && enemy.isMini).length,
+      initialSmokePuffCount: gameRef.current.smokePuffs.length,
+    });
     setHud({
       score: previousScore,
       bestScore: bestScoreRef.current,
@@ -3518,6 +3556,12 @@ export default function GameScreen() {
     const previous = sizeRef.current;
     const changed = Math.abs(previous.width - width) > 1 || Math.abs(previous.height - height) > 1;
     sizeRef.current = { width, height };
+    diagnosticLog('arena-layout', {
+      width: Math.round(width),
+      height: Math.round(height),
+      changed,
+      initialized: gameRef.current.initialized,
+    });
     if (changed && gameRef.current.initialized) resetGame(true);
   }, [resetGame]);
 
@@ -4069,6 +4113,12 @@ export default function GameScreen() {
           g.smokePuffs.push(...splitShips.flatMap((splitShip) => (
             createShipSmokePuffs(splitShip, g.cell, 3)
           )));
+          diagnosticLog('ship-split-smoke-created', {
+            parentIsBoss: enemy.isBoss,
+            splitShipCount: splitShips.length,
+            miniShipCount: splitShips.filter((splitShip) => splitShip.isMini).length,
+            smokePuffCount: g.smokePuffs.length,
+          });
         }
       }
     };
@@ -9900,6 +9950,12 @@ export default function GameScreen() {
     const previous = sizeRef.current;
     const changed = Math.abs(previous.width - width) > 1 || Math.abs(previous.height - height) > 1;
     sizeRef.current = { width, height };
+    diagnosticLog('arena-layout', {
+      width: Math.round(width),
+      height: Math.round(height),
+      changed,
+      initialized: gameRef.current.initialized,
+    });
     if (changed && gameRef.current.initialized) resetGame(true);
   }, [resetGame]);
 

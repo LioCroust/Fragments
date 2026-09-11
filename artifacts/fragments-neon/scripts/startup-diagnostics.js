@@ -6,12 +6,17 @@ const packagePath = path.join(projectRoot, 'package.json');
 const lockfilePath = path.resolve(projectRoot, '..', '..', 'pnpm-lock.yaml');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const lockfile = fs.readFileSync(lockfilePath, 'utf8');
-const importerStart = lockfile.indexOf('  artifacts/fragments-neon:\n');
-const importerEnd = importerStart >= 0
-  ? lockfile.indexOf('\n  ', importerStart + 2)
+const importerHeader = '  artifacts/fragments-neon:\n';
+const importerStart = lockfile.indexOf(importerHeader);
+const importerContentStart = importerStart >= 0
+  ? importerStart + importerHeader.length
   : -1;
-const importer = importerStart >= 0
-  ? lockfile.slice(importerStart, importerEnd >= 0 ? importerEnd : undefined)
+const remainder = importerContentStart >= 0
+  ? lockfile.slice(importerContentStart)
+  : '';
+const nextImporterOffset = remainder.search(/\n  [^ \n]/);
+const importer = importerContentStart >= 0
+  ? remainder.slice(0, nextImporterOffset >= 0 ? nextImporterOffset : undefined)
   : '';
 
 const trackedPackages = [
