@@ -2381,20 +2381,32 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
               const motion = enemyAnimationTransform(enemy, snapshot.cell);
               const smokeSize = snapshot.cell * (enemy.isMini ? 0.9 : 1.8);
               const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
+              const smokeClipId = `ship-smoke-single-blob-${index}`;
               return (
                 <G
                   key={`ship-smoke-sprite-${index}`}
-                  transform={`translate(${smokePosition.x} ${smokePosition.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
+                  transform={`translate(${smokePosition.x} ${smokePosition.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)}) translate(0 ${-smokeSize * 0.3})`}
                   opacity={0.58}
                 >
-                  <G clipPath="url(#ship-smoke-sprite-frame-clip)">
-                    <SvgImage
-                      href={shipSmokeSpriteSource}
-                      x={-smokeSize / 2 - frame * smokeSize}
-                      y={-smokeSize / 2}
-                      width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
-                      height={smokeSize}
-                    />
+                  <Defs>
+                    <ClipPath id={smokeClipId}>
+                      <Circle
+                        cx={-smokeSize * 0.04}
+                        cy={smokeSize * 0.3}
+                        r={smokeSize * 0.28}
+                      />
+                    </ClipPath>
+                  </Defs>
+                  <G clipPath={`url(#${smokeClipId})`}>
+                    <G clipPath="url(#ship-smoke-sprite-frame-clip)">
+                      <SvgImage
+                        href={shipSmokeSpriteSource}
+                        x={-smokeSize / 2 - frame * smokeSize}
+                        y={-smokeSize / 2}
+                        width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
+                        height={smokeSize}
+                      />
+                    </G>
                   </G>
                 </G>
               );
