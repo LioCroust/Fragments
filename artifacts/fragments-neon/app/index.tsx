@@ -2200,7 +2200,7 @@ const placeBombsInOpenSurface = (
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
   const shipScale = enemy.isMini ? 0.5 : 1;
-  const smokeCount = enemy.isMini ? 3 : count;
+  const smokeCount = 1;
   const backwardX = -enemy.vx / velocityLength;
   const backwardY = -enemy.vy / velocityLength;
   const sideX = -backwardY;
@@ -2376,41 +2376,28 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           </Defs>
           {snapshot.enemies
             .filter((enemy) => enemy.kind === 'SHIP' && enemy.respawnAt <= Date.now())
-            .flatMap((enemy, index) => {
+            .map((enemy, index) => {
               const smokePosition = shipSmokePosition(enemy, snapshot.cell);
               const motion = enemyAnimationTransform(enemy, snapshot.cell);
               const smokeSize = snapshot.cell * (enemy.isMini ? 0.9 : 1.8);
               const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
-              const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
-              const backwardX = -enemy.vx / velocityLength;
-              const backwardY = -enemy.vy / velocityLength;
-              const smokeCount = enemy.isMini ? 3 : 1;
-              return Array.from({ length: smokeCount }, (_, smokeIndex) => {
-                const smokeOffset = enemy.isMini
-                  ? snapshot.cell * 0.34 * smokeIndex
-                  : 0;
-                const positionedSmoke = {
-                  x: smokePosition.x + backwardX * smokeOffset,
-                  y: smokePosition.y + backwardY * smokeOffset,
-                };
-                return (
-                  <G
-                    key={`ship-smoke-sprite-${index}-${smokeIndex}`}
-                    transform={`translate(${positionedSmoke.x} ${positionedSmoke.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
-                    opacity={enemy.isMini ? 0.34 : 0.58}
-                  >
-                    <G clipPath="url(#ship-smoke-sprite-frame-clip)">
-                      <SvgImage
-                        href={shipSmokeSpriteSource}
-                        x={-smokeSize / 2 - frame * smokeSize}
-                        y={-smokeSize / 2}
-                        width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
-                        height={smokeSize}
-                      />
-                    </G>
+              return (
+                <G
+                  key={`ship-smoke-sprite-${index}`}
+                  transform={`translate(${smokePosition.x} ${smokePosition.y + motion.offsetY}) rotate(${motion.rotation * (180 / Math.PI)})`}
+                  opacity={0.58}
+                >
+                  <G clipPath="url(#ship-smoke-sprite-frame-clip)">
+                    <SvgImage
+                      href={shipSmokeSpriteSource}
+                      x={-smokeSize / 2 - frame * smokeSize}
+                      y={-smokeSize / 2}
+                      width={smokeSize * SHIP_SMOKE_SPRITE_FRAME_COUNT}
+                      height={smokeSize}
+                    />
                   </G>
-                );
-              });
+                </G>
+              );
             })}
         </>
       )}
@@ -2879,7 +2866,7 @@ export default function GameScreen() {
     diagnosticLog('game-screen-mounted', {
       platform: Platform.OS,
       smokeRenderMode: SHIP_SMOKE_RENDER_MODE,
-      miniShipSmokeCount: 3,
+      shipSmokeCount: 1,
     });
     return () => {
       diagnosticLog('game-screen-unmounted');
