@@ -2195,12 +2195,13 @@ const placeBombsInOpenSurface = (
 const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[] => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
   const shipScale = enemy.isMini ? 0.5 : 1;
+  const smokeCount = enemy.isMini ? 1 : count;
   const backwardX = -enemy.vx / velocityLength;
   const backwardY = -enemy.vy / velocityLength;
   const sideX = -backwardY;
   const sideY = backwardX;
 
-  return Array.from({ length: count }, (_, index) => {
+  return Array.from({ length: smokeCount }, (_, index) => {
     const sideOffset = (Math.random() - 0.5) * cell * 0.34 * shipScale;
     const trailOffset = cell * (0.92 + index * 0.2) * shipScale;
     const maxLife = 0.43 + Math.random() * 0.17;
@@ -4066,7 +4067,7 @@ export default function GameScreen() {
         g.smokeAccumulator = 0;
         if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && splitShips.length > 0) {
           g.smokePuffs.push(...splitShips.flatMap((splitShip) => (
-            createShipSmokePuffs(splitShip, g.cell, splitShip.isMini ? 1 : 3)
+            createShipSmokePuffs(splitShip, g.cell, 3)
           )));
         }
       }
