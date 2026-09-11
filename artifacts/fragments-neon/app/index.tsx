@@ -5778,7 +5778,7 @@ export default function GameScreen() {
                     : banner.kind === 'SHIELD'
                       ? 'BOUCLIER ACTIVÉ'
                       : banner.kind === 'SECTOR'
-                        ? 'SECTEUR TERMINÉ'
+                        ? 'SECTEUR SÉCURISÉ À 80%'
                         : banner.kind === 'BOSS'
                           ? 'ALERTE BOSS'
                         : banner.kind === 'BOSS_SPLIT'
@@ -5801,7 +5801,7 @@ export default function GameScreen() {
                     : banner.kind === 'SHIELD'
                       ? 'INVINCIBILITÉ  •  10 SECONDES'
                     : banner.kind === 'SECTOR'
-                      ? `PASSAGE AU SECTEUR ${(banner.level ?? 2).toString().padStart(2, '0')}`
+                      ? 'PASSAGE SECTEUR SUIVANT'
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'BOSS_SPLIT'
