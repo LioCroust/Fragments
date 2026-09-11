@@ -116,6 +116,39 @@ artifacts\fragments-neon\Fragments-Neon-release.apk
 Le fichier `.apk` est ignoré par Git afin de ne pas être ajouté au dépôt par
 erreur.
 
+## Tester rapidement avec Expo Go sur Android
+
+Cette méthode est adaptée aux tests répétés sur un téléphone Android. Elle ne
+dépend pas du domaine réseau Replit : Expo tourne directement sur ton
+ordinateur et le téléphone le rejoint sur le même Wi-Fi.
+
+### Pré-requis
+
+- Node.js 20 LTS ou une version LTS plus récente ;
+- GitHub Desktop ou Git pour récupérer le projet ;
+- pnpm ;
+- Expo Go installé sur le téléphone Android ;
+- l’ordinateur et le téléphone connectés au même réseau Wi-Fi.
+
+Dans PowerShell, depuis le dossier racine du projet :
+
+```powershell
+corepack enable
+corepack prepare pnpm@10.26.1 --activate
+pnpm install --frozen-lockfile
+pnpm --filter @workspace/fragments-neon run dev:local
+```
+
+Expo affiche ensuite un QR code. Scanne-le avec Expo Go. Pour arrêter le
+serveur, utilise `Ctrl+C`.
+
+Si Windows affiche une demande d’autorisation réseau pour Node.js, autorise
+Node.js sur les réseaux privés. N’utilise pas le réseau Wi-Fi invité, qui
+bloque souvent la communication entre les appareils.
+
+Cette commande locale est distincte de la commande Replit `dev`, qui conserve
+son fonctionnement actuel dans le Preview.
+
 ## Compilation avec Android Studio
 
 1. Ouvrir le dossier suivant dans Android Studio :
