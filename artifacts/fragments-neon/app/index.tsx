@@ -5808,21 +5808,37 @@ export default function GameScreen() {
         </View>
 
         <View style={styles.hudDeck}>
-          <View style={[styles.hudCard, styles.sectorCard]}>
-            <Text
-              style={[
-                styles.cardLabel,
-                { color: HUD_COLORS.cyan },
-              ]}
-            >
-              SECTEUR
-            </Text>
-            <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
-              {hud.level.toString().padStart(2, '0')}
-            </Text>
-            {isBossSector(hud.level) && (
-              <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
-            )}
+          <View style={[styles.hudCardStack, styles.sectorStack]}>
+            <View style={[styles.hudCard, styles.sectorCard]}>
+              <Text
+                style={[
+                  styles.cardLabel,
+                  { color: HUD_COLORS.cyan },
+                ]}
+              >
+                SECTEUR
+              </Text>
+              <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
+                {hud.level.toString().padStart(2, '0')}
+              </Text>
+              {isBossSector(hud.level) && (
+                <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
+              )}
+            </View>
+            <View style={[styles.hudCard, styles.utilityCard, styles.optionsCard]}>
+              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole options">
+                <Polygon
+                  points="8,0.4 10,1.2 11.8,0.5 12.7,2.2 14.7,2.5 14.9,4.4 16.6,5.5 15.9,7.3 17.2,8.8 15.9,10.3 16.5,12.1 14.8,13.1 14.6,15 12.7,15.2 11.7,16.8 10,16.1 8.2,16.8 7.3,15.1 5.3,14.8 5.1,13 3.4,11.9 4.1,10.2 2.8,8.7 4.1,7.2 3.5,5.4 5.2,4.4 5.4,2.5 7.3,2.2"
+                  fill="none"
+                  stroke={HUD_COLORS.cyan}
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <Circle cx="10" cy="8.7" r="3.1" fill="none" stroke={HUD_COLORS.cyan} strokeWidth="1.5" />
+                <Circle cx="10" cy="8.7" r="1" fill={HUD_COLORS.cyan} />
+              </Svg>
+              <Text style={[styles.utilityLabel, { color: HUD_COLORS.cyan }]}>OPTIONS</Text>
+            </View>
           </View>
 
           <View style={[styles.hudCard, styles.scoreCard]}>
@@ -5835,23 +5851,35 @@ export default function GameScreen() {
             </Text>
           </View>
 
-          <View style={[styles.hudCard, styles.shieldCard]}>
-            <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
-            <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
-            <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
-              {shieldSegments.map((_, index) => (
-                <View
-                  key={`shield-${index}`}
-                  style={[
-                    styles.shieldSegment,
-                    index < hud.shields
-                      ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
-                      : styles.shieldSegmentInactive,
-                  ]}
-                />
-              ))}
+          <View style={[styles.hudCardStack, styles.shieldStack]}>
+            <View style={[styles.hudCard, styles.shieldCard]}>
+              <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
+              <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
+              <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
+                {shieldSegments.map((_, index) => (
+                  <View
+                    key={`shield-${index}`}
+                    style={[
+                      styles.shieldSegment,
+                      index < hud.shields
+                        ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
+                        : styles.shieldSegmentInactive,
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
             </View>
-            <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
+            <View style={[styles.hudCard, styles.utilityCard, styles.shopCard]}>
+              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole boutique">
+                <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
+                <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
+                <Rect x="4" y="6" width="12" height="9" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
+                <Rect x="8" y="10" width="4" height="5" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.2" />
+                <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.lime} strokeWidth="1" />
+              </Svg>
+              <Text style={[styles.utilityLabel, { color: HUD_COLORS.lime }]}>BOUTIQUE</Text>
+            </View>
           </View>
         </View>
 
@@ -5997,10 +6025,19 @@ const styles = StyleSheet.create({
   },
   hudDeck: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginTop: 6,
-    minHeight: 86,
+    minHeight: 101,
+  },
+  hudCardStack: {
+    alignItems: 'stretch',
+  },
+  sectorStack: {
+    width: '26%',
+  },
+  shieldStack: {
+    width: '29%',
   },
   hudCard: {
     borderWidth: 1,
@@ -6015,13 +6052,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   sectorCard: {
-    width: '24%',
+    width: '100%',
     minHeight: 60,
     borderColor: HUD_COLORS.cyan,
     transform: [{ translateY: 2 }, { rotate: '-1deg' }],
   },
   scoreCard: {
-    width: '48%',
+    width: '44%',
     minHeight: 92,
     marginHorizontal: -5,
     zIndex: 2,
@@ -6030,10 +6067,36 @@ const styles = StyleSheet.create({
     transform: [{ translateY: 8 }],
   },
   shieldCard: {
-    width: '27%',
+    width: '100%',
     minHeight: 70,
     borderColor: HUD_COLORS.lime,
     transform: [{ translateY: 1 }, { rotate: '1deg' }],
+  },
+  utilityCard: {
+    width: '100%',
+    minHeight: 39,
+    marginTop: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  optionsCard: {
+    borderColor: HUD_COLORS.cyan,
+    backgroundColor: 'rgba(0, 24, 34, 0.9)',
+    transform: [{ translateY: 0 }, { rotate: '-1deg' }],
+  },
+  shopCard: {
+    borderColor: HUD_COLORS.lime,
+    backgroundColor: 'rgba(18, 34, 8, 0.9)',
+    transform: [{ translateY: 0 }, { rotate: '1deg' }],
+  },
+  utilityLabel: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 0.75,
   },
   cardLabel: {
     fontFamily: 'Inter_700Bold',
@@ -6095,6 +6158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
+    transform: [{ translateX: -7 }, { translateY: -29 }],
   },
   zoneCard: {
     width: '56%',
