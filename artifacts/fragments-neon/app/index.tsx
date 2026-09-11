@@ -2862,6 +2862,9 @@ export default function GameScreen() {
   const cuttingSpriteImageRef = useRef<any>(null);
   const shipSmokeSpriteImageRef = useRef<any>(null);
   const sectorBackgroundImageRefs = useRef<Record<number, any>>({});
+  const sectorBackgroundLoadPromisesRef = useRef<Record<number, Promise<void>>>({});
+  const allGameAssetsPromiseRef = useRef<Promise<void> | null>(null);
+  const initialSectorPreparationStartedRef = useRef(false);
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
   const savedGameRef = useRef<PersistedGame | null>(null);
@@ -3143,6 +3146,102 @@ export default function GameScreen() {
     });
   }, [sevenFireShotPlayer]);
 
+  const preloadAllGameAssets = useCallback(() => {
+    if (!allGameAssetsPromiseRef.current) {
+      const imageModules = [
+        ...Object.values(spriteFrames).flat(),
+        diamondSource,
+        playerSource,
+        playerMissileSource,
+        cockpitInteriorSource,
+        cuttingSpriteSource,
+        shipSmokeSpriteSource,
+        coreReactorSpriteSource,
+        sevenFireOrbSource,
+        diamondSpriteSource,
+        spiderWebSource,
+        ...Object.values(LEVEL_BACKGROUND_SOURCES),
+      ];
+      const uniqueAssetModules = Array.from(new Set(imageModules));
+      allGameAssetsPromiseRef.current = Promise.allSettled(
+        uniqueAssetModules.map((assetModule) => {
+          if (Platform.OS === 'web') return Promise.resolve();
+          const resolved = (RNImage as any).resolveAssetSource?.(assetModule);
+          const uri = resolved?.uri ?? assetModule?.uri ?? assetModule;
+          return new Promise<void>((resolve, reject) => {
+            RNImage.getSize(
+              uri,
+              () => resolve(),
+              () => reject(new Error(`Unable to preload image asset: ${uri}`)),
+            );
+          });
+        }),
+      ).then((results) => {
+        const failedCount = results.filter((result) => result.status === 'rejected').length;
+        diagnosticLog('game-assets-preloaded', {
+          requestedCount: uniqueAssetModules.length,
+          failedCount,
+        });
+      });
+    }
+    return allGameAssetsPromiseRef.current;
+  }, []);
+
+  const loadWebBackground = useCallback((level: number) => {
+    if (Platform.OS !== 'web') return Promise.resolve();
+    const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
+    if (sectorBackgroundImageRefs.current[normalizedLevel]) return Promise.resolve();
+    const existingPromise = sectorBackgroundLoadPromisesRef.current[normalizedLevel];
+    if (existingPromise) return existingPromise;
+
+    const source = backgroundSourceForLevel(normalizedLevel);
+    const resolvedBackground = (RNImage as any).resolveAssetSource?.(source);
+    const backgroundImage = new (globalThis as any).Image();
+    backgroundImage.decoding = 'async';
+    const promise = new Promise<void>((resolve) => {
+      backgroundImage.onload = () => {
+        sectorBackgroundImageRefs.current[normalizedLevel] = backgroundImage;
+        resolve();
+      };
+      backgroundImage.onerror = () => {
+        diagnosticLog('sector-background-preload-failed', { level: normalizedLevel });
+        resolve();
+      };
+    });
+    sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
+    backgroundImage.src = resolvedBackground?.uri ?? source;
+    return promise;
+  }, []);
+
+  const preloadSectorForBanner = useCallback(async (level: number) => {
+    const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
+    await Promise.all([
+      preloadAllGameAssets(),
+      loadWebBackground(normalizedLevel),
+    ]);
+    diagnosticLog('sector-assets-ready', { level: normalizedLevel });
+  }, [loadWebBackground, preloadAllGameAssets]);
+
+  const releaseSectorBackground = useCallback((level: number, nextLevel: number) => {
+    const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
+    const normalizedNextLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(nextLevel)));
+    if (normalizedLevel === normalizedNextLevel) return;
+    if (Platform.OS === 'web') {
+      const backgroundImage = sectorBackgroundImageRefs.current[normalizedLevel];
+      if (backgroundImage) {
+        backgroundImage.onload = null;
+        backgroundImage.onerror = null;
+        backgroundImage.src = '';
+      }
+      delete sectorBackgroundImageRefs.current[normalizedLevel];
+      delete sectorBackgroundLoadPromisesRef.current[normalizedLevel];
+    }
+    diagnosticLog('sector-background-released', {
+      level: normalizedLevel,
+      nextLevel: normalizedNextLevel,
+    });
+  }, []);
+
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
 
@@ -3215,14 +3314,8 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
-    Object.entries(LEVEL_BACKGROUND_SOURCES).forEach(([level, source]) => {
-      const resolvedBackground = (RNImage as any).resolveAssetSource?.(source);
-      const backgroundImage = new (globalThis as any).Image();
-      backgroundImage.decoding = 'async';
-      backgroundImage.onload = () => {
-        if (!cancelled) sectorBackgroundImageRefs.current[Number(level)] = backgroundImage;
-      };
-      backgroundImage.src = resolvedBackground?.uri ?? source;
+    Object.keys(LEVEL_BACKGROUND_SOURCES).forEach((level) => {
+      void loadWebBackground(Number(level));
     });
 
     return () => {
@@ -3237,8 +3330,9 @@ export default function GameScreen() {
       cuttingSpriteImageRef.current = null;
       shipSmokeSpriteImageRef.current = null;
       sectorBackgroundImageRefs.current = {};
+      sectorBackgroundLoadPromisesRef.current = {};
     };
-  }, []);
+  }, [loadWebBackground]);
 
   const resetGame = useCallback((preserveStats = false, resetBoard = false) => {
     const g = gameRef.current;
@@ -3545,9 +3639,21 @@ export default function GameScreen() {
   const teleportToSector = useCallback((sector: number) => {
     const g = gameRef.current;
     if (!g.initialized) return;
-    g.level = Math.round(clamp(sector, 1, MAX_LEVEL));
-    resetGame(true, true);
-  }, [resetGame]);
+    const previousLevel = g.level;
+    const nextLevel = Math.round(clamp(sector, 1, MAX_LEVEL));
+    g.status = 'SECTOR_TRANSITION';
+    void preloadSectorForBanner(nextLevel).then(() => {
+      const transitionGame = gameRef.current;
+      if (transitionGame.status !== 'SECTOR_TRANSITION') return;
+      transitionGame.level = nextLevel;
+      releaseSectorBackground(previousLevel, nextLevel);
+      resetGame(true, true);
+      enqueueBanner({
+        kind: 'SECTOR_START',
+        level: nextLevel,
+      });
+    });
+  }, [enqueueBanner, preloadSectorForBanner, releaseSectorBackground, resetGame]);
 
   const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -3600,6 +3706,7 @@ export default function GameScreen() {
   useEffect(() => {
     let animationFrame = 0;
     let lastTime = Date.now();
+    let cancelled = false;
 
     const addParticle = (g: Game, direction: Direction) => {
       if (g.particles.length >= (CUTTING_SPRITE_ENABLED ? 56 : 96)) return;
@@ -4965,13 +5072,18 @@ export default function GameScreen() {
               g.fillCursor = 0;
               g.pendingCapturePolygons = [];
               g.pendingCaptureArea = 0;
+            const previousLevel = g.level;
+            void preloadSectorForBanner(nextLevel).then(() => {
+              const transitionGame = gameRef.current;
+              if (transitionGame.status !== 'SECTOR_TRANSITION') return;
               enqueueBanner({
                 kind: 'SECTOR',
                 level: nextLevel,
                 onComplete: () => {
-                  const transitionGame = gameRef.current;
-                  if (transitionGame.status !== 'SECTOR_TRANSITION') return;
-                  transitionGame.level = nextLevel;
+                  const completedTransitionGame = gameRef.current;
+                  if (completedTransitionGame.status !== 'SECTOR_TRANSITION') return;
+                  completedTransitionGame.level = nextLevel;
+                  releaseSectorBackground(previousLevel, nextLevel);
                   enqueueBanner({
                     kind: 'SECTOR_START',
                     level: nextLevel,
@@ -4979,6 +5091,7 @@ export default function GameScreen() {
                   resetGame(true, true);
                 },
               });
+            });
               playSectorTransition();
               return;
             }
@@ -5637,15 +5750,22 @@ export default function GameScreen() {
         !g.initialized
         && sizeRef.current.width > 0
         && savedGameHydratedRef.current
+        && !initialSectorPreparationStartedRef.current
       ) {
-        if (savedGameRef.current) restoreSavedGame(savedGameRef.current);
-        else resetGame(false);
-        if (gameRef.current.initialized) {
-          enqueueBanner({
-            kind: 'SECTOR_START',
-            level: gameRef.current.level,
-          });
-        }
+        initialSectorPreparationStartedRef.current = true;
+        const savedGame = savedGameRef.current;
+        const initialLevel = savedGame?.level ?? 1;
+        void preloadSectorForBanner(initialLevel).then(() => {
+          if (cancelled || gameRef.current.initialized) return;
+          if (savedGame) restoreSavedGame(savedGame);
+          else resetGame(false);
+          if (gameRef.current.initialized) {
+            enqueueBanner({
+              kind: 'SECTOR_START',
+              level: gameRef.current.level,
+            });
+          }
+        });
       }
       if (g.initialized) {
         update(g, dt, now);
@@ -5733,7 +5853,10 @@ export default function GameScreen() {
     };
 
     animationFrame = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animationFrame);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animationFrame);
+    };
   }, [
     enqueueBanner,
     clearSavedGameProgress,
@@ -5742,6 +5865,7 @@ export default function GameScreen() {
     playSevenFireShot,
     playSectorTransition,
     playShieldLossExplosion,
+    preloadSectorForBanner,
     resetGame,
     restoreSavedGame,
     saveGameProgress,

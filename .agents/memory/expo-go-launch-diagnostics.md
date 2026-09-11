@@ -8,3 +8,9 @@ When Expo Go fails to download or launch after dependency edits, compare the pac
 **Why:** A launch failure can look like a JavaScript regression even when the cause is a stale Metro cache or an out-of-sync dependency lock; restoring the aligned runtime and clearing the cache restored the game launch.
 
 **How to apply:** Run the app's startup preflight before Metro, inspect its alignment warnings and required-path checks, then only investigate game code after the iOS/Android bundle succeeds.
+
+For image preloading in this workspace, verify that a declared Expo asset package is actually installed before importing it; React Native's local-image loading APIs are the safe fallback when the workspace install is incomplete.
+
+**Why:** The dependency can appear in the artifact manifest while being absent from the installed workspace modules, which breaks TypeScript and Metro before the game starts.
+
+**How to apply:** Prefer the existing React Native image loader for local visual assets unless the Expo asset package is present in the resolved workspace installation.
