@@ -2851,6 +2851,7 @@ export default function GameScreen() {
     feedback: '',
   });
   const [banner, setBanner] = useState<Banner | null>(null);
+  const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
@@ -2876,6 +2877,8 @@ export default function GameScreen() {
   const bannerAnimatingRef = useRef(false);
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
+  const initialLoadingRevealStartedRef = useRef(false);
+  const loadingBannerTranslateX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     diagnosticLog('game-screen-mounted', {
@@ -3027,6 +3030,22 @@ export default function GameScreen() {
 
     playNextBanner();
   }, [bannerTranslateX]);
+
+  const revealGameAfterInitialLoad = useCallback((nextBanner: Banner) => {
+    if (initialLoadingRevealStartedRef.current) return;
+    initialLoadingRevealStartedRef.current = true;
+    loadingBannerTranslateX.stopAnimation();
+    Animated.timing(loadingBannerTranslateX, {
+      toValue: Math.max(sizeRef.current.width, 360) + 180,
+      duration: 330,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) return;
+      setIsLoadingScreenVisible(false);
+      enqueueBanner(nextBanner);
+    });
+  }, [enqueueBanner, loadingBannerTranslateX]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5760,7 +5779,7 @@ export default function GameScreen() {
           if (savedGame) restoreSavedGame(savedGame);
           else resetGame(false);
           if (gameRef.current.initialized) {
-            enqueueBanner({
+            revealGameAfterInitialLoad({
               kind: 'SECTOR_START',
               level: gameRef.current.level,
             });
@@ -5866,6 +5885,7 @@ export default function GameScreen() {
     playSectorTransition,
     playShieldLossExplosion,
     preloadSectorForBanner,
+    revealGameAfterInitialLoad,
     resetGame,
     restoreSavedGame,
     saveGameProgress,
@@ -6157,6 +6177,23 @@ export default function GameScreen() {
         onSelect={teleportToSector}
         bottomInset={Math.max(insets.bottom, 6)}
       />
+
+      {isLoadingScreenVisible && (
+        <View style={styles.loadingScreen} pointerEvents="auto">
+          <Animated.View
+            style={[
+              styles.loadingBanner,
+              { transform: [{ translateX: loadingBannerTranslateX }] },
+            ]}
+            accessibilityLabel="Chargement"
+          >
+            <View style={styles.bannerGloss} />
+            <View style={styles.bannerAccent} />
+            <Text style={styles.loadingBannerTitle}>Chargement...</Text>
+            <Text style={styles.loadingBannerSubtitle}>PRÉPARATION DU SYSTÈME</Text>
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }
@@ -6166,6 +6203,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
     overflow: 'hidden',
+  },
+  loadingScreen: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+  },
+  loadingBanner: {
+    width: '82%',
+    minHeight: 94,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderRadius: 4,
+    borderColor: HUD_COLORS.cyan,
+    backgroundColor: '#02070d',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.95,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 14,
+  },
+  loadingBannerTitle: {
+    maxWidth: '100%',
+    color: HUD_COLORS.warmWhite,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 25,
+    lineHeight: 30,
+    letterSpacing: 1.6,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 13,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  loadingBannerSubtitle: {
+    marginTop: 5,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 1.6,
+    textAlign: 'center',
   },
   arena: {
     position: 'absolute',
