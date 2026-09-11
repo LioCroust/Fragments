@@ -4922,11 +4922,11 @@ export default function GameScreen() {
                   const transitionGame = gameRef.current;
                   if (transitionGame.status !== 'SECTOR_TRANSITION') return;
                   transitionGame.level = nextLevel;
-                  resetGame(true, true);
                   enqueueBanner({
                     kind: 'SECTOR_START',
                     level: nextLevel,
                   });
+                  resetGame(true, true);
                 },
               });
               playSectorTransition();
@@ -5590,6 +5590,12 @@ export default function GameScreen() {
       ) {
         if (savedGameRef.current) restoreSavedGame(savedGameRef.current);
         else resetGame(false);
+        if (gameRef.current.initialized) {
+          enqueueBanner({
+            kind: 'SECTOR_START',
+            level: gameRef.current.level,
+          });
+        }
       }
       if (g.initialized) {
         update(g, dt, now);
@@ -5835,19 +5841,18 @@ export default function GameScreen() {
                             ? 'GAME OVER'
                             : 'ENNEMI DÉTRUIT'}
               </Text>
-              <Text style={styles.bannerScore} numberOfLines={1}>
-                {banner.kind === 'RECORD'
-                  ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
-                  : banner.kind === 'DIAMOND'
-                    ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
-                    : banner.kind === 'BOMB'
-                      ? `+${banner.points ?? BOMB_SCORE} POINTS`
-                    : banner.kind === 'SHIELD'
-                      ? 'INVINCIBILITÉ  •  10 SECONDES'
-                    : banner.kind === 'SECTOR'
-                      ? 'PASSAGE SECTEUR SUIVANT'
-                       : banner.kind === 'SECTOR_START'
-                         ? 'DÉPLOIEMENT DU DRONE'
+              {banner.kind !== 'SECTOR_START' && (
+                <Text style={styles.bannerScore} numberOfLines={1}>
+                  {banner.kind === 'RECORD'
+                    ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
+                    : banner.kind === 'DIAMOND'
+                      ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
+                      : banner.kind === 'BOMB'
+                        ? `+${banner.points ?? BOMB_SCORE} POINTS`
+                      : banner.kind === 'SHIELD'
+                        ? 'INVINCIBILITÉ  •  10 SECONDES'
+                      : banner.kind === 'SECTOR'
+                        ? 'PASSAGE SECTEUR SUIVANT'
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'BOSS_SPLIT'
@@ -5855,11 +5860,12 @@ export default function GameScreen() {
                       : banner.kind === 'SPLIT'
                         ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-${ENEMY_KIND_PLURAL_LABELS[banner.enemyKind ?? 'SHIP']}`
                       : banner.kind === 'CLEAN'
-                          ? 'SÉCURISEZ 80%'
-                          : banner.kind === 'GAME_OVER'
-                            ? `SCORE FINAL  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
-                            : `+${banner.points ?? 0} POINTS`}
-              </Text>
+                            ? 'SÉCURISEZ 80%'
+                            : banner.kind === 'GAME_OVER'
+                              ? `SCORE FINAL  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
+                              : `+${banner.points ?? 0} POINTS`}
+                </Text>
+              )}
             </Animated.View>
           </View>
         )}
