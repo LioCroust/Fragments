@@ -5680,6 +5680,7 @@ export default function GameScreen() {
     const nativeHeight = snapshot.height + renderMargin * 2;
     return (
       <Svg
+        pointerEvents="none"
         style={[
           styles.nativeDynamicOverlay,
           {
