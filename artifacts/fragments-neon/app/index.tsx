@@ -3263,7 +3263,7 @@ export default function GameScreen() {
       : createBombs(width, height, cell, previousLevel);
     const respawnPlayer = {
       x: bounds.left + cell,
-      y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
+      y: bounds.top - cell * PLAYER_RADIUS_CELLS,
     };
     placeEnemiesInOpenSurface(
       enemies,
@@ -3297,7 +3297,7 @@ export default function GameScreen() {
       rows,
       player: respawnPlayer,
       inputDir: ZERO,
-      facingDir: { x: 0, y: -1 },
+       facingDir: { x: 0, y: 1 },
       hasMoveCommand: false,
       cutDir: ZERO,
       cutCoordinate: 0,
