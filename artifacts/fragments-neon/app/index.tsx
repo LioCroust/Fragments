@@ -5725,12 +5725,7 @@ export default function GameScreen() {
               ref: canvasRef,
               style: { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' },
             })
-          : (
-            <>
-              {renderNativeArena()}
-              {renderNativeDynamicArena()}
-            </>
-          )}
+          : renderNativeArena()}
         {banner && (
           <View style={styles.arcadeBannerLayer} pointerEvents="none">
             <Animated.View
@@ -5815,6 +5810,8 @@ export default function GameScreen() {
           </View>
         )}
       </View>
+
+      {renderNativeDynamicArena()}
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
@@ -5943,8 +5940,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 4,
     backgroundColor: '#000000',
-    overflow: 'visible',
-    zIndex: 2,
+    overflow: 'hidden',
   },
   debugSectorSelector: {
     position: 'absolute',
