@@ -17,13 +17,25 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
+const logStartup = (event: string, details: Record<string, unknown> = {}) => {
+  if (__DEV__) {
+    console.log(`[FragmentsNeon][startup] ${event}`, details);
+  }
+};
+
 // Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
+  console.error('[FragmentsNeon][startup] splash-screen-setup-failed', error);
+});
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   useEffect(() => {
+    logStartup('root-layout-mounted', {
+      platform: Platform.OS,
+      native: Platform.OS !== 'web',
+    });
     if (Platform.OS !== 'android') return undefined;
 
     // The game owns horizontal swipes. Consume Android's system back action
@@ -53,14 +65,27 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      if (fontError) {
+        console.error('[FragmentsNeon][startup] font-load-failed', fontError);
+      } else {
+        logStartup('fonts-loaded');
+      }
+      void SplashScreen.hideAsync().catch((error: unknown) => {
+        console.error('[FragmentsNeon][startup] splash-screen-hide-failed', error);
+      });
     }
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    void SystemUI.setBackgroundColorAsync('#000000');
-    NavigationBar.setStyle('dark');
+    void SystemUI.setBackgroundColorAsync('#000000').catch((error: unknown) => {
+      console.error('[FragmentsNeon][startup] system-ui-background-failed', error);
+    });
+    try {
+      NavigationBar.setStyle('dark');
+    } catch (error) {
+      console.error('[FragmentsNeon][startup] navigation-bar-style-failed', error);
+    }
   }, []);
 
   if (!fontsLoaded && !fontError) return null;
@@ -69,7 +94,16 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <NativeStatusBar barStyle="light-content" backgroundColor="#000000" translucent={false} />
       <NavigationBar style="dark" />
-      <ErrorBoundary>
+      <ErrorBoundary
+        onError={(error, componentStack) => {
+          console.error('[FragmentsNeon][runtime] react-error-boundary', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            componentStack,
+          });
+        }}
+      >
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
