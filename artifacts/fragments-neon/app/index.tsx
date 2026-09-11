@@ -384,8 +384,8 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
 const DIAMOND_SCORE = 750;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_SMOKE_PUFFS = 28;
-const DRAGON_NOMINAL_SPEED = 32;
-const DRAGON_ATTACK_SPEED = 78;
+const DRAGON_NOMINAL_SPEED = 28;
+const DRAGON_ATTACK_SPEED = 68;
 const dragonSpeedFor = (enemy: Enemy, attacking: boolean) => {
   const bossMultiplier = enemy.isBoss
     ? (1.16 + Math.min(0.16, (enemy.bossTier ?? 1) * 0.035)) * BOSS_SPEED_BOOST
@@ -553,7 +553,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER';
   score?: number;
   points?: number;
   level?: number;
@@ -4923,6 +4923,10 @@ export default function GameScreen() {
                   if (transitionGame.status !== 'SECTOR_TRANSITION') return;
                   transitionGame.level = nextLevel;
                   resetGame(true, true);
+                  enqueueBanner({
+                    kind: 'SECTOR_START',
+                    level: nextLevel,
+                  });
                 },
               });
               playSectorTransition();
@@ -5817,6 +5821,8 @@ export default function GameScreen() {
                       ? 'BOUCLIER ACTIVÉ'
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR SÉCURISÉ À 80%'
+                        : banner.kind === 'SECTOR_START'
+                          ? `SECTEUR ${(banner.level ?? 1).toString().padStart(2, '0')}`
                         : banner.kind === 'BOSS'
                           ? 'ALERTE BOSS'
                         : banner.kind === 'BOSS_SPLIT'
@@ -5840,6 +5846,8 @@ export default function GameScreen() {
                       ? 'INVINCIBILITÉ  •  10 SECONDES'
                     : banner.kind === 'SECTOR'
                       ? 'PASSAGE SECTEUR SUIVANT'
+                       : banner.kind === 'SECTOR_START'
+                         ? 'DÉPLOIEMENT DU DRONE'
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'BOSS_SPLIT'
