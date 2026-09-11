@@ -517,7 +517,7 @@ type Game = {
   frame: number;
   trailScoreAccumulator: number;
   initialized: boolean;
-  status: 'PLAYING' | 'FUSING' | 'RESPAWN';
+  status: 'PLAYING' | 'FUSING' | 'RESPAWN' | 'SECTOR_TRANSITION';
   respawnAt: number;
   invincibleUntil: number;
 };
@@ -559,6 +559,7 @@ type Banner = {
   level?: number;
   bossKind?: EnemyKind;
   enemyKind?: EnemyKind;
+  onComplete?: () => void;
 };
 
 type Snapshot = {
@@ -2986,6 +2987,7 @@ export default function GameScreen() {
       ]).start(({ finished }) => {
         if (!finished || bannerSequenceRef.current !== sequence) return;
         setBanner(null);
+        next.onComplete?.();
         playNextBanner();
       });
     };
@@ -3263,7 +3265,7 @@ export default function GameScreen() {
       : createBombs(width, height, cell, previousLevel);
     const respawnPlayer = {
       x: bounds.left + cell,
-      y: bounds.bottom + cell * PLAYER_RADIUS_CELLS,
+      y: bounds.top - cell * PLAYER_RADIUS_CELLS,
     };
     placeEnemiesInOpenSurface(
       enemies,
@@ -3297,7 +3299,7 @@ export default function GameScreen() {
       rows,
       player: respawnPlayer,
       inputDir: ZERO,
-      facingDir: { x: 0, y: -1 },
+      facingDir: { x: 0, y: 1 },
       hasMoveCommand: false,
       cutDir: ZERO,
       cutCoordinate: 0,
@@ -3366,6 +3368,33 @@ export default function GameScreen() {
 
     resetGame(false);
     const game = gameRef.current;
+    const savedCell = saved.cell > 0 ? saved.cell : saved.width / COLS;
+    const savedBounds = perimeterBounds(saved.width, saved.height, savedCell);
+    const emptySectorOneSave = (
+      saved.level === 1
+      && saved.score === 0
+      && saved.shields === 3
+      && saved.trail.length === 0
+      && saved.pendingCapturePolygons.length === 0
+      && saved.fillQueue.length === 0
+      && saved.capturedArea <= savedCell * savedCell * 0.1
+    );
+    const legacyBottomSpawn = (
+      saved.trail.length === 0
+      && saved.pendingCapturePolygons.length === 0
+      && saved.fillQueue.length === 0
+      && saved.capturedArea <= savedCell * savedCell * 0.1
+      && Math.abs(saved.player.x - (savedBounds.left + savedCell)) <= savedCell * 0.24
+      && Math.abs(saved.player.y - (savedBounds.bottom + savedCell * PLAYER_RADIUS_CELLS)) <= savedCell * 0.24
+    );
+    if (emptySectorOneSave || legacyBottomSpawn) {
+      game.level = Math.round(clamp(saved.level, 1, MAX_LEVEL));
+      game.score = Math.max(0, saved.score);
+      game.shields = Math.max(0, saved.shields);
+      savedGameRef.current = null;
+      resetGame(true, true);
+      return;
+    }
     const scaleX = width / Math.max(1, saved.width);
     const scaleY = height / Math.max(1, saved.height);
     const scalePoint = (point: Point): Point => ({
@@ -4804,6 +4833,8 @@ export default function GameScreen() {
         return;
       }
 
+      if (g.status === 'SECTOR_TRANSITION') return;
+
       if (g.fillQueue.length > 0) {
         const unitsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
         g.fillCursor = Math.min(g.fillQueue.length, g.fillCursor + unitsPerFrame);
@@ -4876,10 +4907,25 @@ export default function GameScreen() {
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (g.level < MAX_LEVEL && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
               const nextLevel = Math.min(MAX_LEVEL, g.level + 1);
-              enqueueBanner({ kind: 'SECTOR', level: nextLevel });
+              g.status = 'SECTOR_TRANSITION';
+              g.inputDir = ZERO;
+              g.cutDir = ZERO;
+              g.hasMoveCommand = false;
+              g.fillQueue = [];
+              g.fillCursor = 0;
+              g.pendingCapturePolygons = [];
+              g.pendingCaptureArea = 0;
+              enqueueBanner({
+                kind: 'SECTOR',
+                level: nextLevel,
+                onComplete: () => {
+                  const transitionGame = gameRef.current;
+                  if (transitionGame.status !== 'SECTOR_TRANSITION') return;
+                  transitionGame.level = nextLevel;
+                  resetGame(true, true);
+                },
+              });
               playSectorTransition();
-              g.level = nextLevel;
-              resetGame(true, true);
               return;
             }
             if (sectorHasLiveTargets(g.enemies, g.bombs)) {
