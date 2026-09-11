@@ -3510,11 +3510,6 @@ export default function GameScreen() {
       resetBoard,
       enemyCount: enemies.length,
       splitEnemyCount: enemies.filter((enemy) => enemy.splitLevel !== undefined).length,
-      miniEnemyKinds: Array.from(new Set(
-        enemies
-          .filter((enemy) => enemy.isMini)
-          .map((enemy) => enemy.kind),
-      )).join(','),
       initialSmokePuffCount: gameRef.current.smokePuffs.length,
     });
     setHud({
