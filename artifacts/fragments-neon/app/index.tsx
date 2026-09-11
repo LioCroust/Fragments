@@ -5655,21 +5655,8 @@ export default function GameScreen() {
   const renderNativeArena = () => {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
-    const renderMargin = Math.max(24, snapshot.cell * 2.1);
-    const nativeWidth = snapshot.width + renderMargin * 2;
-    const nativeHeight = snapshot.height + renderMargin * 2;
     return (
-      <Svg
-        style={{
-          position: 'absolute',
-          left: -renderMargin,
-          top: -renderMargin,
-          width: nativeWidth,
-          height: nativeHeight,
-          overflow: 'visible',
-        }}
-        viewBox={`${-renderMargin} ${-renderMargin} ${nativeWidth} ${nativeHeight}`}
-      >
+      <Svg style={StyleSheet.absoluteFill} viewBox={`0 0 ${snapshot.width} ${snapshot.height}`}>
         <NativeArenaStatic
           width={snapshot.width}
           height={snapshot.height}
@@ -5681,6 +5668,29 @@ export default function GameScreen() {
           claimedCount={snapshot.claimedPolygons.length}
           protectedTrailCount={snapshot.protectedTrails.length}
         />
+      </Svg>
+    );
+  };
+
+  const renderNativeDynamicArena = () => {
+    if (Platform.OS === 'web' || !nativeSnapshot) return null;
+    const snapshot = nativeSnapshot;
+    const renderMargin = Math.max(28, snapshot.cell * 2.4);
+    const nativeWidth = snapshot.width + renderMargin * 2;
+    const nativeHeight = snapshot.height + renderMargin * 2;
+    return (
+      <Svg
+        style={[
+          styles.nativeDynamicOverlay,
+          {
+            left: -renderMargin,
+            top: 174 - renderMargin,
+            width: nativeWidth,
+            height: nativeHeight,
+          },
+        ]}
+        viewBox={`${-renderMargin} ${-renderMargin} ${nativeWidth} ${nativeHeight}`}
+      >
         {snapshot.trail.length > 1 && (
           <Polyline
             points={pointsToString(snapshot.trail)}
@@ -5807,6 +5817,8 @@ export default function GameScreen() {
           </View>
         )}
       </View>
+
+      {renderNativeDynamicArena()}
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
@@ -5935,6 +5947,12 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 4,
     backgroundColor: '#000000',
+    overflow: 'visible',
+  },
+  nativeDynamicOverlay: {
+    position: 'absolute',
+    zIndex: 1,
+    elevation: 1,
     overflow: 'visible',
   },
   debugSectorSelector: {
