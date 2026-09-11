@@ -3297,7 +3297,7 @@ export default function GameScreen() {
       rows,
       player: respawnPlayer,
       inputDir: ZERO,
-       facingDir: { x: 0, y: 1 },
+      facingDir: { x: 0, y: 1 },
       hasMoveCommand: false,
       cutDir: ZERO,
       cutCoordinate: 0,
