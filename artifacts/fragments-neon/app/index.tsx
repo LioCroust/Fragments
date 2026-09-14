@@ -1615,9 +1615,9 @@ type CutSparkSegment = {
   width: number;
 };
 
-// Keep the attractive fan of molten sparks without allocating dozens of
-// short-lived particle objects every frame. Three deterministic segments are
-// enough to preserve the look while keeping both Canvas and native SVG light.
+// Keep a visible fan of molten sparks without allocating dozens of short-lived
+// particle objects every frame. The sparks begin just behind the cutting
+// sprite so they remain visible instead of being hidden underneath its atlas.
 const cutSparkSegments = (
   player: Point,
   direction: Direction,
@@ -1628,17 +1628,17 @@ const cutSparkSegments = (
   const point = cuttingPoint(player, direction, cell);
   const backward = { x: -direction.x, y: -direction.y };
   const normal = { x: -direction.y, y: direction.x };
-  const colors = ['#fff35c', '#ff8a00', '#ffffff'];
+  const colors = ['#ffffff', '#fff35c', '#ffb02e', '#ff8a00', '#ffffff'];
 
-  return Array.from({ length: 3 }, (_, index) => {
-    const phase = frame * 0.22 + index * 2.1;
-    const travel = 0.16 + (Math.sin(phase) * 0.5 + 0.5) * 0.28;
-    const lateral = Math.sin(phase * 1.17) * 0.22;
+  return Array.from({ length: 5 }, (_, index) => {
+    const phase = frame * 0.22 + index * 1.25;
+    const travel = 0.7 + (Math.sin(phase) * 0.5 + 0.5) * 0.34;
+    const lateral = Math.sin(phase * 1.17) * 0.28;
     const start = {
       x: point.x + backward.x * cell * travel + normal.x * cell * lateral,
       y: point.y + backward.y * cell * travel + normal.y * cell * lateral,
     };
-    const length = 0.12 + (Math.cos(phase * 0.83) * 0.5 + 0.5) * 0.18;
+    const length = 0.16 + (Math.cos(phase * 0.83) * 0.5 + 0.5) * 0.24;
     const end = {
       x: start.x + backward.x * cell * length + normal.x * cell * lateral * 0.35,
       y: start.y + backward.y * cell * length + normal.y * cell * lateral * 0.35,
@@ -1647,8 +1647,8 @@ const cutSparkSegments = (
       start,
       end,
       color: colors[index],
-      opacity: 0.38 + (Math.sin(phase * 1.4) * 0.5 + 0.5) * 0.42,
-      width: cell * (0.018 + index * 0.006),
+      opacity: 0.56 + (Math.sin(phase * 1.4) * 0.5 + 0.5) * 0.4,
+      width: cell * (0.028 + (index % 3) * 0.008),
     };
   });
 };
