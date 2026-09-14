@@ -25,16 +25,14 @@ import Svg, {
   Rect,
 } from 'react-native-svg';
 import {
-  Canvas as SkiaCanvas,
   Group as SkiaGroup,
   Image as SkiaImage,
-  Picture as SkiaPicture,
   Skia,
   PaintStyle as SkiaPaintStyle,
   StrokeCap as SkiaStrokeCap,
+  SkiaPictureView,
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
-import { useSharedValue } from 'react-native-reanimated';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
