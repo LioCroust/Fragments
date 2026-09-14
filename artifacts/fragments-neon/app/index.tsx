@@ -3681,8 +3681,15 @@ export default function GameScreen() {
     image.decoding = 'async';
     const promise = new Promise<void>((resolve, reject) => {
       image.onload = () => {
-        webAssetImageRefs.current[uri] = image;
-        resolve();
+        const finish = () => {
+          webAssetImageRefs.current[uri] = image;
+          resolve();
+        };
+        if (typeof image.decode === 'function') {
+          void image.decode().then(finish).catch(finish);
+        } else {
+          finish();
+        }
       };
       image.onerror = () => {
         reject(new Error(`Unable to preload web image asset: ${uri}`));
@@ -3691,6 +3698,23 @@ export default function GameScreen() {
     webAssetLoadPromisesRef.current[uri] = promise;
     image.src = uri;
     return promise;
+  }, []);
+
+  const loadNativeImageAsset = useCallback((assetModule: any) => {
+    if (Platform.OS === 'web') return Promise.resolve();
+    const resolvedAsset = (RNImage as any).resolveAssetSource?.(assetModule);
+    const uri = String(resolvedAsset?.uri ?? assetModule?.uri ?? assetModule);
+    const prefetch = typeof (RNImage as any).prefetch === 'function'
+      ? (RNImage as any).prefetch(uri).catch(() => false)
+      : Promise.resolve(false);
+    const dimensions = new Promise<void>((resolve, reject) => {
+      RNImage.getSize(
+        uri,
+        () => resolve(),
+        () => reject(new Error(`Unable to preload native image asset: ${uri}`)),
+      );
+    });
+    return Promise.all([prefetch, dimensions]).then(() => undefined);
   }, []);
 
   const preloadAllGameAssets = useCallback(() => {
@@ -3713,15 +3737,7 @@ export default function GameScreen() {
       allGameAssetsPromiseRef.current = Promise.allSettled(
         uniqueAssetModules.map((assetModule) => {
           if (Platform.OS === 'web') return loadWebImageAsset(assetModule);
-          const resolved = (RNImage as any).resolveAssetSource?.(assetModule);
-          const uri = resolved?.uri ?? assetModule?.uri ?? assetModule;
-          return new Promise<void>((resolve, reject) => {
-            RNImage.getSize(
-              uri,
-              () => resolve(),
-              () => reject(new Error(`Unable to preload image asset: ${uri}`)),
-            );
-          });
+          return loadNativeImageAsset(assetModule);
         }),
       ).then((results) => {
         const failedCount = results.filter((result) => result.status === 'rejected').length;
@@ -3732,16 +3748,25 @@ export default function GameScreen() {
       });
     }
     return allGameAssetsPromiseRef.current;
-  }, [loadWebImageAsset]);
+  }, [loadNativeImageAsset, loadWebImageAsset]);
 
   const loadWebBackground = useCallback((level: number) => {
-    if (Platform.OS !== 'web') return Promise.resolve();
     const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
     if (sectorBackgroundImageRefs.current[normalizedLevel]) return Promise.resolve();
     const existingPromise = sectorBackgroundLoadPromisesRef.current[normalizedLevel];
     if (existingPromise) return existingPromise;
 
     const source = backgroundSourceForLevel(normalizedLevel);
+    if (Platform.OS !== 'web') {
+      const promise = loadNativeImageAsset(source).catch((error: unknown) => {
+        diagnosticLog('sector-background-preload-failed', {
+          level: normalizedLevel,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+      sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
+      return promise;
+    }
     const resolvedBackground = (RNImage as any).resolveAssetSource?.(source);
     const backgroundUri = String(resolvedBackground?.uri ?? source);
     const promise = loadWebImageAsset(source)
@@ -3756,7 +3781,7 @@ export default function GameScreen() {
       });
     sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
     return promise;
-  }, [loadWebImageAsset]);
+  }, [loadNativeImageAsset, loadWebImageAsset]);
 
   const preloadBackgroundWindow = useCallback((
     startLevel: number,
@@ -6344,7 +6369,8 @@ export default function GameScreen() {
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, g.width, g.height);
       context.globalAlpha = 1;
-      const background = sectorBackgroundImageRefs.current[g.level];
+      const backgroundLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(g.level)));
+      const background = sectorBackgroundImageRefs.current[backgroundLevel];
       if (background) {
         const sourceWidth = background.naturalWidth || background.width;
         const sourceHeight = background.naturalHeight || background.height;
