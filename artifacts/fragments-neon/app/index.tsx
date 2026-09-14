@@ -63,9 +63,7 @@ const TUTORIAL_SWIPE_REPETITIONS = 2;
 // Keep the sector strip and tutorial controls available in the APK as well as
 // during development. They are part of the game's tutorial/navigation UI.
 const DEBUG_SECTOR_SELECTOR_ENABLED = true;
-// The picture-as-shared-value path is disabled until it is validated against
-// the current Expo Go/Reanimated recorder. The SVG native fallback is stable.
-const SKIA_DYNAMIC_RENDER_ENABLED = false;
+const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS = 33;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
