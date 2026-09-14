@@ -28,8 +28,13 @@ import {
   Canvas as SkiaCanvas,
   Group as SkiaGroup,
   Image as SkiaImage,
+  Picture as SkiaPicture,
+  Skia,
+  PaintStyle as SkiaPaintStyle,
+  StrokeCap as SkiaStrokeCap,
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
+import { useSharedValue } from 'react-native-reanimated';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -77,6 +82,15 @@ const diagnosticLog = (event: string, details: Record<string, unknown> = {}) => 
   if (__DEV__) {
     console.log(`[Fragments][diagnostic] ${event}`, details);
   }
+};
+type PerformanceMetrics = {
+  frames: number;
+  updateMs: number;
+  collisionMs: number;
+  renderMs: number;
+  nativeBuildMs: number;
+  particleCount: number;
+  peakParticles: number;
 };
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
@@ -2804,38 +2818,471 @@ const NativeArenaStatic = React.memo(({
 type SkiaDynamicArenaProps = {
   snapshot: Snapshot;
   renderMargin: number;
-  renderShip: boolean;
+  publisherRef: React.MutableRefObject<NativePicturePublisher | null>;
   onReady: () => void;
+};
+
+type NativeSkiaImageSet = {
+  player: any;
+  diamond: any;
+  speedBoost: any;
+  coreReactor: any;
+  projectile: any;
+  missile: any;
+  spiderWeb: any;
+  shipSmoke: any;
+  enemies: Record<EnemyKind, any[]>;
+};
+
+type NativePicturePublisher = (game: Game, now: number) => void;
+
+const drawSkiaSpriteFrame = (
+  canvas: any,
+  image: any,
+  sourceWidth: number,
+  sourceHeight: number,
+  frame: number,
+  destination: { x: number; y: number; width: number; height: number },
+  paint: any,
+) => {
+  if (!image) return;
+  canvas.drawImageRect(
+    image,
+    Skia.XYWHRect(frame * sourceWidth, 0, sourceWidth, sourceHeight),
+    Skia.XYWHRect(
+      destination.x,
+      destination.y,
+      destination.width,
+      destination.height,
+    ),
+    paint,
+  );
+};
+
+const drawSkiaPolyline = (
+  canvas: any,
+  points: Point[],
+  paint: any,
+  close = false,
+) => {
+  if (points.length < 2) return;
+  const path = Skia.Path.Make();
+  path.moveTo(points[0].x, points[0].y);
+  for (let index = 1; index < points.length; index += 1) {
+    path.lineTo(points[index].x, points[index].y);
+  }
+  if (close) path.close();
+  canvas.drawPath(path, paint);
+};
+
+const buildNativeDynamicPicture = (
+  game: Game,
+  now: number,
+  renderMargin: number,
+  images: NativeSkiaImageSet,
+) => {
+  const recorder = Skia.PictureRecorder();
+  const canvas = recorder.beginRecording(
+    Skia.XYWHRect(
+      -renderMargin,
+      -renderMargin,
+      game.width + renderMargin * 2,
+      game.height + renderMargin * 2,
+    ),
+  );
+  const fillPaint = Skia.Paint();
+  const strokePaint = Skia.Paint();
+  const imagePaint = Skia.Paint();
+  fillPaint.setStyle(SkiaPaintStyle.Fill);
+  strokePaint.setStyle(SkiaPaintStyle.Stroke);
+  strokePaint.setStrokeCap(SkiaStrokeCap.Round);
+  imagePaint.setAntiAlias(true);
+  canvas.save();
+  canvas.translate(renderMargin, renderMargin);
+
+  const setPaint = (
+    paint: any,
+    color: string,
+    alpha = 1,
+    style = SkiaPaintStyle.Fill,
+    strokeWidth = 1,
+  ) => {
+    paint.setColor(Skia.Color(color));
+    paint.setAlphaf(alpha);
+    paint.setStyle(style);
+    if (style === SkiaPaintStyle.Stroke) paint.setStrokeWidth(strokeWidth);
+  };
+
+  const bounds = perimeterBounds(game.width, game.height, game.cell);
+  const pickupSize = pickupVisualSize(game.cell);
+
+  if (game.trail.length > 1) {
+    setPaint(strokePaint, '#fff3d6', 0.16, SkiaPaintStyle.Stroke, 12);
+    drawSkiaPolyline(canvas, game.trail, strokePaint);
+    setPaint(strokePaint, '#ffffff', 1, SkiaPaintStyle.Stroke, 5);
+    drawSkiaPolyline(canvas, game.trail, strokePaint);
+  }
+
+  const diamondFrame = Math.floor(game.frame / DIAMOND_SPRITE_FRAME_DURATION)
+    % DIAMOND_SPRITE_FRAME_COUNT;
+  for (const diamond of game.diamonds) {
+    if (diamond.collected || !images.diamond) continue;
+    const size = pickupSize;
+    drawSkiaSpriteFrame(
+      canvas,
+      images.diamond,
+      DIAMOND_SPRITE_FRAME_SIZE,
+      DIAMOND_SPRITE_FRAME_SIZE,
+      diamondFrame,
+      {
+        x: diamond.x - size / 2,
+        y: diamond.y + pickupFloatOffset(game.frame, diamond.phase, game.cell) - size / 2,
+        width: size,
+        height: size,
+      },
+      imagePaint,
+    );
+  }
+
+  const speedSize = pickupSize * 0.92;
+  for (const speedBoost of game.speedBoosts) {
+    if (speedBoost.collected || !images.speedBoost) continue;
+    canvas.drawImage(
+      images.speedBoost,
+      speedBoost.x - speedSize / 2,
+      speedBoost.y + pickupFloatOffset(game.frame, speedBoost.phase, game.cell) - speedSize / 2,
+      imagePaint,
+    );
+  }
+
+  if (images.coreReactor) {
+    const bombFrame = Math.floor(game.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
+      % CORE_REACTOR_SPRITE_FRAME_COUNT;
+    for (const bomb of game.bombs) {
+      if (bomb.destroyed) continue;
+      const floatY = pickupFloatOffset(
+        game.frame,
+        bomb.x * 0.013 + bomb.y * 0.007,
+        game.cell,
+      );
+      drawSkiaSpriteFrame(
+        canvas,
+        images.coreReactor,
+        CORE_REACTOR_SPRITE_FRAME_SIZE,
+        CORE_REACTOR_SPRITE_FRAME_SIZE,
+        bombFrame,
+        {
+          x: bomb.x - pickupSize / 2,
+          y: bomb.y + floatY - pickupSize / 2,
+          width: pickupSize,
+          height: pickupSize,
+        },
+        imagePaint,
+      );
+    }
+  }
+
+  for (const thread of game.spiderThreads) {
+    const active = spiderThreadIsActive(thread);
+    if (thread.anchored && images.spiderWeb) {
+      const size = game.cell * thread.webSizeCells * NON_PLAYER_RENDER_SCALE;
+      imagePaint.setAlphaf(clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88));
+      canvas.drawImage(
+        images.spiderWeb,
+        thread.target.x - size / 2,
+        thread.target.y - size / 2,
+        imagePaint,
+      );
+    } else {
+      setPaint(strokePaint, '#fff3d6', active ? 0.82 : 0.94, SkiaPaintStyle.Stroke, 2.8);
+      canvas.drawLine(thread.start.x, thread.start.y, thread.end.x, thread.end.y, strokePaint);
+      setPaint(strokePaint, '#00f3ff', active ? 0.9 : 0.72, SkiaPaintStyle.Stroke, 0.72);
+      canvas.drawLine(thread.start.x, thread.start.y, thread.end.x, thread.end.y, strokePaint);
+      setPaint(fillPaint, '#fff3d6', active ? 0.9 : 0.72);
+      canvas.drawCircle(thread.end.x, thread.end.y, 3.2, fillPaint);
+    }
+  }
+
+  for (const particle of game.particles) {
+    const opacity = clamp(particle.life / 0.4, 0, 1);
+    if (particle.streak) {
+      setPaint(strokePaint, particle.color, opacity, SkiaPaintStyle.Stroke, particle.size * 1.35);
+      canvas.drawLine(
+        particle.x,
+        particle.y,
+        particle.x - particle.vx * 0.018,
+        particle.y - particle.vy * 0.018,
+        strokePaint,
+      );
+    } else {
+      setPaint(fillPaint, particle.color, opacity);
+      canvas.drawCircle(particle.x, particle.y, particle.size, fillPaint);
+    }
+  }
+
+  if (game.fusion) {
+    const head = pointOnPolyline(
+      game.fusion.path,
+      game.fusion.cumulativeLengths,
+      game.fusion.totalLength * clamp(
+        game.fusion.elapsed / game.fusion.travelDuration,
+        0,
+        1,
+      ),
+    ).point;
+    setPaint(fillPaint, '#ff6a16', 0.28);
+    canvas.drawCircle(head.x, head.y, game.cell * 0.23, fillPaint);
+    setPaint(fillPaint, '#fff5bd', 0.92);
+    canvas.drawCircle(head.x, head.y, game.cell * 0.1, fillPaint);
+  }
+
+  for (const spark of game.fusionSparks) {
+    const opacity = clamp(spark.life / spark.maxLife, 0, 1);
+    setPaint(
+      spark.streak ? strokePaint : fillPaint,
+      spark.color,
+      opacity,
+      spark.streak ? SkiaPaintStyle.Stroke : SkiaPaintStyle.Fill,
+      spark.size,
+    );
+    if (spark.streak) {
+      canvas.drawLine(spark.previousX, spark.previousY, spark.x, spark.y, strokePaint);
+    } else {
+      canvas.drawCircle(spark.x, spark.y, spark.size, fillPaint);
+    }
+  }
+
+  if (images.projectile) {
+    const projectileSize = sevenProjectileSize(game.cell);
+    for (const projectile of game.projectiles) {
+      canvas.drawImage(
+        images.projectile,
+        projectile.x - projectileSize / 2,
+        projectile.y - projectileSize / 2,
+        imagePaint,
+      );
+    }
+  }
+
+  if (images.missile) {
+    const missileSize = playerMissileSize(game.cell);
+    for (const missile of game.missiles) {
+      if (!pointInsidePerimeter(missile, bounds)) continue;
+      canvas.save();
+      canvas.translate(missile.x, missile.y);
+      canvas.rotate(missile.angle * 180 / Math.PI, 0, 0);
+      canvas.drawImage(
+        images.missile,
+        -missileSize / 2,
+        -missileSize / 2,
+        imagePaint,
+      );
+      canvas.restore();
+    }
+  }
+
+  if (SHIP_SMOKE_RENDER_MODE === 'SPRITE' && images.shipSmoke) {
+    const smokeFrame = Math.floor(game.frame / SHIP_SMOKE_SPRITE_FRAME_DURATION)
+      % SHIP_SMOKE_SPRITE_FRAME_COUNT;
+    for (const enemy of game.enemies) {
+      if (enemy.kind !== 'SHIP' || enemy.respawnAt > now) continue;
+      const smokePosition = shipSmokePosition(enemy, game.cell);
+      const motion = enemyAnimationTransform(enemy, game.cell);
+      const smokeSize = game.cell
+        * (enemy.isMini ? 0.9 : 1.8)
+        * NON_PLAYER_RENDER_SCALE;
+      imagePaint.setAlphaf(0.58);
+      canvas.save();
+      canvas.translate(smokePosition.x, smokePosition.y + motion.offsetY);
+      canvas.rotate(motion.rotation * 180 / Math.PI, 0, 0);
+      drawSkiaSpriteFrame(
+        canvas,
+        images.shipSmoke,
+        SHIP_SMOKE_SPRITE_FRAME_SIZE,
+        SHIP_SMOKE_SPRITE_FRAME_SIZE,
+        smokeFrame,
+        {
+          x: -smokeSize / 2,
+          y: -smokeSize / 2,
+          width: smokeSize,
+          height: smokeSize,
+        },
+        imagePaint,
+      );
+      canvas.restore();
+    }
+  }
+
+  for (const enemy of game.enemies) {
+    if (enemy.respawnAt > now) continue;
+    const frame = enemyFrameIndex(enemy);
+    const image = images.enemies[enemy.kind]?.[frame];
+    if (!image) continue;
+    const size = enemyRenderSize(enemy.kind, game.cell, enemy.isMini);
+    const motion = enemyAnimationTransform(enemy, game.cell);
+    canvas.save();
+    canvas.translate(enemy.x, enemy.y + motion.offsetY);
+    canvas.rotate(motion.rotation * 180 / Math.PI, 0, 0);
+    canvas.scale(motion.scale, motion.scale);
+    imagePaint.setAlphaf(0.98);
+    canvas.drawImage(image, -size.width / 2, -size.height / 2, imagePaint);
+    canvas.restore();
+  }
+
+  for (const polygon of game.pendingCapturePolygons) {
+    const intervals = polygonHorizontalIntervals(polygon, game.scanY);
+    for (const [startX, endX] of intervals) {
+      setPaint(strokePaint, '#ffffff', 0.2, SkiaPaintStyle.Stroke, 8);
+      canvas.drawLine(startX, game.scanY, endX, game.scanY, strokePaint);
+      setPaint(strokePaint, '#ffffff', 0.98, SkiaPaintStyle.Stroke, 2);
+      canvas.drawLine(startX, game.scanY, endX, game.scanY, strokePaint);
+    }
+  }
+
+  if (isParticleSmokeMode(SHIP_SMOKE_RENDER_MODE)) {
+    for (const puff of game.smokePuffs) {
+      const opacity = clamp(puff.life / puff.maxLife, 0, 1) * 0.22;
+      setPaint(fillPaint, '#00f3ff', opacity);
+      canvas.drawCircle(puff.x, puff.y, puff.size, fillPaint);
+      setPaint(fillPaint, '#ffffff', opacity * 0.55);
+      canvas.drawCircle(puff.x, puff.y, puff.size * 0.42, fillPaint);
+    }
+  }
+
+  const invincibilityRemaining = Math.max(0, game.invincibleUntil - now);
+  if (invincibilityRemaining > 0) {
+    const protectionPulse = clamp(
+      0.5
+        + Math.sin(now * 0.014) * 0.24
+        + Math.sin(now * 0.041) * 0.15
+        + Math.sin(now * 0.083) * 0.1,
+      0,
+      1,
+    );
+    setPaint(
+      strokePaint,
+      '#00f3ff',
+      0.1 + protectionPulse * 0.22,
+      SkiaPaintStyle.Stroke,
+      game.cell * 0.065,
+    );
+    canvas.drawCircle(game.player.x, game.player.y, game.cell * (0.92 + protectionPulse * 0.12), strokePaint);
+    setPaint(fillPaint, '#00f3ff', 0.015 + protectionPulse * 0.045);
+    canvas.drawCircle(game.player.x, game.player.y, game.cell * (0.62 + protectionPulse * 0.08), fillPaint);
+    setPaint(
+      strokePaint,
+      '#fff5cf',
+      0.06 + protectionPulse * 0.16,
+      SkiaPaintStyle.Stroke,
+      game.cell * 0.02,
+    );
+    canvas.drawCircle(game.player.x, game.player.y, game.cell * 1.16, strokePaint);
+  }
+
+  const currentDirection = game.trail.length > 0 ? game.cutDir : game.facingDir;
+  const playerSize = playerSpriteSize(game.cell);
+  if (images.player) {
+    canvas.save();
+    canvas.translate(game.player.x, game.player.y);
+    canvas.rotate(
+      (Math.atan2(currentDirection.y, currentDirection.x) + Math.PI / 2) * 180 / Math.PI,
+      0,
+      0,
+    );
+    imagePaint.setAlphaf(0.98);
+    canvas.drawImage(
+      images.player,
+      -playerSize.width / 2,
+      -playerSize.height / 2,
+      imagePaint,
+    );
+    canvas.restore();
+  }
+
+  canvas.restore();
+  return recorder.finishRecordingAsPicture();
 };
 
 const SkiaDynamicArena = React.memo(({
   snapshot,
   renderMargin,
-  renderShip,
+  publisherRef,
   onReady,
 }: SkiaDynamicArenaProps) => {
   const playerImage = useSkiaImage(playerSource);
-  const shipImage = useSkiaImage(spriteFrames.SHIP[0]);
+  const diamondImage = useSkiaImage(diamondSpriteSource);
+  const speedBoostImage = useSkiaImage(speedBoostSource);
+  const coreReactorImage = useSkiaImage(coreReactorSpriteSource);
+  const projectileImage = useSkiaImage(sevenFireOrbSource);
+  const missileImage = useSkiaImage(playerMissileSource);
+  const spiderWebImage = useSkiaImage(spiderWebSource);
+  const shipSmokeImage = useSkiaImage(shipSmokeSpriteSource);
+  const shipImages = spriteFrames.SHIP.map((source) => useSkiaImage(source));
+  const dragonImages = spriteFrames.DRAGON.map((source) => useSkiaImage(source));
+  const sevenImages = spriteFrames.SEVEN.map((source) => useSkiaImage(source));
+  const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
+  const picture = useSharedValue<any>(null);
 
   useEffect(() => {
-    if (playerImage && shipImage) onReady();
-  }, [onReady, playerImage, shipImage]);
+    const imageSet: NativeSkiaImageSet = {
+      player: playerImage,
+      diamond: diamondImage,
+      speedBoost: speedBoostImage,
+      coreReactor: coreReactorImage,
+      projectile: projectileImage,
+      missile: missileImage,
+      spiderWeb: spiderWebImage,
+      shipSmoke: shipSmokeImage,
+      enemies: {
+        SHIP: shipImages,
+        DRAGON: dragonImages,
+        SEVEN: sevenImages,
+        SPIDER: spiderImages,
+      },
+    };
+    const allImagesReady = [
+      playerImage,
+      diamondImage,
+      speedBoostImage,
+      coreReactorImage,
+      projectileImage,
+      missileImage,
+      spiderWebImage,
+      shipSmokeImage,
+      ...shipImages,
+      ...dragonImages,
+      ...sevenImages,
+      ...spiderImages,
+    ].every(Boolean);
+    if (!allImagesReady) return undefined;
+    const publisher: NativePicturePublisher = (game, now) => {
+      picture.value = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
+    };
+    publisherRef.current = publisher;
+    onReady();
+    return () => {
+      if (publisherRef.current === publisher) publisherRef.current = null;
+    };
+  }, [
+    renderMargin,
+    publisherRef,
+    onReady,
+    playerImage,
+    diamondImage,
+    speedBoostImage,
+    coreReactorImage,
+    projectileImage,
+    missileImage,
+    spiderWebImage,
+    shipSmokeImage,
+    shipImages,
+    dragonImages,
+    sevenImages,
+    spiderImages,
+    picture,
+  ]);
 
-  if (!playerImage || !shipImage) return null;
-
-  const playerSize = playerSpriteSize(snapshot.cell);
-  const playerX = snapshot.player.x + renderMargin;
-  const playerY = snapshot.player.y + renderMargin;
-  const playerAngle = Math.atan2(snapshot.direction.y, snapshot.direction.x) + Math.PI / 2;
-  const liveShip = snapshot.enemies.find((enemy) => (
-    enemy.kind === 'SHIP'
-    && !enemyIsDestroyed(enemy)
-    && enemy.respawnAt <= Date.now()
-  ));
-  const shipMotion = liveShip ? enemyAnimationTransform(liveShip, snapshot.cell) : null;
-  const shipSize = liveShip
-    ? enemyRenderSize(liveShip.kind, snapshot.cell, liveShip.isMini)
-    : enemyRenderSize('SHIP', snapshot.cell);
+  if (!snapshot || !picture) return null;
 
   return (
     <SkiaCanvas
@@ -2850,35 +3297,7 @@ const SkiaDynamicArena = React.memo(({
       ]}
       pointerEvents="none"
     >
-      <SkiaGroup
-        transform={[{ rotate: playerAngle }]}
-        origin={{ x: playerX, y: playerY }}
-      >
-        <SkiaImage
-          image={playerImage}
-          x={playerX - playerSize.width / 2}
-          y={playerY - playerSize.height / 2}
-          width={playerSize.width}
-          height={playerSize.height}
-        />
-      </SkiaGroup>
-      {renderShip && liveShip && shipMotion && (
-        <SkiaGroup
-          transform={[{ rotate: shipMotion.rotation }]}
-          origin={{
-            x: liveShip.x + renderMargin,
-            y: liveShip.y + shipMotion.offsetY + renderMargin,
-          }}
-        >
-          <SkiaImage
-            image={shipImage}
-            x={liveShip.x + renderMargin - shipSize.width / 2}
-            y={liveShip.y + shipMotion.offsetY + renderMargin - shipSize.height / 2}
-            width={shipSize.width}
-            height={shipSize.height}
-          />
-        </SkiaGroup>
-      )}
+      <SkiaPicture picture={picture as any} />
     </SkiaCanvas>
   );
 });
@@ -3359,6 +3778,20 @@ export default function GameScreen() {
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
+  const performanceMetricsRef = useRef<PerformanceMetrics>({
+    frames: 0,
+    updateMs: 0,
+    collisionMs: 0,
+    renderMs: 0,
+    nativeBuildMs: 0,
+    particleCount: 0,
+    peakParticles: 0,
+  });
+  const lastPerformanceReportAtRef = useRef(0);
+  const nativeSnapshotRef = useRef<Snapshot | null>(null);
+  const nativePicturePublisherRef = useRef<NativePicturePublisher | null>(null);
+  const lastNativeStaticPublishAtRef = useRef(0);
+  const lastHudPublishAtRef = useRef(0);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
   const sevenFireOrbImageRef = useRef<any>(null);
@@ -6035,10 +6468,15 @@ export default function GameScreen() {
       if (g.fillQueue.length > 0) {
         const unitsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
         g.fillCursor = Math.min(g.fillQueue.length, g.fillCursor + unitsPerFrame);
-        const pendingPoints = g.pendingCapturePolygons.flat();
-        if (pendingPoints.length > 0) {
-          const minY = Math.min(...pendingPoints.map((point) => point.y));
-          const maxY = Math.max(...pendingPoints.map((point) => point.y));
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (const polygon of g.pendingCapturePolygons) {
+          for (const point of polygon) {
+            if (point.y < minY) minY = point.y;
+            if (point.y > maxY) maxY = point.y;
+          }
+        }
+        if (Number.isFinite(minY) && Number.isFinite(maxY)) {
           const progress = g.fillCursor / Math.max(1, g.fillQueue.length);
           g.scanY = minY + (maxY - minY) * progress;
         }
@@ -6234,6 +6672,12 @@ export default function GameScreen() {
         return;
       }
 
+      const collisionStartedAt = __DEV__ ? performance.now() : 0;
+      const recordCollisionTime = () => {
+        if (collisionStartedAt > 0) {
+          performanceMetricsRef.current.collisionMs += performance.now() - collisionStartedAt;
+        }
+      };
       const direction = g.trail.length > 0
         ? g.cutDir
         : (g.inputDir.x !== 0 || g.inputDir.y !== 0)
@@ -6247,37 +6691,38 @@ export default function GameScreen() {
       const baseDistance = baseSpeed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
         const steps = Math.max(1, Math.ceil(baseDistance));
+        const movementBounds = perimeterBounds(g.width, g.height, g.cell);
+        const movementOuterBounds = playerOuterBounds(movementBounds, g.cell);
+        const movementBodyRadius = playerBodyRadius(g.cell);
+        const previous = { x: g.player.x, y: g.player.y };
 
         for (let i = 0; i < steps; i += 1) {
-          const bounds = perimeterBounds(g.width, g.height, g.cell);
-          const previous = { ...g.player };
+          previous.x = g.player.x;
+          previous.y = g.player.y;
           const activeTrail = g.trail.length > 0;
           const probe = {
             x: g.player.x + direction.x * (baseDistance / steps),
             y: g.player.y + direction.y * (baseDistance / steps),
           };
-          const caughtInSpiderWeb = g.spiderThreads.some((thread) => (
-            spiderThreadIsActive(thread)
-            && (
-              thread.anchored
-                ? Math.hypot(probe.x - thread.target.x, probe.y - thread.target.y)
-                  <= playerBodyRadius(g.cell) + g.cell * thread.webRadiusCells
-                : distanceBetweenSegments(
-                  g.player,
-                  probe,
-                  thread.start,
-                  thread.end,
-                ) <= playerBodyRadius(g.cell) + g.cell * 0.12
-            )
-          ));
+          let caughtInSpiderWeb = false;
+          let spiderSlowFactor = 0.25;
+          for (const thread of g.spiderThreads) {
+            if (!spiderThreadIsActive(thread)) continue;
+            const touchesThread = thread.anchored
+              ? Math.hypot(probe.x - thread.target.x, probe.y - thread.target.y)
+                <= movementBodyRadius + g.cell * thread.webRadiusCells
+              : distanceBetweenSegments(
+                g.player,
+                probe,
+                thread.start,
+                thread.end,
+              ) <= movementBodyRadius + g.cell * 0.12;
+            if (!touchesThread) continue;
+            caughtInSpiderWeb = true;
+            if (thread.anchored) spiderSlowFactor = thread.slowFactor;
+          }
           const movementDistance = (
-            (caughtInSpiderWeb ? baseSpeed * (
-              g.spiderThreads.find((thread) => spiderThreadIsActive(thread)
-                && thread.anchored
-                && Math.hypot(probe.x - thread.target.x, probe.y - thread.target.y)
-                  <= playerBodyRadius(g.cell) + g.cell * thread.webRadiusCells
-              )?.slowFactor ?? 0.25
-            ) : baseSpeed) * dt
+            (caughtInSpiderWeb ? baseSpeed * spiderSlowFactor : baseSpeed) * dt
           ) / steps;
           const stepX = direction.x * movementDistance;
           const stepY = direction.y * movementDistance;
@@ -6292,13 +6737,13 @@ export default function GameScreen() {
           }
 
           const reachedPerimeter = activeTrail && (
-            (direction.x < 0 && next.x <= bounds.left)
-            || (direction.x > 0 && next.x >= bounds.right)
-            || (direction.y < 0 && next.y <= bounds.top)
-            || (direction.y > 0 && next.y >= bounds.bottom)
+            (direction.x < 0 && next.x <= movementBounds.left)
+            || (direction.x > 0 && next.x >= movementBounds.right)
+            || (direction.y < 0 && next.y <= movementBounds.top)
+            || (direction.y > 0 && next.y >= movementBounds.bottom)
           );
           if (reachedPerimeter) {
-            const contact = perimeterContact(next, direction, bounds);
+            const contact = perimeterContact(next, direction, movementBounds);
             g.player = contact;
             if (g.trail.length > 2) {
               g.trail.push(contact);
@@ -6308,7 +6753,7 @@ export default function GameScreen() {
               g.player = playerPerimeterSafetyPoint(
                 g.player,
                 direction,
-                bounds,
+                movementBounds,
                 g.cell,
               );
               g.facingDir = direction;
@@ -6321,9 +6766,8 @@ export default function GameScreen() {
 
           // Keep the outer playable band narrow: the drone can stop only a
           // few pixels outside the blue perimeter, never at the phone edge.
-          const outerBounds = playerOuterBounds(bounds, g.cell);
-          next.x = clamp(next.x, outerBounds.left, outerBounds.right);
-          next.y = clamp(next.y, outerBounds.top, outerBounds.bottom);
+          next.x = clamp(next.x, movementOuterBounds.left, movementOuterBounds.right);
+          next.y = clamp(next.y, movementOuterBounds.top, movementOuterBounds.bottom);
           g.player = next;
             collectSpeedBoostsAlongSegment(g, previous, g.player, now);
            const movementHitBomb = g.bombs.some((bomb) => (
@@ -6350,7 +6794,7 @@ export default function GameScreen() {
             break;
           }
 
-          const inside = pointInsidePerimeter(g.player, bounds);
+          const inside = pointInsidePerimeter(g.player, movementBounds);
           if (!inside) continue;
 
           const onClaimedSurface = pointInsideClaimedSurface(
@@ -6374,9 +6818,9 @@ export default function GameScreen() {
                 g.cell * 0.18,
               );
               const trailStart = claimedExit
-                ?? (pointInsidePerimeter(previous, bounds)
+                ?? (pointInsidePerimeter(previous, movementBounds)
                   ? previous
-                  : perimeterEntryContact(previous, direction, bounds));
+                  : perimeterEntryContact(previous, direction, movementBounds));
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
@@ -6392,12 +6836,22 @@ export default function GameScreen() {
       }
 
       movePlayerMissiles(g, dt, now);
-      if (g.status !== 'PLAYING') return;
+      if (g.status !== 'PLAYING') {
+        recordCollisionTime();
+        return;
+      }
       moveProjectiles(g, dt, now);
-      if (g.status !== 'PLAYING') return;
+      if (g.status !== 'PLAYING') {
+        recordCollisionTime();
+        return;
+      }
       checkBombContact(g, now);
-      if (g.status !== 'PLAYING') return;
+      if (g.status !== 'PLAYING') {
+        recordCollisionTime();
+        return;
+      }
       moveEnemies(g, dt, now);
+      recordCollisionTime();
       if (g.status !== 'PLAYING') return;
 
     };
@@ -6452,7 +6906,10 @@ export default function GameScreen() {
        g.claimedPolygons.forEach((polygon) => {
          if (polygon.length < 3) return;
          context.moveTo(polygon[0].x, polygon[0].y);
-         polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+          for (let pointIndex = 1; pointIndex < polygon.length; pointIndex += 1) {
+            const point = polygon[pointIndex];
+            context.lineTo(point.x, point.y);
+          }
          context.closePath();
        });
        context.fill();
@@ -6483,7 +6940,10 @@ export default function GameScreen() {
           if (trail.length < 2) return;
           context.beginPath();
           context.moveTo(trail[0].x, trail[0].y);
-          trail.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+           for (let pointIndex = 1; pointIndex < trail.length; pointIndex += 1) {
+             const point = trail[pointIndex];
+             context.lineTo(point.x, point.y);
+           }
           context.stroke();
         };
          g.protectedTrails.forEach(drawTrail);
@@ -6835,9 +7295,6 @@ export default function GameScreen() {
       }
 
       if (g.fillQueue.length > 0) {
-        const scanIntervals = g.pendingCapturePolygons.flatMap((polygon) => (
-          polygonHorizontalIntervals(polygon, g.scanY)
-        ));
         context.save();
         context.globalCompositeOperation = 'source-over';
         context.strokeStyle = '#ffffff';
@@ -6845,21 +7302,27 @@ export default function GameScreen() {
         context.shadowBlur = g.cell * 0.18;
         context.globalAlpha = 0.22;
         context.lineWidth = 7;
-        scanIntervals.forEach(([startX, endX]) => {
-          context.beginPath();
-          context.moveTo(startX, g.scanY);
-          context.lineTo(endX, g.scanY);
-          context.stroke();
-        });
+         for (const polygon of g.pendingCapturePolygons) {
+           const intervals = polygonHorizontalIntervals(polygon, g.scanY);
+           for (const [startX, endX] of intervals) {
+             context.beginPath();
+             context.moveTo(startX, g.scanY);
+             context.lineTo(endX, g.scanY);
+             context.stroke();
+           }
+         }
         context.globalAlpha = 1;
         context.shadowBlur = g.cell * 0.08;
         context.lineWidth = 2;
-        scanIntervals.forEach(([startX, endX]) => {
-          context.beginPath();
-          context.moveTo(startX, g.scanY);
-          context.lineTo(endX, g.scanY);
-          context.stroke();
-        });
+         for (const polygon of g.pendingCapturePolygons) {
+           const intervals = polygonHorizontalIntervals(polygon, g.scanY);
+           for (const [startX, endX] of intervals) {
+             context.beginPath();
+             context.moveTo(startX, g.scanY);
+             context.lineTo(endX, g.scanY);
+             context.stroke();
+           }
+         }
         context.restore();
       }
 
@@ -6924,7 +7387,12 @@ export default function GameScreen() {
         });
       }
       if (g.initialized) {
+        const profileFrame = __DEV__;
+        const updateStartedAt = profileFrame ? performance.now() : 0;
         update(g, dt, now);
+        if (profileFrame) {
+          performanceMetricsRef.current.updateMs += performance.now() - updateStartedAt;
+        }
         if (now - lastGameSaveAtRef.current >= GAME_SAVE_INTERVAL_MS) {
           lastGameSaveAtRef.current = now;
           saveGameProgress();
@@ -6943,25 +7411,40 @@ export default function GameScreen() {
             if (__DEV__) console.warn('Unable to save best score', error);
           });
         }
+        const renderStartedAt = profileFrame ? performance.now() : 0;
         drawCanvas(g, now);
+        if (profileFrame) {
+          performanceMetricsRef.current.renderMs += performance.now() - renderStartedAt;
+        }
         if (Platform.OS !== 'web') {
-          const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
-          setNativeSnapshot({
-            width: g.width,
-            height: g.height,
-            cell: g.cell,
-            rows: g.rows,
-            level: g.level,
-            frame: g.frame,
-            trail: g.trail,
-             protectedTrails: g.protectedTrails,
-            player: { ...g.player },
+          const nativeBuildStartedAt = profileFrame ? performance.now() : 0;
+          nativePicturePublisherRef.current?.(g, now);
+          if (profileFrame) {
+            performanceMetricsRef.current.nativeBuildMs += (
+              performance.now() - nativeBuildStartedAt
+            );
+          }
+          if (
+            !nativeSnapshotRef.current
+            || now - lastNativeStaticPublishAtRef.current >= 100
+          ) {
+            const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
+            const staticSnapshot: Snapshot = {
+              width: g.width,
+              height: g.height,
+              cell: g.cell,
+              rows: g.rows,
+              level: g.level,
+              frame: g.frame,
+              trail: g.trail,
+              protectedTrails: g.protectedTrails,
+              player: { ...g.player },
               direction: currentDirection,
-             enemies: g.enemies.map((enemy) => ({ ...enemy })),
+              enemies: g.enemies.map((enemy) => ({ ...enemy })),
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
-               speedBoosts: g.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
+              speedBoosts: g.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
-               projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
+              projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
               missiles: g.missiles.map((missile) => ({ ...missile })),
               spiderThreads: g.spiderThreads.map((thread) => ({
                 ...thread,
@@ -6971,28 +7454,49 @@ export default function GameScreen() {
               })),
               particles: g.particles.slice(-120),
               fusionSparks: g.fusionSparks.map((spark) => ({ ...spark })),
-              fusionHead: g.fusion
-                ? pointOnPolyline(
-                    g.fusion.path,
-                    g.fusion.cumulativeLengths,
-                    g.fusion.totalLength * clamp(
-                      g.fusion.elapsed / g.fusion.travelDuration,
-                      0,
-                      1,
-                    ),
-                  ).point
-                : null,
-             // Keep native SVG state immutable between frames. The game loop
-             // mutates live puff objects in place, which can otherwise leave
-             // Expo Go rendering the previous coordinates on Android.
-             smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
-             claimedPolygons: g.claimedPolygons,
-             pendingCapturePolygons: g.pendingCapturePolygons,
-            scanY: g.scanY,
-            invincibleUntil: g.invincibleUntil,
-          });
+              fusionHead: null,
+              smokePuffs: g.smokePuffs.map((puff) => ({ ...puff })),
+              claimedPolygons: g.claimedPolygons,
+              pendingCapturePolygons: g.pendingCapturePolygons,
+              scanY: g.scanY,
+              invincibleUntil: g.invincibleUntil,
+            };
+            nativeSnapshotRef.current = staticSnapshot;
+            lastNativeStaticPublishAtRef.current = now;
+            setNativeSnapshot(staticSnapshot);
+          }
         }
-        if (g.frame % 2 === 0) {
+        if (profileFrame) {
+          const metrics = performanceMetricsRef.current;
+          if (lastPerformanceReportAtRef.current === 0) {
+            lastPerformanceReportAtRef.current = now;
+          }
+          metrics.frames += 1;
+          metrics.particleCount = g.particles.length;
+          metrics.peakParticles = Math.max(metrics.peakParticles, g.particles.length);
+          if (now - lastPerformanceReportAtRef.current >= 1000) {
+            const frameCount = Math.max(1, metrics.frames);
+            diagnosticLog('performance-sample', {
+              fps: Math.round(frameCount * 1000 / Math.max(1, now - lastPerformanceReportAtRef.current)),
+              updateMs: Number((metrics.updateMs / frameCount).toFixed(2)),
+              collisionMs: Number((metrics.collisionMs / frameCount).toFixed(2)),
+              renderMs: Number((metrics.renderMs / frameCount).toFixed(2)),
+              nativeBuildMs: Number((metrics.nativeBuildMs / frameCount).toFixed(2)),
+              particles: metrics.particleCount,
+              peakParticles: metrics.peakParticles,
+              platform: Platform.OS,
+            });
+            metrics.frames = 0;
+            metrics.updateMs = 0;
+            metrics.collisionMs = 0;
+            metrics.renderMs = 0;
+            metrics.nativeBuildMs = 0;
+            metrics.peakParticles = metrics.particleCount;
+            lastPerformanceReportAtRef.current = now;
+          }
+        }
+        if (now - lastHudPublishAtRef.current >= 66) {
+          lastHudPublishAtRef.current = now;
           const nextHud = {
             score: g.score,
             bestScore: bestScoreRef.current,
@@ -7079,62 +7583,13 @@ export default function GameScreen() {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
     const renderMargin = Math.max(snapshot.cell * 2.2, 28);
-    const expandedWidth = snapshot.width + renderMargin * 2;
-    const expandedHeight = snapshot.height + renderMargin * 2;
-    const liveShipCount = snapshot.enemies.filter((enemy) => (
-      enemy.kind === 'SHIP'
-      && !enemyIsDestroyed(enemy)
-      && enemy.respawnAt <= Date.now()
-    )).length;
-    const skiaShipReady = skiaReady && liveShipCount <= 1;
     return (
       <View style={styles.nativeArenaDynamicLayer} pointerEvents="none">
-        <Svg
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              left: -renderMargin,
-              top: -renderMargin,
-              width: expandedWidth,
-              height: expandedHeight,
-              overflow: 'visible',
-            },
-          ]}
-          viewBox={`${-renderMargin} ${-renderMargin} ${expandedWidth} ${expandedHeight}`}
-          preserveAspectRatio="none"
-        >
-          {snapshot.trail.length > 1 && (
-            <>
-              <Polyline
-                points={pointsToString(snapshot.trail)}
-                fill="none"
-                stroke="#fff3d6"
-                strokeWidth={12}
-                opacity={0.16}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Polyline
-                points={pointsToString(snapshot.trail)}
-                fill="none"
-                stroke="#ffffff"
-                strokeWidth={5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </>
-          )}
-          <NativeArenaDynamic
-            snapshot={snapshot}
-            skiaPlayerReady={skiaReady}
-            skiaShipReady={skiaShipReady}
-          />
-        </Svg>
         {SKIA_DYNAMIC_RENDER_ENABLED && (
           <SkiaDynamicArena
             snapshot={snapshot}
             renderMargin={renderMargin}
-            renderShip={skiaShipReady}
+            publisherRef={nativePicturePublisherRef}
             onReady={handleSkiaReady}
           />
         )}
