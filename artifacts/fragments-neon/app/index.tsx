@@ -302,6 +302,8 @@ type Enemy = Point & {
   bossTier?: number;
   isMini?: boolean;
   splitLevel?: number;
+  curveStrength?: number;
+  curvePhase?: number;
   lastSafeX?: number;
   lastSafeY?: number;
 };
@@ -311,6 +313,9 @@ type EnemySpawnSpec = {
   spiderGrade?: number;
   isBoss?: boolean;
   bossTier?: number;
+  speedScale?: number;
+  curveStrength?: number;
+  curvePhase?: number;
 };
 
 const BOSS_SECTOR_KINDS: Record<number, EnemyKind> = {
@@ -2053,26 +2058,38 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
       }];
       continue;
     }
-    const cycle = sector % 10;
-    const spiderGrade = sector < 10 ? undefined : sector < 20 ? 2 : sector < 30 ? 3 : 5;
-    const spider = sector >= 5
-      ? [{ baseIndex: 4, spiderGrade: Math.max(1, Math.min(5, spiderGrade ?? 1)) }]
+    const curveStrength = sector >= 5
+      ? clamp(0.28 + (sector - 5) * 0.012, 0.28, 0.78)
+      : 0;
+    const shipCount = sector <= 2 ? 1 : sector <= 4 ? 2 : 3;
+    const shipSpeedStart = clamp(0.84 + (sector - 1) * 0.011, 0.84, 1.36);
+    const ships: EnemySpawnSpec[] = Array.from({ length: shipCount }, (_, index) => ({
+        baseIndex: index % 2 === 0 ? 0 : 2,
+        speedScale: shipSpeedStart + index * 0.1,
+        curveStrength,
+        curvePhase: sector * 0.47 + index * 1.35,
+      }));
+    const spiderGrade = sector < 30 ? 3 : 5;
+    const dragon = sector >= 7
+      ? [{
+          baseIndex: 1,
+          speedScale: clamp(0.82 + (sector - 7) * 0.018, 0.82, 1.3),
+        }]
       : [];
-    rosterByLevel[sector] = cycle <= 2
-      ? [{ baseIndex: 0 }]
-      : cycle === 3
-        ? [{ baseIndex: 1 }]
-        : cycle === 4
-          ? [{ baseIndex: 0 }, { baseIndex: 1 }]
-          : cycle === 5
-            ? [{ baseIndex: 0 }, ...spider]
-            : cycle === 6
-              ? [{ baseIndex: 1 }, { baseIndex: 3 }]
-              : cycle === 7
-                ? [{ baseIndex: 0 }, { baseIndex: 1 }, ...spider]
-                : cycle === 8
-                  ? [{ baseIndex: 0 }, { baseIndex: 3 }]
-                  : [{ baseIndex: 1 }, { baseIndex: 3 }, ...spider];
+    const seven = sector >= 15
+      ? [{
+          baseIndex: 3,
+          speedScale: clamp(0.84 + (sector - 15) * 0.018, 0.84, 1.44),
+        }]
+      : [];
+    const spider = sector >= 25
+      ? [{
+          baseIndex: 4,
+          spiderGrade: Math.max(1, Math.min(5, spiderGrade)),
+          speedScale: clamp(0.8 + (sector - 25) * 0.018, 0.8, 1.25),
+        }]
+      : [];
+    rosterByLevel[sector] = [...ships, ...dragon, ...seven, ...spider];
   }
   return (rosterByLevel[clampedLevel] ?? rosterByLevel[1]).map((spec) => {
     const enemy = { ...enemies[spec.baseIndex], ...spec };
@@ -2084,9 +2101,11 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
       : undefined;
     return {
       ...enemy,
-      speed: enemy.speed * bossSpeed,
-      vx: enemy.vx * bossSpeed,
-      vy: enemy.vy * bossSpeed,
+      speed: enemy.speed * bossSpeed * (spec.speedScale ?? 1),
+      vx: enemy.vx * bossSpeed * (spec.speedScale ?? 1),
+      vy: enemy.vy * bossSpeed * (spec.speedScale ?? 1),
+      curveStrength: spec.curveStrength ?? enemy.curveStrength,
+      curvePhase: spec.curvePhase ?? enemy.curvePhase,
       spiderThreadTimer: spiderDifficulty?.initialDelay,
       visualRotation: enemy.kind === 'SHIP' ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2 : undefined,
     };
@@ -4991,6 +5010,10 @@ export default function GameScreen() {
           phase: enemy.phase + 0.6 + index * 0.8,
           spin: enemy.spin + side * 0.16,
           routePhase: enemy.routePhase + side * 0.35,
+          curveStrength: enemy.curveStrength
+            ? Math.min(0.9, enemy.curveStrength * 1.08)
+            : undefined,
+          curvePhase: (enemy.curvePhase ?? 0) + side * 0.52 + index * 0.18,
           targetX: x,
           targetY: y,
           visualRotation: miniHeading + Math.PI / 2,
@@ -5567,9 +5590,15 @@ export default function GameScreen() {
           if (!isDragon) desiredSpeed *= farSlowdown;
         } else {
           const currentHeading = Math.atan2(enemy.vy, enemy.vx);
-          const routeBend = enemy.pattern === 'SWEEP'
+          const baseRouteBend = enemy.pattern === 'SWEEP'
             ? Math.sin(enemy.routePhase * 0.75) * 0.58
             : Math.sin(enemy.routePhase * 1.35) * 1.1;
+          const curveBend = enemy.kind === 'SHIP' && (enemy.curveStrength ?? 0) > 0
+            ? Math.sin(
+              enemy.routePhase * 0.55 + (enemy.curvePhase ?? 0),
+            ) * (enemy.curveStrength ?? 0)
+            : 0;
+          const routeBend = baseRouteBend + curveBend;
           const routeHeading = currentHeading + routeBend * dt;
           desiredVelocity = { x: Math.cos(routeHeading), y: Math.sin(routeHeading) };
         }
