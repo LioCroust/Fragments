@@ -2779,7 +2779,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         </>
       )}
-      {snapshot.fusionSparks.map((spark, index) => (
+      {snapshot.frame % 2 === 0 && snapshot.fusionSparks.map((spark, index) => (
         <FusionSparkSprite
           key={`fusion-spark-${index}`}
           spark={spark}
