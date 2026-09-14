@@ -573,6 +573,7 @@ type Banner = {
   enemyKind?: EnemyKind;
   tutorialCompleted?: boolean;
   tutorialStep?: 1 | 2 | 3 | 4;
+  tutorialPrompt?: 'SECURE_AREA';
   onComplete?: () => void;
 };
 
@@ -3115,6 +3116,7 @@ export default function GameScreen() {
   const tutorialCompletionBannerShownRef = useRef(false);
   const tutorialCaptureCompletionBannerShownRef = useRef(false);
   const tutorialEnemyCaptureCompletionBannerShownRef = useRef(false);
+  const tutorialEnemyCaptureProgressBannerShownRef = useRef(false);
   const tutorialEnemyDestructionCompletionBannerShownRef = useRef(false);
   const tutorialStepRef = useRef<1 | 2 | 3 | 4>(1);
   const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
@@ -3715,6 +3717,7 @@ export default function GameScreen() {
       tutorialCompletionBannerShownRef.current = false;
       tutorialCaptureCompletionBannerShownRef.current = false;
       tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+      tutorialEnemyCaptureProgressBannerShownRef.current = false;
       tutorialEnemyDestructionCompletionBannerShownRef.current = false;
       tutorialStepRef.current = 1;
       setTutorialStep(1);
@@ -3998,6 +4001,7 @@ export default function GameScreen() {
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyCaptureProgressBannerShownRef.current = false;
     tutorialEnemyDestructionCompletionBannerShownRef.current = false;
     setTutorialStep(2);
     enqueueBanner({
@@ -4049,6 +4053,7 @@ export default function GameScreen() {
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyCaptureProgressBannerShownRef.current = false;
     tutorialEnemyDestructionCompletionBannerShownRef.current = false;
     setTutorialStep(3);
     enqueueBanner({
@@ -5692,21 +5697,39 @@ export default function GameScreen() {
               capturedEnemies.forEach((enemy) => {
                 burstEnemy(g, enemy, now, false, true);
               });
-              if (
-                g.level === TUTORIAL_SECTOR
-                && tutorialStepRef.current === 3
-                && !tutorialEnemyCaptureCompletionBannerShownRef.current
-              ) {
-                tutorialEnemyCaptureCompletionBannerShownRef.current = true;
-                g.inputDir = ZERO;
-                g.hasMoveCommand = false;
-                enqueueBanner({
-                  kind: 'TUTORIAL',
-                  tutorialStep: 3,
-                  tutorialCompleted: true,
-                  onComplete: beginTutorialDestructionStep,
-                });
-              }
+            }
+            const tutorialStepThreeTargetReached = (
+              g.level === TUTORIAL_SECTOR
+              && tutorialStepRef.current === 3
+              && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
+            );
+            if (
+              tutorialStepThreeTargetReached
+              && !tutorialEnemyCaptureCompletionBannerShownRef.current
+            ) {
+              tutorialEnemyCaptureCompletionBannerShownRef.current = true;
+              g.inputDir = ZERO;
+              g.hasMoveCommand = false;
+              enqueueBanner({
+                kind: 'TUTORIAL',
+                tutorialStep: 3,
+                tutorialCompleted: true,
+                onComplete: beginTutorialDestructionStep,
+              });
+            } else if (
+              capturedEnemies.length > 0
+              && g.level === TUTORIAL_SECTOR
+              && tutorialStepRef.current === 3
+              && !tutorialEnemyCaptureProgressBannerShownRef.current
+            ) {
+              tutorialEnemyCaptureProgressBannerShownRef.current = true;
+              g.inputDir = ZERO;
+              g.hasMoveCommand = false;
+              enqueueBanner({
+                kind: 'TUTORIAL',
+                tutorialStep: 3,
+                tutorialPrompt: 'SECURE_AREA',
+              });
             }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (
@@ -6701,7 +6724,9 @@ export default function GameScreen() {
                             : banner.tutorialStep === 3
                               ? banner.tutorialCompleted
                                 ? 'OBJECTIF ATTEINT !'
-                                : 'TUTORIEL 3/4'
+                                : banner.tutorialPrompt === 'SECURE_AREA'
+                                  ? 'ZONE À SÉCURISER'
+                                  : 'TUTORIEL 3/4'
                               : banner.tutorialStep === 2
                                 ? banner.tutorialCompleted
                                   ? 'OBJECTIF ATTEINT !'
@@ -6748,7 +6773,9 @@ export default function GameScreen() {
                           : banner.tutorialStep === 3
                             ? banner.tutorialCompleted
                               ? '✓ ENNEMI CAPTURÉ'
-                              : 'CAPTURE LE VAISSEAU ENNEMI'
+                              : banner.tutorialPrompt === 'SECURE_AREA'
+                                ? 'SÉCURISE 80% DE LA ZONE'
+                                : 'CAPTURE LE VAISSEAU ENNEMI'
                             : banner.tutorialStep === 2
                               ? banner.tutorialCompleted
                                 ? '✓ ZONE SÉCURISÉE À 80%'
@@ -6947,9 +6974,9 @@ const styles = StyleSheet.create({
   },
   loadingArtworkFrame: {
     position: 'relative',
-    width: '100%',
-    maxWidth: 390,
-    maxHeight: '94%',
+    width: '82%',
+    maxWidth: 330,
+    maxHeight: '84%',
     aspectRatio: 688 / 1543,
     overflow: 'hidden',
     borderWidth: 1,
