@@ -20,3 +20,9 @@ The Replit build container may report a React Native DevTools `libglib-2.0.so.0`
 **Why:** The warning comes from the optional local DevTools binary, while device-side Expo Go errors are only visible on a connected phone.
 
 **How to apply:** Treat this warning separately from app runtime failures; validate the Android bundle and ask for the Expo Go error log only if a connected Android device still fails after a clean reload.
+
+Web screenshots validate only the web preview. They are not evidence that the QR session launches inside Expo Go; native validation must use the Expo Go QR path or an iOS/Android bundle check.
+
+**Why:** The web and native renderers take different code paths, especially for image loading, SVG, audio, and native modules.
+
+**How to apply:** State explicitly which platform was tested, and never report a web screenshot as an Expo Go launch verification.

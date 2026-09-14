@@ -30,7 +30,9 @@
           "enforceContrast": false,
           "style": "dark"
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
