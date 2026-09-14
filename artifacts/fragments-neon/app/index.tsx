@@ -6780,6 +6780,9 @@ export default function GameScreen() {
               <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
                 {hud.level.toString().padStart(2, '0')}
               </Text>
+              {hud.level === TUTORIAL_SECTOR && (
+                <Text style={styles.tutorialSectorLabel}>TUTO</Text>
+              )}
               {isBossSector(hud.level) && (
                 <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
               )}
@@ -7260,6 +7263,19 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: 1.2,
     marginTop: 1,
+  },
+  tutorialSectorLabel: {
+    alignSelf: 'center',
+    marginTop: 2,
+    marginBottom: 1,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 1.7,
+    lineHeight: 9,
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 6,
+    textShadowOffset: { width: 0, height: 0 },
   },
   sectorValue: {
     fontFamily: 'Inter_700Bold',
