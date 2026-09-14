@@ -2169,6 +2169,11 @@ const createBombs = (width: number, height: number, cell: number, level: number)
 
 const enemyIsDestroyed = (enemy: Enemy) => enemy.respawnAt === Number.POSITIVE_INFINITY;
 
+const bossObjectiveComplete = (level: number, enemies: Enemy[]) => (
+  !isBossSector(level)
+  || enemies.some((enemy) => enemy.isBoss && enemyIsDestroyed(enemy))
+);
+
 const sectorHasLiveTargets = (enemies: Enemy[], bombs: Bomb[]) => (
   enemies.some((enemy) => !enemyIsDestroyed(enemy))
   || bombs.some((bomb) => !bomb.destroyed)
@@ -6181,6 +6186,7 @@ export default function GameScreen() {
               g.level !== TUTORIAL_SECTOR
               && g.level < MAX_LEVEL
               && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
+              && bossObjectiveComplete(g.level, g.enemies)
             ) {
               const nextLevel = Math.min(MAX_LEVEL, g.level + 1);
               g.status = 'SECTOR_TRANSITION';
