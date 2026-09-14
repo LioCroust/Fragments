@@ -5120,13 +5120,24 @@ export default function GameScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     };
 
+    const appendParticle = (g: Game, particle: Particle) => {
+      g.particles.push(particle);
+      if (g.particles.length > MAX_PARTICLES) g.particles.shift();
+    };
+
+    const appendSmokePuffs = (g: Game, puffs: SmokePuff[]) => {
+      for (const puff of puffs) {
+        g.smokePuffs.push(puff);
+        if (g.smokePuffs.length > MAX_SMOKE_PUFFS) g.smokePuffs.shift();
+      }
+    };
+
     const addFusionSpark = (
       g: Game,
       sequence: FusionSequence,
       pathDistance: number,
       initialSpread = 1,
     ) => {
-      if (g.fusionSparks.length >= 80) return;
       const sample = pointOnPolyline(
         sequence.path,
         sequence.cumulativeLengths,
@@ -5152,6 +5163,7 @@ export default function GameScreen() {
         color: ['#ffffff', '#fff5b0', '#ffd447', '#ff8a22', '#ff4b16'][Math.floor(Math.random() * 5)],
         streak: Math.random() > 0.22,
       });
+      if (g.fusionSparks.length > MAX_FUSION_SPARKS) g.fusionSparks.shift();
     };
 
     const startFusionDeath = (g: Game, impactPoint: Point) => {
@@ -5270,7 +5282,7 @@ export default function GameScreen() {
       for (let index = 0; index < 48; index += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 35 + Math.random() * 190;
-        g.particles.push({
+        appendParticle(g, {
           x: bomb.x,
           y: bomb.y,
           vx: Math.cos(angle) * speed,
