@@ -3117,6 +3117,7 @@ export default function GameScreen() {
   const tutorialCaptureCompletionBannerShownRef = useRef(false);
   const tutorialEnemyCaptureCompletionBannerShownRef = useRef(false);
   const tutorialEnemyCaptureProgressBannerShownRef = useRef(false);
+  const tutorialEnemyDestroyedRef = useRef(false);
   const tutorialEnemyDestructionCompletionBannerShownRef = useRef(false);
   const tutorialStepRef = useRef<1 | 2 | 3 | 4>(1);
   const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
@@ -3718,6 +3719,7 @@ export default function GameScreen() {
       tutorialCaptureCompletionBannerShownRef.current = false;
       tutorialEnemyCaptureCompletionBannerShownRef.current = false;
       tutorialEnemyCaptureProgressBannerShownRef.current = false;
+      tutorialEnemyDestroyedRef.current = false;
       tutorialEnemyDestructionCompletionBannerShownRef.current = false;
       tutorialStepRef.current = 1;
       setTutorialStep(1);
@@ -4002,6 +4004,7 @@ export default function GameScreen() {
     tutorialCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureProgressBannerShownRef.current = false;
+    tutorialEnemyDestroyedRef.current = false;
     tutorialEnemyDestructionCompletionBannerShownRef.current = false;
     setTutorialStep(2);
     enqueueBanner({
@@ -4105,6 +4108,7 @@ export default function GameScreen() {
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = true;
     tutorialEnemyCaptureCompletionBannerShownRef.current = true;
+    tutorialEnemyDestroyedRef.current = false;
     tutorialEnemyDestructionCompletionBannerShownRef.current = false;
     setTutorialStep(4);
     enqueueBanner({
