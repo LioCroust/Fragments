@@ -83,6 +83,7 @@ const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.
 const coreReactorSpriteSource = require('../assets/images/core-reactor-sprite-sheet.png');
 const sevenFireOrbSource = require('../assets/images/seven-fire-orb.png');
 const diamondSpriteSource = require('../assets/images/neon-diamond-fragment-sprite-sheet.png');
+const speedBoostSource = require('../assets/images/speed-boost-sprite.png');
 const spiderWebSource = require('../assets/images/spider-web-destination.png');
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
@@ -217,6 +218,9 @@ const ENEMY_RENDER_SCALE = 0.88;
 const BOSS_RENDER_SCALE = 1.72;
 const PICKUP_VISUAL_SIZE_CELLS = 1.34;
 const PLAYER_MOVE_SPEED = 126;
+const SPEED_BOOST_MULTIPLIER = 1.5;
+const SPEED_BOOST_DURATION_MS = 5000;
+const SPEED_BOOST_RADIUS_CELLS = 0.72;
 const BOSS_SPEED_BOOST = 1.06;
 const CAPTURE_INVINCIBILITY_DURATION = 10;
 const SEVEN_PROJECTILE_COUNT = 7;
@@ -347,6 +351,11 @@ const isBossSector = (level: number) => Boolean(BOSS_SECTOR_KINDS[level]);
 const bossKindForSector = (level: number) => BOSS_SECTOR_KINDS[level];
 
 type Diamond = Point & {
+  phase: number;
+  collected: boolean;
+};
+
+type SpeedBoost = Point & {
   phase: number;
   collected: boolean;
 };
@@ -505,6 +514,7 @@ type Game = {
   protectedTrails: Point[][];
   enemies: Enemy[];
   diamonds: Diamond[];
+  speedBoosts: SpeedBoost[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
   missiles: PlayerMissile[];
@@ -532,6 +542,7 @@ type Game = {
   status: 'PLAYING' | 'FUSING' | 'RESPAWN' | 'SECTOR_TRANSITION';
   respawnAt: number;
   invincibleUntil: number;
+  speedBoostUntil: number;
 };
 
 type PersistedGame = Omit<
@@ -546,12 +557,14 @@ type PersistedGame = Omit<
   | 'status'
   | 'respawnAt'
   | 'invincibleUntil'
+  | 'speedBoostUntil'
 > & {
   version: typeof GAME_SAVE_VERSION;
   savedAt: number;
   resumeType: 'EXACT' | 'SECTOR';
   resumeLevel: number;
   invincibleRemainingMs: number;
+  speedBoostRemainingMs: number;
 };
 
 type Hud = {
@@ -565,7 +578,7 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER' | 'TUTORIAL';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SPEED_BOOST' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER' | 'TUTORIAL';
   score?: number;
   points?: number;
   level?: number;
@@ -590,6 +603,7 @@ type Snapshot = {
   direction: Direction;
   enemies: Enemy[];
   diamonds: Diamond[];
+  speedBoosts: SpeedBoost[];
   bombs: Bomb[];
   projectiles: SevenProjectile[];
   missiles: PlayerMissile[];
@@ -660,6 +674,7 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   protectedTrails: game.protectedTrails.map((trail) => trail.map((point) => ({ ...point }))),
   enemies: game.enemies.map((enemy) => ({ ...enemy })),
   diamonds: game.diamonds.map((diamond) => ({ ...diamond })),
+  speedBoosts: game.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
   bombs: game.bombs.map((bomb) => ({ ...bomb })),
   projectiles: game.projectiles.map((projectile) => ({ ...projectile })),
   missiles: game.missiles.map((missile) => ({ ...missile })),
@@ -685,6 +700,7 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   level: game.level,
   trailScoreAccumulator: game.trailScoreAccumulator,
   invincibleRemainingMs: Math.max(0, game.invincibleUntil - now),
+  speedBoostRemainingMs: Math.max(0, game.speedBoostUntil - now),
 });
 
 const cardinalDirection = (dx: number, dy: number): Direction => {
@@ -1532,6 +1548,7 @@ const enemyRenderSize = (kind: EnemyKind, cell: number, isMini = false) => {
 };
 
 const pickupVisualSize = (cell: number) => cell * PICKUP_VISUAL_SIZE_CELLS;
+const speedBoostRadius = (cell: number) => cell * SPEED_BOOST_RADIUS_CELLS;
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
   const miniScale = enemy.isMini ? 0.5 : 1;
@@ -9092,6 +9109,100 @@ const createDiamonds = (width: number, height: number, cell: number, count: numb
     diamonds.push(candidate);
   }
   return diamonds;
+};
+
+const createSpeedBoosts = (width: number, height: number, cell: number, level: number): SpeedBoost[] => {
+  if (level === TUTORIAL_SECTOR || isBossSector(level)) return [];
+  const bounds = perimeterBounds(width, height, cell);
+  return [{
+    x: bounds.left + cell * (1.4 + Math.random() * Math.max(1, (bounds.right - bounds.left) / cell - 2.8)),
+    y: bounds.top + cell * (1.4 + Math.random() * Math.max(1, (bounds.bottom - bounds.top) / cell - 2.8)),
+    phase: Math.random() * Math.PI * 2,
+    collected: false,
+  }];
+};
+
+const placeSpeedBoostsInOpenSurface = (
+  speedBoosts: SpeedBoost[],
+  enemies: Enemy[],
+  diamonds: Diamond[],
+  bombs: Bomb[],
+  width: number,
+  height: number,
+  cell: number,
+  claimedPolygons: Point[][],
+  protectedTrails: Point[][],
+  activeTrail: Point[],
+  player: Point,
+) => {
+  const bounds = perimeterBounds(width, height, cell);
+  const radius = speedBoostRadius(cell);
+  const randomCandidates = Array.from({ length: 28 }, () => ({
+    x: bounds.left + radius + Math.random() * Math.max(0, bounds.right - bounds.left - radius * 2),
+    y: bounds.top + radius + Math.random() * Math.max(0, bounds.bottom - bounds.top - radius * 2),
+  }));
+  const gridCandidates = Array.from({ length: 7 }, (_, row) => (
+    Array.from({ length: 7 }, (_, column) => ({
+      x: bounds.left + (bounds.right - bounds.left) * ((column + 0.5) / 7),
+      y: bounds.top + (bounds.bottom - bounds.top) * ((row + 0.5) / 7),
+    }))
+  )).flat();
+
+  speedBoosts.forEach((speedBoost) => {
+    if (speedBoost.collected) return;
+    const candidates = [
+      { x: speedBoost.x, y: speedBoost.y },
+      ...randomCandidates,
+      ...gridCandidates,
+    ];
+    const candidate = candidates.find((point) => {
+      const x = clamp(point.x, bounds.left + radius, bounds.right - radius);
+      const y = clamp(point.y, bounds.top + radius, bounds.bottom - radius);
+      const candidatePoint = { x, y };
+      const clearOfClaimed = !pointInsideClaimedSurface(candidatePoint, claimedPolygons, cell * 0.12);
+      const clearOfProtected = protectedTrails.every((trail) => (
+        trail.slice(1).every((trailPoint, index) => (
+          distanceToSegment(candidatePoint, trail[index], trailPoint)
+            > radius + PERIMETER_STROKE_WIDTH * 0.5
+        ))
+      ));
+      const clearOfActiveTrail = activeTrail.length < 2 || !pathTouchesPolygon(
+        activeTrail,
+        [
+          { x: x - radius, y: y - radius },
+          { x: x + radius, y: y - radius },
+          { x: x + radius, y: y + radius },
+          { x: x - radius, y: y + radius },
+        ],
+        PERIMETER_STROKE_WIDTH * 0.5,
+      );
+      const clearOfPlayer = Math.hypot(x - player.x, y - player.y)
+        > radius + playerBodyRadius(cell) * 1.8;
+      const clearOfEnemies = enemies
+        .filter((enemy) => !enemyIsDestroyed(enemy))
+        .every((enemy) => (
+          Math.hypot(x - enemy.x, y - enemy.y)
+            > radius + enemyVisualRadius(enemy, cell) * 0.72
+        ));
+      const clearOfDiamonds = diamonds
+        .filter((diamond) => !diamond.collected)
+        .every((diamond) => Math.hypot(x - diamond.x, y - diamond.y) > radius + cell * 0.7);
+      const clearOfBombs = bombs
+        .filter((bomb) => !bomb.destroyed)
+        .every((bomb) => Math.hypot(x - bomb.x, y - bomb.y) > radius + bombRadius(cell));
+      return clearOfClaimed
+        && clearOfProtected
+        && clearOfActiveTrail
+        && clearOfPlayer
+        && clearOfEnemies
+        && clearOfDiamonds
+        && clearOfBombs;
+    });
+    if (candidate) {
+      speedBoost.x = clamp(candidate.x, bounds.left + radius, bounds.right - radius);
+      speedBoost.y = clamp(candidate.y, bounds.top + radius, bounds.bottom - radius);
+    }
+  });
 };
 
 const diamondCountForLevel = (level: number) => {
