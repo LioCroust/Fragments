@@ -76,6 +76,7 @@ const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
 const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
 const sectorTransitionVictorySource = require('../assets/audio/sector-transition-victory-joyful.wav');
 const sevenFireShotSource = require('../assets/audio/seven-fire-shot.mp3');
+const loadingCoverSource = require('../assets/images/loading-cover.png');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
@@ -3077,6 +3078,7 @@ export default function GameScreen() {
   });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
@@ -3539,12 +3541,16 @@ export default function GameScreen() {
     return Promise.all(levels.map((level) => loadWebBackground(level)));
   }, [loadWebBackground]);
 
-  const preloadSectorForBanner = useCallback(async (level: number) => {
+  const preloadSectorForBanner = useCallback(async (
+    level: number,
+    onProgress?: (progress: number) => void,
+  ) => {
     const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
-    await Promise.all([
-      preloadAllGameAssets(),
-      loadWebBackground(normalizedLevel),
-    ]);
+    onProgress?.(0.08);
+    await preloadAllGameAssets();
+    onProgress?.(0.76);
+    await loadWebBackground(normalizedLevel);
+    onProgress?.(0.94);
     diagnosticLog('sector-assets-ready', { level: normalizedLevel });
   }, [loadWebBackground, preloadAllGameAssets]);
 
