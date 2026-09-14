@@ -568,6 +568,7 @@ type Banner = {
   bossKind?: EnemyKind;
   enemyKind?: EnemyKind;
   tutorialCompleted?: boolean;
+  tutorialStep?: 1 | 2 | 3 | 4;
   onComplete?: () => void;
 };
 
@@ -3105,9 +3106,12 @@ export default function GameScreen() {
   const tutorialSwipeCountsRef = useRef<TutorialSwipeCounts>({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
   const tutorialSwipeGestureDirectionRef = useRef<TutorialDirection | null>(null);
   const tutorialCompletionBannerShownRef = useRef(false);
+  const tutorialCaptureCompletionBannerShownRef = useRef(false);
+  const tutorialStepRef = useRef<1 | 2 | 3 | 4>(1);
   const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
     ...EMPTY_TUTORIAL_SWIPE_COUNTS,
   });
+  const [tutorialStep, setTutorialStep] = useState<1 | 2 | 3 | 4>(1);
 
   useEffect(() => {
     diagnosticLog('game-screen-mounted', {
@@ -3688,6 +3692,9 @@ export default function GameScreen() {
       tutorialSwipeCountsRef.current = { ...EMPTY_TUTORIAL_SWIPE_COUNTS };
       tutorialSwipeGestureDirectionRef.current = null;
       tutorialCompletionBannerShownRef.current = false;
+      tutorialCaptureCompletionBannerShownRef.current = false;
+      tutorialStepRef.current = 1;
+      setTutorialStep(1);
       setTutorialSwipeCounts({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
     } else {
       rememberLastPlayedSector(previousLevel);
@@ -3960,6 +3967,20 @@ export default function GameScreen() {
     });
   }, [rememberLastPlayedSector, resetGame]);
 
+  const beginTutorialCaptureStep = useCallback(() => {
+    const game = gameRef.current;
+    if (game.level !== TUTORIAL_SECTOR) return;
+    resetGame(false, false, TUTORIAL_SECTOR);
+    tutorialStepRef.current = 2;
+    tutorialCompletionBannerShownRef.current = true;
+    tutorialCaptureCompletionBannerShownRef.current = false;
+    setTutorialStep(2);
+    enqueueBanner({
+      kind: 'TUTORIAL',
+      tutorialStep: 2,
+    });
+  }, [enqueueBanner, resetGame]);
+
   const registerTutorialSwipe = useCallback((direction: Direction) => {
     const game = gameRef.current;
     if (
@@ -3992,10 +4013,12 @@ export default function GameScreen() {
       tutorialCompletionBannerShownRef.current = true;
       enqueueBanner({
         kind: 'TUTORIAL',
+        tutorialStep: 1,
         tutorialCompleted: true,
+        onComplete: beginTutorialCaptureStep,
       });
     }
-  }, [enqueueBanner]);
+  }, [beginTutorialCaptureStep, enqueueBanner]);
 
   const teleportToSector = useCallback((sector: number) => {
     const g = gameRef.current;
