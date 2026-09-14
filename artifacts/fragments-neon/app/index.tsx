@@ -5569,15 +5569,25 @@ export default function GameScreen() {
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
+          const tutorialStepToRestart = g.level === TUTORIAL_SECTOR
+            && tutorialStepRef.current >= 3
+            ? tutorialStepRef.current
+            : null;
           if (g.shields <= 0) {
             enqueueBanner({ kind: 'GAME_OVER', score: g.score });
             clearSavedGameProgress();
-            const resumeLevel = Math.round(clamp(
-              lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : g.level,
-              1,
-              MAX_LEVEL,
-            ));
-            resetGame(false, false, resumeLevel);
+            if (tutorialStepToRestart) {
+              restartTutorialStep(tutorialStepToRestart);
+            } else {
+              const resumeLevel = Math.round(clamp(
+                lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : g.level,
+                1,
+                MAX_LEVEL,
+              ));
+              resetGame(false, false, resumeLevel);
+            }
+          } else if (tutorialStepToRestart) {
+            restartTutorialStep(tutorialStepToRestart);
           } else {
             resetGame(true);
           }
@@ -6501,6 +6511,8 @@ export default function GameScreen() {
     preloadSectorForBanner,
     revealGameAfterInitialLoad,
     resetGame,
+    beginTutorialDestructionStep,
+    beginTutorialEnemyStep,
     restartTutorialStep,
     restoreSavedGame,
     saveGameProgress,
