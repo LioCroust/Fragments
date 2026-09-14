@@ -3290,6 +3290,7 @@ export default function GameScreen() {
   const revealGameAfterInitialLoad = useCallback((nextBanner: Banner) => {
     if (initialLoadingRevealStartedRef.current) return;
     initialLoadingRevealStartedRef.current = true;
+    setLoadingProgress(1);
     loadingBannerTranslateX.stopAnimation();
     Animated.timing(loadingBannerTranslateX, {
       toValue: Math.max(sizeRef.current.width, 360) + 180,
@@ -6411,7 +6412,8 @@ export default function GameScreen() {
         const savedGame = savedGameRef.current;
         const initialLevel = savedGame?.level
           ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
-        void preloadSectorForBanner(initialLevel).then(() => {
+        setLoadingProgress(0.03);
+        void preloadSectorForBanner(initialLevel, setLoadingProgress).then(() => {
           if (cancelled || gameRef.current.initialized) return;
           if (savedGame) restoreSavedGame(savedGame);
           else resetGame(false, false, initialLevel);
@@ -6883,15 +6885,33 @@ export default function GameScreen() {
         <View style={styles.loadingScreen} pointerEvents="auto">
           <Animated.View
             style={[
-              styles.loadingBanner,
+              styles.loadingArtworkFrame,
               { transform: [{ translateX: loadingBannerTranslateX }] },
             ]}
             accessibilityLabel="Chargement"
           >
-            <View style={styles.bannerGloss} />
-            <View style={styles.bannerAccent} />
-            <Text style={styles.loadingBannerTitle}>Chargement...</Text>
-            <Text style={styles.loadingBannerSubtitle}>PRÉPARATION DU SYSTÈME</Text>
+            <RNImage
+              source={loadingCoverSource}
+              style={styles.loadingArtwork}
+              resizeMode="cover"
+              accessibilityLabel="Illustration Fragments Neon"
+            />
+            <View style={styles.loadingArtworkShade} />
+            <View style={styles.loadingOverlay}>
+              <Text style={styles.loadingBannerTitle}>CHARGEMENT...</Text>
+              <Text style={styles.loadingBannerSubtitle}>PRÉPARATION DU SYSTÈME</Text>
+              <View style={styles.loadingProgressTrack}>
+                <View
+                  style={[
+                    styles.loadingProgressFill,
+                    { width: `${Math.round(loadingProgress * 100)}%` },
+                  ]}
+                />
+              </View>
+              <Text style={styles.loadingProgressLabel}>
+                {Math.round(loadingProgress * 100)}%
+              </Text>
+            </View>
           </Animated.View>
         </View>
       )}
@@ -6910,7 +6930,69 @@ const styles = StyleSheet.create({
     zIndex: 100,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
     backgroundColor: '#000000',
+  },
+  loadingArtworkFrame: {
+    position: 'relative',
+    width: '100%',
+    maxWidth: 390,
+    maxHeight: '94%',
+    aspectRatio: 688 / 1543,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 30, 56, 0.78)',
+    backgroundColor: '#020208',
+    shadowColor: '#ff1e38',
+    shadowOpacity: 0.8,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
+  loadingArtwork: {
+    ...StyleSheet.absoluteFill,
+  },
+  loadingArtworkShade: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.16)',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 24,
+    alignItems: 'center',
+  },
+  loadingProgressTrack: {
+    width: '100%',
+    height: 8,
+    marginTop: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ff1e38',
+    backgroundColor: 'rgba(10, 0, 10, 0.82)',
+    shadowColor: '#ff1e38',
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  loadingProgressFill: {
+    height: '100%',
+    backgroundColor: '#ff1e38',
+    shadowColor: '#ff5a64',
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  loadingProgressLabel: {
+    marginTop: 5,
+    color: '#ff5a64',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    letterSpacing: 1.4,
+    textShadowColor: '#ff1e38',
+    textShadowRadius: 7,
+    textAlign: 'center',
   },
   loadingBanner: {
     width: '82%',
