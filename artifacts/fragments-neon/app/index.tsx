@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   Image as RNImage,
@@ -2223,6 +2223,284 @@ const createShipSmokePuffs = (enemy: Enemy, cell: number, count = 4): SmokePuff[
   });
 };
 
+const EnemySprite = React.memo(
+  ({ enemy, enemyIndex, cell, spriteFrames }: any) => {
+    const frame = useMemo(() => enemyFrameIndex(enemy), [enemy.phase]);
+    const size = useMemo(
+      () => enemyRenderSize(enemy.kind, cell, enemy.isMini),
+      [enemy.kind, cell, enemy.isMini],
+    );
+    const motion = useMemo(
+      () => enemyAnimationTransform(enemy, cell),
+      [enemy.x, enemy.y, enemy.spin, cell],
+    );
+    if (enemy.respawnAt > Date.now()) return null;
+    const centerY = enemy.y + motion.offsetY;
+    const rotationDegrees = motion.rotation * (180 / Math.PI);
+    return (
+      <G
+        transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${motion.scale}) translate(${-enemy.x} ${-enemy.y})`}
+      >
+        <SvgImage
+          href={spriteFrames[enemy.kind][frame]}
+          x={enemy.x - size.width / 2}
+          y={enemy.y - size.height / 2}
+          width={size.width}
+          height={size.height}
+          opacity={0.98}
+        />
+      </G>
+    );
+  },
+  (previous: any, next: any) => (
+    previous.enemy.x === next.enemy.x
+      && previous.enemy.y === next.enemy.y
+      && previous.enemy.phase === next.enemy.phase
+      && previous.enemy.spin === next.enemy.spin
+      && previous.enemy.respawnAt === next.enemy.respawnAt
+      && previous.cell === next.cell
+      && previous.enemy.kind === next.enemy.kind
+      && previous.enemy.isMini === next.enemy.isMini
+  ),
+);
+
+const ProjectileSprite = React.memo(
+  ({ projectile, cell, sevenFireOrbSource }: any) => {
+    const spriteSize = useMemo(() => sevenProjectileSize(cell), [cell]);
+    return (
+      <SvgImage
+        href={sevenFireOrbSource}
+        x={projectile.x - spriteSize / 2}
+        y={projectile.y - spriteSize / 2}
+        width={spriteSize}
+        height={spriteSize}
+        opacity={0.96}
+      />
+    );
+  },
+  (previous: any, next: any) => (
+    previous.projectile.x === next.projectile.x
+      && previous.projectile.y === next.projectile.y
+      && previous.cell === next.cell
+  ),
+);
+
+const PlayerMissileSprite = React.memo(
+  ({ missile, cell, playerMissileSource, arenaBounds }: any) => {
+    const spriteSize = useMemo(() => playerMissileSize(cell), [cell]);
+    const rotationDegrees = useMemo(
+      () => missile.angle * (180 / Math.PI),
+      [missile.angle],
+    );
+    if (!pointInsidePerimeter(missile, arenaBounds)) return null;
+    return (
+      <SvgImage
+        href={playerMissileSource}
+        x={missile.x - spriteSize / 2}
+        y={missile.y - spriteSize / 2}
+        width={spriteSize}
+        height={spriteSize}
+        opacity={0.98}
+        transform={`rotate(${rotationDegrees} ${missile.x} ${missile.y})`}
+      />
+    );
+  },
+  (previous: any, next: any) => (
+    previous.missile.x === next.missile.x
+      && previous.missile.y === next.missile.y
+      && previous.missile.angle === next.missile.angle
+      && previous.cell === next.cell
+      && previous.arenaBounds.left === next.arenaBounds.left
+      && previous.arenaBounds.right === next.arenaBounds.right
+      && previous.arenaBounds.top === next.arenaBounds.top
+      && previous.arenaBounds.bottom === next.arenaBounds.bottom
+  ),
+);
+
+const BombSprite = React.memo(
+  ({ bomb, pickupSize, frame, coreReactorSpriteSource }: any) => {
+    if (bomb.destroyed) return null;
+    return (
+      <G transform={`translate(${bomb.x} ${bomb.y})`}>
+        <Defs>
+          <ClipPath id="bomb-clip">
+            <Rect
+              x={-pickupSize / 2}
+              y={-pickupSize / 2}
+              width={pickupSize}
+              height={pickupSize}
+            />
+          </ClipPath>
+        </Defs>
+        <G clipPath="url(#bomb-clip)">
+          <SvgImage
+            href={coreReactorSpriteSource}
+            x={-pickupSize / 2 - frame * pickupSize}
+            y={-pickupSize / 2}
+            width={pickupSize * CORE_REACTOR_SPRITE_FRAME_COUNT}
+            height={pickupSize}
+            opacity={0.98}
+          />
+        </G>
+      </G>
+    );
+  },
+  (previous: any, next: any) => (
+    previous.bomb.x === next.bomb.x
+      && previous.bomb.y === next.bomb.y
+      && previous.bomb.destroyed === next.bomb.destroyed
+      && previous.frame === next.frame
+      && previous.pickupSize === next.pickupSize
+  ),
+);
+
+const DiamondSprite = React.memo(
+  ({ diamond, pickupSize, frame, diamondSpriteSource }: any) => {
+    if (diamond.collected) return null;
+    return (
+      <G transform={`translate(${diamond.x} ${diamond.y})`}>
+        <Defs>
+          <ClipPath id="diamond-clip">
+            <Rect
+              x={-pickupSize / 2}
+              y={-pickupSize / 2}
+              width={pickupSize}
+              height={pickupSize}
+            />
+          </ClipPath>
+        </Defs>
+        <G clipPath="url(#diamond-clip)">
+          <SvgImage
+            href={diamondSpriteSource}
+            x={-pickupSize / 2 - frame * pickupSize}
+            y={-pickupSize / 2}
+            width={pickupSize * DIAMOND_SPRITE_FRAME_COUNT}
+            height={pickupSize}
+            opacity={0.98}
+          />
+        </G>
+      </G>
+    );
+  },
+  (previous: any, next: any) => (
+    previous.diamond.x === next.diamond.x
+      && previous.diamond.y === next.diamond.y
+      && previous.diamond.collected === next.diamond.collected
+      && previous.frame === next.frame
+      && previous.pickupSize === next.pickupSize
+  ),
+);
+
+const SpiderThreadSprite = React.memo(
+  ({ thread, spiderWebSource, cell }: any) => {
+    const active = useMemo(
+      () => spiderThreadIsActive(thread),
+      [thread.remaining, thread.anchored],
+    );
+    const webSize = useMemo(
+      () => cell * thread.webSizeCells,
+      [cell, thread.webSizeCells],
+    );
+    return (
+      <G opacity={active ? 0.82 : 0.92}>
+        {!thread.anchored && (
+          <>
+            <Line
+              x1={thread.start.x}
+              y1={thread.start.y}
+              x2={thread.end.x}
+              y2={thread.end.y}
+              stroke="#fff3d6"
+              strokeWidth={2.8}
+              strokeLinecap="round"
+            />
+            <Line
+              x1={thread.start.x}
+              y1={thread.start.y}
+              x2={thread.end.x}
+              y2={thread.end.y}
+              stroke="#ff2bb5"
+              strokeWidth={1.15}
+              strokeLinecap="round"
+            />
+          </>
+        )}
+        {thread.anchored && (
+          <SvgImage
+            href={spiderWebSource}
+            x={thread.target.x - webSize / 2}
+            y={thread.target.y - webSize / 2}
+            width={webSize}
+            height={webSize}
+            opacity={clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88)}
+          />
+        )}
+        {!thread.anchored && (
+          <>
+            <Line
+              x1={thread.start.x}
+              y1={thread.start.y}
+              x2={thread.end.x}
+              y2={thread.end.y}
+              stroke="#00f3ff"
+              strokeWidth={0.72}
+              strokeLinecap="round"
+            />
+            <Circle cx={thread.end.x} cy={thread.end.y} r={3.2} fill="#fff3d6" />
+          </>
+        )}
+      </G>
+    );
+  },
+  (previous: any, next: any) => (
+    previous.thread.start.x === next.thread.start.x
+      && previous.thread.start.y === next.thread.start.y
+      && previous.thread.end.x === next.thread.end.x
+      && previous.thread.end.y === next.thread.end.y
+      && previous.thread.target.x === next.thread.target.x
+      && previous.thread.target.y === next.thread.target.y
+      && previous.thread.anchored === next.thread.anchored
+      && previous.thread.remaining === next.thread.remaining
+      && previous.cell === next.cell
+  ),
+);
+
+const FusionSparkSprite = React.memo(
+  ({ spark }: any) => {
+    const opacity = useMemo(
+      () => clamp(spark.life / spark.maxLife, 0, 1),
+      [spark.life, spark.maxLife],
+    );
+    return spark.streak ? (
+      <Line
+        x1={spark.x}
+        y1={spark.y}
+        x2={spark.previousX}
+        y2={spark.previousY}
+        stroke={spark.color}
+        strokeWidth={spark.size}
+        strokeLinecap="round"
+        opacity={opacity}
+      />
+    ) : (
+      <Circle
+        cx={spark.x}
+        cy={spark.y}
+        r={spark.size}
+        fill={spark.color}
+        opacity={opacity}
+      />
+    );
+  },
+  (previous: any, next: any) => (
+    previous.spark.x === next.spark.x
+      && previous.spark.y === next.spark.y
+      && previous.spark.life === next.spark.life
+      && previous.spark.previousX === next.spark.previousX
+      && previous.spark.previousY === next.spark.previousY
+  ),
+);
+
 type NativeArenaStaticProps = {
   width: number;
   height: number;
@@ -2334,33 +2612,15 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   return (
     <>
       {snapshot.diamonds.map((diamond, index) => (
-        !diamond.collected && (
-          <G
-            key={`diamond-${index}`}
-            transform={`translate(${diamond.x} ${diamond.y + Math.sin(snapshot.frame * 0.05 + diamond.phase) * snapshot.cell * 0.08})`}
-          >
-            <Defs>
-              <ClipPath id={`diamond-sprite-clip-${index}`}>
-                <Rect
-                  x={-pickupSize / 2}
-                  y={-pickupSize / 2}
-                  width={pickupSize}
-                  height={pickupSize}
-                />
-              </ClipPath>
-            </Defs>
-            <G clipPath={`url(#diamond-sprite-clip-${index})`}>
-              <SvgImage
-                href={diamondSpriteSource}
-                x={-pickupSize / 2 - diamondFrame * pickupSize}
-                y={-pickupSize / 2}
-                width={pickupSize * DIAMOND_SPRITE_FRAME_COUNT}
-                height={pickupSize}
-                opacity={0.98}
-              />
-            </G>
-          </G>
-        )
+        <DiamondSprite
+          key={`diamond-${index}`}
+          diamond={diamond}
+          diamondIndex={index}
+          cell={snapshot.cell}
+          frame={diamondFrame}
+          pickupSize={pickupSize}
+          diamondSpriteSource={diamondSpriteSource}
+        />
       ))}
       {SHIP_SMOKE_RENDER_MODE === 'SPRITE' && (
         <>
@@ -2520,167 +2780,60 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
         </>
       )}
       {snapshot.fusionSparks.map((spark, index) => (
-        spark.streak ? (
-          <Line
-            key={`fusion-spark-${index}`}
-            x1={spark.x}
-            y1={spark.y}
-            x2={spark.previousX}
-            y2={spark.previousY}
-            stroke={spark.color}
-            strokeWidth={spark.size}
-            strokeLinecap="round"
-            opacity={clamp(spark.life / spark.maxLife, 0, 1)}
-          />
-        ) : (
-          <Circle
-            key={`fusion-spark-${index}`}
-            cx={spark.x}
-            cy={spark.y}
-            r={spark.size}
-            fill={spark.color}
-            opacity={clamp(spark.life / spark.maxLife, 0, 1)}
-          />
-        )
+        <FusionSparkSprite
+          key={`fusion-spark-${index}`}
+          spark={spark}
+          sparkIndex={index}
+        />
       ))}
-      {snapshot.spiderThreads.map((thread, index) => {
-        const active = spiderThreadIsActive(thread);
-        const webSize = snapshot.cell * thread.webSizeCells;
-        return (
-          <G key={`spider-thread-${index}`} opacity={active ? 0.82 : 0.92}>
-            {!thread.anchored && (
-              <>
-                <Line
-                  x1={thread.start.x}
-                  y1={thread.start.y}
-                  x2={thread.end.x}
-                  y2={thread.end.y}
-                  stroke="#fff3d6"
-                  strokeWidth={2.8}
-                  strokeLinecap="round"
-                />
-                <Line
-                  x1={thread.start.x}
-                  y1={thread.start.y}
-                  x2={thread.end.x}
-                  y2={thread.end.y}
-                  stroke="#ff2bb5"
-                  strokeWidth={1.15}
-                  strokeLinecap="round"
-                />
-              </>
-            )}
-            {thread.anchored && (
-              <SvgImage
-                href={spiderWebSource}
-                x={thread.target.x - webSize / 2}
-                y={thread.target.y - webSize / 2}
-                width={webSize}
-                height={webSize}
-                opacity={clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88)}
-              />
-            )}
-            {!thread.anchored && (
-              <Line
-                x1={thread.start.x}
-                y1={thread.start.y}
-                x2={thread.end.x}
-                y2={thread.end.y}
-                stroke="#00f3ff"
-                strokeWidth={0.72}
-                strokeLinecap="round"
-              />
-            )}
-            {!thread.anchored && (
-              <Circle cx={thread.end.x} cy={thread.end.y} r={3.2} fill="#fff3d6" />
-            )}
-          </G>
-        );
-      })}
-      {snapshot.bombs.map((bomb, bombIndex) => {
-        if (bomb.destroyed) return null;
-        const frame = Math.floor(snapshot.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
-          % CORE_REACTOR_SPRITE_FRAME_COUNT;
-        const spriteSize = pickupSize;
-        return (
-          <G key={`bomb-${bombIndex}`} transform={`translate(${bomb.x} ${bomb.y})`}>
-            <Defs>
-              <ClipPath id={`core-reactor-sprite-clip-${bombIndex}`}>
-                <Rect
-                  x={-spriteSize / 2}
-                  y={-spriteSize / 2}
-                  width={spriteSize}
-                  height={spriteSize}
-                />
-              </ClipPath>
-            </Defs>
-            <G clipPath={`url(#core-reactor-sprite-clip-${bombIndex})`}>
-              <SvgImage
-                href={coreReactorSpriteSource}
-                x={-spriteSize / 2 - frame * spriteSize}
-                y={-spriteSize / 2}
-                width={spriteSize * CORE_REACTOR_SPRITE_FRAME_COUNT}
-                height={spriteSize}
-                opacity={0.98}
-              />
-            </G>
-          </G>
-        );
-      })}
-      {snapshot.projectiles.map((projectile, projectileIndex) => {
-        const spriteSize = sevenProjectileSize(snapshot.cell);
-        return (
-          <SvgImage
-            key={`seven-projectile-${projectileIndex}`}
-            href={sevenFireOrbSource}
-            x={projectile.x - spriteSize / 2}
-            y={projectile.y - spriteSize / 2}
-            width={spriteSize}
-            height={spriteSize}
-            opacity={0.96}
-          />
-        );
-      })}
-      {snapshot.missiles.map((missile, missileIndex) => {
-        if (!pointInsidePerimeter(missile, arenaBounds)) return null;
-        const spriteSize = playerMissileSize(snapshot.cell);
-        const rotationDegrees = missile.angle * (180 / Math.PI);
-        return (
-          <SvgImage
-            key={`player-missile-${missileIndex}`}
-            href={playerMissileSource}
-            x={missile.x - spriteSize / 2}
-            y={missile.y - spriteSize / 2}
-            width={spriteSize}
-            height={spriteSize}
-            opacity={0.98}
-            transform={`rotate(${rotationDegrees} ${missile.x} ${missile.y})`}
-          />
-        );
-      })}
-      {snapshot.enemies.map((enemy, enemyIndex) => {
-        if (enemy.respawnAt > Date.now()) return null;
-        const frame = enemyFrameIndex(enemy);
-        const size = enemyRenderSize(enemy.kind, snapshot.cell, enemy.isMini);
-        const motion = enemyAnimationTransform(enemy, snapshot.cell);
-        const centerY = enemy.y + motion.offsetY;
-        const rotationDegrees = motion.rotation * (180 / Math.PI);
-        return (
-          <G
-            key={`enemy-sprite-${enemyIndex}`}
-            transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${motion.scale}) translate(${-enemy.x} ${-enemy.y})`}
-          >
-            <SvgImage
-              href={spriteFrames[enemy.kind][frame]}
-              x={enemy.x - size.width / 2}
-              y={enemy.y - size.height / 2}
-              width={size.width}
-              height={size.height}
-              opacity={0.98}
-            />
-          </G>
-        );
-      })}
+      {snapshot.spiderThreads.map((thread, index) => (
+        <SpiderThreadSprite
+          key={`spider-thread-${index}`}
+          thread={thread}
+          threadIndex={index}
+          cell={snapshot.cell}
+          spiderWebSource={spiderWebSource}
+        />
+      ))}
+      {snapshot.bombs.map((bomb, bombIndex) => (
+        <BombSprite
+          key={`bomb-${bombIndex}`}
+          bomb={bomb}
+          bombIndex={bombIndex}
+          pickupSize={pickupSize}
+          frame={Math.floor(snapshot.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
+            % CORE_REACTOR_SPRITE_FRAME_COUNT}
+          coreReactorSpriteSource={coreReactorSpriteSource}
+        />
+      ))}
+      {snapshot.projectiles.map((projectile, projectileIndex) => (
+        <ProjectileSprite
+          key={`seven-projectile-${projectileIndex}`}
+          projectile={projectile}
+          projectileIndex={projectileIndex}
+          cell={snapshot.cell}
+          sevenFireOrbSource={sevenFireOrbSource}
+        />
+      ))}
+      {snapshot.missiles.map((missile, missileIndex) => (
+        <PlayerMissileSprite
+          key={`player-missile-${missileIndex}`}
+          missile={missile}
+          missileIndex={missileIndex}
+          cell={snapshot.cell}
+          playerMissileSource={playerMissileSource}
+          arenaBounds={arenaBounds}
+        />
+      ))}
+      {snapshot.enemies.map((enemy, enemyIndex) => (
+        <EnemySprite
+          key={`enemy-sprite-${enemyIndex}`}
+          enemy={enemy}
+          enemyIndex={enemyIndex}
+          cell={snapshot.cell}
+          spriteFrames={spriteFrames}
+        />
+      ))}
       {scanIntervals.map(([startX, endX], index) => (
         <Line
           key={`capture-scan-${index}`}
@@ -3407,11 +3560,10 @@ export default function GameScreen() {
     const previousBombs = preserveBombLayout
       ? g.bombs.map((bomb) => ({ ...bomb }))
       : [];
-    const previousSplitShips = preserveStats && !resetBoard
+    const previousSplitEnemies = preserveStats && !resetBoard
       ? previousEnemies
         .filter((enemy) => (
-          enemy.kind === 'SHIP'
-          && (enemy.isMini || enemy.splitLevel !== undefined)
+          (enemy.isMini || enemy.splitLevel !== undefined)
           && !enemyIsDestroyed(enemy)
         ))
         .map((enemy) => ({ ...enemy }))
@@ -3426,8 +3578,8 @@ export default function GameScreen() {
       enemies,
       previousEnemies.filter((enemy) => !enemy.isMini && enemy.splitLevel === undefined),
     );
-    if (previousSplitShips.length > 0) {
-      enemies.push(...previousSplitShips);
+    if (previousSplitEnemies.length > 0) {
+      enemies.push(...previousSplitEnemies);
     }
     // A respawn resumes the same sector state, including the exact bomb
     // roster and destroyed flags. Only a new sector/game creates a new draw.
