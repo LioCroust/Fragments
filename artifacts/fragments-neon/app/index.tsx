@@ -4039,6 +4039,7 @@ export default function GameScreen() {
       }
       enqueueBanner({
         kind: nextLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
+        tutorialStep: nextLevel === TUTORIAL_SECTOR ? 1 : undefined,
         level: nextLevel,
       });
     });
@@ -5478,7 +5479,25 @@ export default function GameScreen() {
               });
             }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
-            if (g.level < MAX_LEVEL && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100) {
+            if (
+              g.level === TUTORIAL_SECTOR
+              && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
+              && !tutorialCaptureCompletionBannerShownRef.current
+            ) {
+              tutorialCaptureCompletionBannerShownRef.current = true;
+              g.inputDir = ZERO;
+              g.hasMoveCommand = false;
+              enqueueBanner({
+                kind: 'TUTORIAL',
+                tutorialStep: 2,
+                tutorialCompleted: true,
+              });
+            }
+            if (
+              g.level !== TUTORIAL_SECTOR
+              && g.level < MAX_LEVEL
+              && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
+            ) {
               const nextLevel = Math.min(MAX_LEVEL, g.level + 1);
               g.status = 'SECTOR_TRANSITION';
               g.inputDir = ZERO;
@@ -6180,6 +6199,7 @@ export default function GameScreen() {
           if (gameRef.current.initialized) {
             revealGameAfterInitialLoad({
               kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
+              tutorialStep: initialLevel === TUTORIAL_SECTOR ? 1 : undefined,
               level: gameRef.current.level,
             });
           }
@@ -6375,7 +6395,9 @@ export default function GameScreen() {
               style: { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' },
             })
           : renderNativeArena()}
-        {hud.level === TUTORIAL_SECTOR && !tutorialCompletionBannerShownRef.current && (
+        {hud.level === TUTORIAL_SECTOR
+          && tutorialStep === 1
+          && !tutorialCompletionBannerShownRef.current && (
           <TutorialSwipeGuide counts={tutorialSwipeCounts} />
         )}
         {banner && (
@@ -6426,9 +6448,13 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR SÉCURISÉ À 80%'
                         : banner.kind === 'TUTORIAL'
-                          ? banner.tutorialCompleted
-                            ? 'DIRIGER LE DRONE 1/4'
-                            : 'TUTORIEL 1/4'
+                          ? banner.tutorialStep === 2
+                            ? banner.tutorialCompleted
+                              ? 'OBJECTIF ATTEINT !'
+                              : 'TUTORIEL 2/4'
+                            : banner.tutorialCompleted
+                              ? 'DIRIGER LE DRONE 1/4'
+                              : 'TUTORIEL 1/4'
                         : banner.kind === 'SECTOR_START'
                           ? `SECTEUR ${(banner.level ?? 1).toString().padStart(2, '0')}`
                         : banner.kind === 'BOSS'
@@ -6456,9 +6482,13 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'PASSAGE SECTEUR SUIVANT'
                       : banner.kind === 'TUTORIAL'
-                        ? banner.tutorialCompleted
-                          ? '✓ OBJECTIF VALIDÉ'
-                          : 'DIRIGE LE DRONE AVEC DES SWIPES'
+                        ? banner.tutorialStep === 2
+                          ? banner.tutorialCompleted
+                            ? '✓ ZONE SÉCURISÉE À 80% • BRAVO'
+                            : 'SÉCURISE 80% DE LA ZONE'
+                          : banner.tutorialCompleted
+                            ? '✓ OBJECTIF VALIDÉ'
+                            : 'DIRIGE LE DRONE AVEC DES SWIPES'
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'BOSS_SPLIT'
