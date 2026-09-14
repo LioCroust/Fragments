@@ -4773,6 +4773,18 @@ export default function GameScreen() {
       enemy.respawnAt = Number.POSITIVE_INFINITY;
       enemy.vx = 0;
       enemy.vy = 0;
+      const respawnTutorialEnemyAfterCapture = (
+        g.level === TUTORIAL_SECTOR
+        && tutorialStepRef.current === 4
+        && fromCapture
+      );
+      if (respawnTutorialEnemyAfterCapture) {
+        // In the destruction lesson, capturing the ship is only the first
+        // half of the exercise. Move it out of the newly claimed surface and
+        // bring it back so the player can finish with a missile.
+        spawnPointAfterBurst(g, enemy);
+        enemy.respawnAt = now + 250;
+      }
       if (splitOnMissile) {
         g.enemies.push(...splitShips);
         if (!suppressTutorialCompletionBanner) {
@@ -6789,7 +6801,7 @@ export default function GameScreen() {
                 {hud.level.toString().padStart(2, '0')}
               </Text>
               {hud.level === TUTORIAL_SECTOR && (
-                <Text style={styles.tutorialSectorLabel}>TUTO</Text>
+                <Text style={styles.tutorialSectorLabel}>TUTORIEL</Text>
               )}
               {isBossSector(hud.level) && (
                 <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
@@ -7353,7 +7365,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   tutorialSectorLabel: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
+    marginLeft: 1,
     marginTop: 2,
     marginBottom: 1,
     color: HUD_COLORS.cyan,
