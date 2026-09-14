@@ -46,6 +46,8 @@ const CAPTURED_ZONE_LAYER_OPACITY = (
 ) / (1 - INITIAL_MAP_OPACITY);
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
+const TUTORIAL_SECTOR = 0;
+const TUTORIAL_SWIPE_REPETITIONS = 2;
 // Temporary QA control. __DEV__ hides it automatically from production builds.
 const DEBUG_SECTOR_SELECTOR_ENABLED = __DEV__;
 const CONTACT_FREEZE_DURATION = 1000;
@@ -187,6 +189,7 @@ const backgroundSourceForLevel = (level: number) => (
 );
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
+const LAST_PLAYED_SECTOR_STORAGE_KEY = 'fragments-neon:last-played-sector:v1';
 const GAME_SAVE_INTERVAL_MS = 1200;
 const GAME_SAVE_VERSION = 2 as const;
 const CUTTING_SPRITE_ENABLED = true;
@@ -558,12 +561,13 @@ type Hud = {
 };
 
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER' | 'TUTORIAL';
   score?: number;
   points?: number;
   level?: number;
   bossKind?: EnemyKind;
   enemyKind?: EnemyKind;
+  tutorialCompleted?: boolean;
   onComplete?: () => void;
 };
 
@@ -592,6 +596,16 @@ type Snapshot = {
   pendingCapturePolygons: Point[][];
   scanY: number;
   invincibleUntil: number;
+};
+
+type TutorialDirection = 'up' | 'down' | 'left' | 'right';
+type TutorialSwipeCounts = Record<TutorialDirection, number>;
+
+const EMPTY_TUTORIAL_SWIPE_COUNTS: TutorialSwipeCounts = {
+  up: 0,
+  down: 0,
+  left: 0,
+  right: 0,
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -1888,6 +1902,7 @@ const pathTouchesPolygon = (path: Point[], polygon: Point[], strokeRadius: numbe
 };
 
 const createEnemies = (width: number, height: number, cell: number, level: number): Enemy[] => {
+  if (level === TUTORIAL_SECTOR) return [];
   const safeX = (ratio: number) => clamp(width * ratio, cell * 4, width - cell * 4);
   const safeY = (ratio: number) => clamp(height * ratio, cell * 4, height - cell * 4);
   const clampedLevel = Math.min(MAX_LEVEL, Math.max(1, level));
@@ -1953,6 +1968,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
 };
 
 const createBombs = (width: number, height: number, cell: number, level: number): Bomb[] => {
+  if (level === TUTORIAL_SECTOR) return [];
   if (isBossSector(level)) return [];
 
   const spawnChance = level <= 4
@@ -2900,15 +2916,28 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
 const DebugSectorSelector = ({
   currentSector,
   onSelect,
+  onSkipTutorial,
   bottomInset,
 }: {
   currentSector: number;
   onSelect: (sector: number) => void;
+  onSkipTutorial: () => void;
   bottomInset: number;
 }) => {
   if (!DEBUG_SECTOR_SELECTOR_ENABLED) return null;
   return (
     <View style={[styles.debugSectorSelector, { bottom: bottomInset }]}>
+      {currentSector === TUTORIAL_SECTOR && (
+        <Pressable
+          style={styles.skipTutorialButton}
+          onPress={onSkipTutorial}
+          accessibilityRole="button"
+          accessibilityLabel="Passer le tutoriel et reprendre au dernier secteur joué"
+          testID="skip-tutorial"
+        >
+          <Text style={styles.skipTutorialButtonText}>PASSER LE TUTORIEL</Text>
+        </Pressable>
+      )}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -2942,6 +2971,39 @@ const DebugSectorSelector = ({
           );
         })}
       </ScrollView>
+    </View>
+  );
+};
+
+const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
+  const arrowStyle = (direction: TutorialDirection) => (
+    counts[direction] >= TUTORIAL_SWIPE_REPETITIONS
+      ? styles.tutorialArrowDone
+      : styles.tutorialArrow
+  );
+
+  return (
+    <View style={styles.tutorialGuide} pointerEvents="none">
+      <Text style={styles.tutorialGuideLabel}>SWIPE DANS LES 4 DIRECTIONS</Text>
+      <View style={styles.tutorialArrowGrid}>
+        <View style={styles.tutorialArrowRow}>
+          <View style={styles.tutorialArrowSlot} />
+          <Text style={arrowStyle('up')}>↑</Text>
+          <View style={styles.tutorialArrowSlot} />
+        </View>
+        <View style={styles.tutorialArrowRow}>
+          <Text style={arrowStyle('left')}>←</Text>
+          <View style={styles.tutorialCenterSlot}>
+            <Text style={styles.tutorialCenterMark}>✦</Text>
+          </View>
+          <Text style={arrowStyle('right')}>→</Text>
+        </View>
+        <View style={styles.tutorialArrowRow}>
+          <View style={styles.tutorialArrowSlot} />
+          <Text style={arrowStyle('down')}>↓</Text>
+          <View style={styles.tutorialArrowSlot} />
+        </View>
+      </View>
     </View>
   );
 };
@@ -3034,6 +3096,14 @@ export default function GameScreen() {
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const initialLoadingRevealStartedRef = useRef(false);
   const loadingBannerTranslateX = useRef(new Animated.Value(0)).current;
+  const lastPlayedSectorRef = useRef(0);
+  const lastPlayedSectorHydratedRef = useRef(false);
+  const tutorialSwipeCountsRef = useRef<TutorialSwipeCounts>({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
+  const tutorialSwipeGestureDirectionRef = useRef<TutorialDirection | null>(null);
+  const tutorialCompletionBannerShownRef = useRef(false);
+  const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
+    ...EMPTY_TUTORIAL_SWIPE_COUNTS,
+  });
 
   useEffect(() => {
     diagnosticLog('game-screen-mounted', {
@@ -3048,7 +3118,13 @@ export default function GameScreen() {
 
   const saveGameProgress = useCallback(() => {
     const game = gameRef.current;
-    if (!game.initialized || game.status !== 'PLAYING') return;
+    if (
+      !game.initialized
+      || game.status !== 'PLAYING'
+      || game.level === TUTORIAL_SECTOR
+    ) {
+      return;
+    }
     const serialized = JSON.stringify(serializeGame(game, Date.now()));
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
@@ -3063,6 +3139,14 @@ export default function GameScreen() {
       .then(() => AsyncStorage.removeItem(GAME_SAVE_STORAGE_KEY))
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Unable to clear saved game progress', error);
+      });
+  }, []);
+  const rememberLastPlayedSector = useCallback((sector: number) => {
+    const normalizedSector = Math.round(clamp(sector, 1, MAX_LEVEL));
+    lastPlayedSectorRef.current = normalizedSector;
+    void AsyncStorage.setItem(LAST_PLAYED_SECTOR_STORAGE_KEY, String(normalizedSector))
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to save last played sector', error);
       });
   }, []);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
@@ -3243,6 +3327,27 @@ export default function GameScreen() {
       })
       .finally(() => {
         if (!cancelled) savedGameHydratedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(LAST_PLAYED_SECTOR_STORAGE_KEY)
+      .then((storedSector) => {
+        if (cancelled) return;
+        const parsedSector = Number.parseInt(storedSector ?? '0', 10);
+        lastPlayedSectorRef.current = Number.isFinite(parsedSector)
+          ? Math.round(clamp(parsedSector, 0, MAX_LEVEL))
+          : 0;
+      })
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to load last played sector', error);
+      })
+      .finally(() => {
+        if (!cancelled) lastPlayedSectorHydratedRef.current = true;
       });
     return () => {
       cancelled = true;
@@ -3534,7 +3639,11 @@ export default function GameScreen() {
     };
   }, [loadWebBackground]);
 
-  const resetGame = useCallback((preserveStats = false, resetBoard = false) => {
+  const resetGame = useCallback((
+    preserveStats = false,
+    resetBoard = false,
+    levelOverride?: number,
+  ) => {
     const g = gameRef.current;
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
@@ -3544,7 +3653,7 @@ export default function GameScreen() {
     const previousInvincibleUntil = preserveStats && resetBoard
       ? (g.invincibleUntil ?? 0)
       : 0;
-    const previousLevel = preserveStats ? g.level : 1;
+    const previousLevel = levelOverride ?? (preserveStats ? g.level : 1);
     const previousClaimedPolygons = preserveStats && !resetBoard
       ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
       : [];
@@ -3554,7 +3663,9 @@ export default function GameScreen() {
     const previousCapturedArea = preserveStats && !resetBoard ? g.capturedArea : 0;
     const previousDiamonds = preserveStats && !resetBoard
       ? g.diamonds.map((diamond) => ({ ...diamond }))
-      : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
+      : previousLevel === TUTORIAL_SECTOR
+        ? []
+        : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
     const previousEnemies = preserveStats && !resetBoard ? g.enemies : [];
     const preserveBombLayout = preserveStats && !resetBoard;
     const previousBombs = preserveBombLayout
@@ -3569,6 +3680,14 @@ export default function GameScreen() {
         .map((enemy) => ({ ...enemy }))
       : [];
     if (!preserveStats) recordBannerShownRef.current = false;
+    if (previousLevel === TUTORIAL_SECTOR) {
+      tutorialSwipeCountsRef.current = { ...EMPTY_TUTORIAL_SWIPE_COUNTS };
+      tutorialSwipeGestureDirectionRef.current = null;
+      tutorialCompletionBannerShownRef.current = false;
+      setTutorialSwipeCounts({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
+    } else {
+      rememberLastPlayedSector(previousLevel);
+    }
     const cell = width / COLS;
     const bounds = perimeterBounds(width, height, cell);
     const rows = Math.max(18, Math.floor(height / cell));
@@ -3691,7 +3810,7 @@ export default function GameScreen() {
         bossKind: bossKindForSector(previousLevel),
       });
     }
-  }, [enqueueBanner]);
+  }, [enqueueBanner, rememberLastPlayedSector]);
 
   const restoreSavedGame = useCallback((saved: PersistedGame) => {
     const { width, height } = sizeRef.current;
@@ -3720,6 +3839,7 @@ export default function GameScreen() {
     );
     if (emptySectorOneSave || legacyBottomSpawn) {
       game.level = Math.round(clamp(saved.level, 1, MAX_LEVEL));
+      rememberLastPlayedSector(game.level);
       game.score = Math.max(0, saved.score);
       game.shields = Math.max(0, saved.shields);
       savedGameRef.current = null;
@@ -3746,6 +3866,7 @@ export default function GameScreen() {
       : 0;
 
     game.level = Math.round(clamp(saved.level, 1, MAX_LEVEL));
+    rememberLastPlayedSector(game.level);
     game.player = scalePoint(saved.player);
     game.inputDir = { ...saved.inputDir };
     game.facingDir = { ...saved.facingDir };
@@ -3833,13 +3954,51 @@ export default function GameScreen() {
       mode: game.mode,
       feedback: '',
     });
-  }, [resetGame]);
+  }, [rememberLastPlayedSector, resetGame]);
+
+  const registerTutorialSwipe = useCallback((direction: Direction) => {
+    const game = gameRef.current;
+    if (
+      game.level !== TUTORIAL_SECTOR
+      || game.status !== 'PLAYING'
+      || tutorialCompletionBannerShownRef.current
+    ) {
+      return;
+    }
+    const tutorialDirection: TutorialDirection = direction.x > 0
+      ? 'right'
+      : direction.x < 0
+        ? 'left'
+        : direction.y > 0
+          ? 'down'
+          : 'up';
+    const nextCounts = {
+      ...tutorialSwipeCountsRef.current,
+      [tutorialDirection]: Math.min(
+        TUTORIAL_SWIPE_REPETITIONS,
+        tutorialSwipeCountsRef.current[tutorialDirection] + 1,
+      ),
+    };
+    tutorialSwipeCountsRef.current = nextCounts;
+    setTutorialSwipeCounts(nextCounts);
+    const completed = Object.values(nextCounts).every(
+      (count) => count >= TUTORIAL_SWIPE_REPETITIONS,
+    );
+    if (completed) {
+      tutorialCompletionBannerShownRef.current = true;
+      enqueueBanner({
+        kind: 'TUTORIAL',
+        tutorialCompleted: true,
+      });
+    }
+  }, [enqueueBanner]);
 
   const teleportToSector = useCallback((sector: number) => {
     const g = gameRef.current;
     if (!g.initialized) return;
     const previousLevel = g.level;
     const nextLevel = Math.round(clamp(sector, 1, MAX_LEVEL));
+    rememberLastPlayedSector(nextLevel);
     g.status = 'SECTOR_TRANSITION';
     void preloadSectorForBanner(nextLevel).then(() => {
       const transitionGame = gameRef.current;
@@ -3852,7 +4011,13 @@ export default function GameScreen() {
         level: nextLevel,
       });
     });
-  }, [enqueueBanner, preloadSectorForBanner, releaseSectorBackground, resetGame]);
+  }, [
+    enqueueBanner,
+    preloadSectorForBanner,
+    releaseSectorBackground,
+    rememberLastPlayedSector,
+    resetGame,
+  ]);
 
   const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -3875,11 +4040,25 @@ export default function GameScreen() {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
         audioUnlockedRef.current = true;
+        tutorialSwipeGestureDirectionRef.current = null;
       },
       onPanResponderMove: (_, gesture) => {
         const g = gameRef.current;
         if (g.status !== 'PLAYING' || Math.hypot(gesture.dx, gesture.dy) < 10) return;
         const direction = cardinalDirection(gesture.dx, gesture.dy);
+        if (g.level === TUTORIAL_SECTOR) {
+          const tutorialDirection: TutorialDirection = direction.x > 0
+            ? 'right'
+            : direction.x < 0
+              ? 'left'
+              : direction.y > 0
+                ? 'down'
+                : 'up';
+          if (tutorialSwipeGestureDirectionRef.current !== tutorialDirection) {
+            tutorialSwipeGestureDirectionRef.current = tutorialDirection;
+            registerTutorialSwipe(direction);
+          }
+        }
         g.inputDir = direction;
         g.hasMoveCommand = true;
         // A new cardinal swipe can redirect an active cut at 90 degrees.
@@ -3892,10 +4071,12 @@ export default function GameScreen() {
         }
       },
       onPanResponderRelease: () => {
+        tutorialSwipeGestureDirectionRef.current = null;
         // Keep the selected direction latched. This lets a short inward
         // swipe cross the outer safe band and enter the empty playfield.
       },
       onPanResponderTerminate: () => {
+        tutorialSwipeGestureDirectionRef.current = null;
         // Keep the selected direction latched for the same safe-band entry.
       },
       onPanResponderTerminationRequest: () => false,
@@ -5181,7 +5362,12 @@ export default function GameScreen() {
           if (g.shields <= 0) {
             enqueueBanner({ kind: 'GAME_OVER', score: g.score });
             clearSavedGameProgress();
-            resetGame(false);
+            const resumeLevel = Math.round(clamp(
+              lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : g.level,
+              1,
+              MAX_LEVEL,
+            ));
+            resetGame(false, false, resumeLevel);
           } else {
             resetGame(true);
           }
@@ -5949,18 +6135,20 @@ export default function GameScreen() {
         !g.initialized
         && sizeRef.current.width > 0
         && savedGameHydratedRef.current
+        && lastPlayedSectorHydratedRef.current
         && !initialSectorPreparationStartedRef.current
       ) {
         initialSectorPreparationStartedRef.current = true;
         const savedGame = savedGameRef.current;
-        const initialLevel = savedGame?.level ?? 1;
+        const initialLevel = savedGame?.level
+          ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
         void preloadSectorForBanner(initialLevel).then(() => {
           if (cancelled || gameRef.current.initialized) return;
           if (savedGame) restoreSavedGame(savedGame);
-          else resetGame(false);
+          else resetGame(false, false, initialLevel);
           if (gameRef.current.initialized) {
             revealGameAfterInitialLoad({
-              kind: 'SECTOR_START',
+              kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
               level: gameRef.current.level,
             });
           }
@@ -6156,6 +6344,9 @@ export default function GameScreen() {
               style: { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' },
             })
           : renderNativeArena()}
+        {hud.level === TUTORIAL_SECTOR && !tutorialCompletionBannerShownRef.current && (
+          <TutorialSwipeGuide counts={tutorialSwipeCounts} />
+        )}
         {banner && (
           <View style={styles.arcadeBannerLayer} pointerEvents="none">
             <Animated.View
@@ -6171,6 +6362,8 @@ export default function GameScreen() {
                             ? styles.shieldBanner
                       : banner.kind === 'SECTOR'
                         ? styles.sectorBanner
+                      : banner.kind === 'TUTORIAL'
+                        ? styles.tutorialBanner
                         : banner.kind === 'BOSS'
                           ? styles.bossBanner
                       : banner.kind === 'CLEAN'
@@ -6201,6 +6394,10 @@ export default function GameScreen() {
                       ? 'BOUCLIER ACTIVÉ'
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR SÉCURISÉ À 80%'
+                        : banner.kind === 'TUTORIAL'
+                          ? banner.tutorialCompleted
+                            ? 'DIRIGER LE DRONE 1/4'
+                            : 'TUTORIEL 1/4'
                         : banner.kind === 'SECTOR_START'
                           ? `SECTEUR ${(banner.level ?? 1).toString().padStart(2, '0')}`
                         : banner.kind === 'BOSS'
@@ -6227,6 +6424,10 @@ export default function GameScreen() {
                         ? 'INVINCIBILITÉ  •  10 SECONDES'
                       : banner.kind === 'SECTOR'
                         ? 'PASSAGE SECTEUR SUIVANT'
+                      : banner.kind === 'TUTORIAL'
+                        ? banner.tutorialCompleted
+                          ? '✓ OBJECTIF VALIDÉ'
+                          : 'DIRIGE LE DRONE AVEC DES SWIPES'
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
                       : banner.kind === 'BOSS_SPLIT'
@@ -6355,6 +6556,9 @@ export default function GameScreen() {
       <DebugSectorSelector
         currentSector={hud.level}
         onSelect={teleportToSector}
+        onSkipTutorial={() => teleportToSector(
+          lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : 1,
+        )}
         bottomInset={Math.max(insets.bottom, 6)}
       />
 
@@ -6455,6 +6659,25 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  skipTutorialButton: {
+    alignSelf: 'stretch',
+    minHeight: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 176, 46, 0.82)',
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 85, 0, 0.16)',
+  },
+  skipTutorialButtonText: {
+    color: '#fff3d6',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 1.3,
+    textShadowColor: '#ff5500',
+    textShadowRadius: 6,
+  },
   debugSectorContent: {
     gap: 5,
     paddingRight: 2,
@@ -6486,6 +6709,83 @@ const styles = StyleSheet.create({
     color: '#fff3d6',
     textShadowColor: '#ffb02e',
     textShadowRadius: 6,
+  },
+  tutorialGuide: {
+    position: 'absolute',
+    top: '48%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  tutorialGuideLabel: {
+    color: '#fff3d6',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 1.35,
+    textShadowColor: '#00f3ff',
+    textShadowRadius: 8,
+  },
+  tutorialArrowGrid: {
+    width: 150,
+    marginTop: 9,
+    gap: 3,
+  },
+  tutorialArrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 38,
+  },
+  tutorialArrowSlot: {
+    width: 42,
+    height: 38,
+  },
+  tutorialCenterSlot: {
+    width: 42,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 243, 255, 0.42)',
+    borderRadius: 3,
+    backgroundColor: 'rgba(0, 16, 28, 0.66)',
+  },
+  tutorialCenterMark: {
+    color: '#00f3ff',
+    fontSize: 15,
+    textShadowColor: '#00f3ff',
+    textShadowRadius: 8,
+  },
+  tutorialArrow: {
+    width: 42,
+    height: 38,
+    color: '#b8ff4a',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 31,
+    lineHeight: 36,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(184, 255, 74, 0.58)',
+    borderRadius: 3,
+    backgroundColor: 'rgba(8, 24, 18, 0.68)',
+    textShadowColor: '#b8ff4a',
+    textShadowRadius: 8,
+  },
+  tutorialArrowDone: {
+    width: 42,
+    height: 38,
+    color: '#fff3d6',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 31,
+    lineHeight: 36,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#00f3ff',
+    borderRadius: 3,
+    backgroundColor: 'rgba(0, 243, 255, 0.18)',
+    textShadowColor: '#00f3ff',
+    textShadowRadius: 10,
   },
   cockpitHeader: {
     position: 'absolute',
@@ -6777,6 +7077,13 @@ const styles = StyleSheet.create({
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,
     backgroundColor: 'rgba(24, 4, 24, 0.46)',
+  },
+  tutorialBanner: {
+    borderColor: HUD_COLORS.cyan,
+    backgroundColor: 'rgba(0, 22, 32, 0.68)',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
   },
   bossBanner: {
     borderColor: '#ff2bb5',
@@ -9712,7 +10019,7 @@ export default function GameScreen() {
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Unable to save game progress', error);
       });
-  }, []);
+  }, [rememberLastPlayedSector]);
   const clearSavedGameProgress = useCallback(() => {
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
