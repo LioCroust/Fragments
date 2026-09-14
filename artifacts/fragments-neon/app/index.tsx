@@ -553,7 +553,6 @@ type Game = {
   respawnAt: number;
   invincibleUntil: number;
   speedBoostUntil: number;
-  cutSparkBurstFrame?: number;
 };
 
 type PersistedGame = Omit<
@@ -3251,6 +3250,7 @@ export default function GameScreen() {
     mode: 'SLOW',
     feedback: '',
   });
+  const [fps, setFps] = useState(0);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
@@ -4538,31 +4538,6 @@ export default function GameScreen() {
     let cancelled = false;
 
     const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
-
-    const emitCutSparkBurst = (g: Game) => {
-      if (g.cutSparkBurstFrame !== undefined && g.frame - g.cutSparkBurstFrame < 6) return;
-      if (g.particles.length >= 72) return;
-      g.cutSparkBurstFrame = g.frame;
-
-      const colors = ['#ffffff', '#fff35c', '#ffb02e', '#ff8a00', '#ffffff', '#ff5500'];
-      const origin = cuttingPoint(g.player, g.cutDir, g.cell);
-      // A short radial burst: six sparks every ~100 ms, each alive for only a
-      // fraction of a second. It reads as a torch flame, not a line.
-      for (let index = 0; index < 6; index += 1) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 135 + Math.random() * 175;
-        g.particles.push({
-          x: origin.x,
-          y: origin.y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 0.18 + Math.random() * 0.1,
-          size: 1.2 + Math.random() * 1.7,
-          color: colors[index],
-          streak: true,
-        });
-      }
-    };
 
     const activateCaptureProtection = (g: Game, now: number) => {
       const protectionWasInactive = !playerIsProtected(g, now);
