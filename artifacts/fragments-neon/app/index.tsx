@@ -554,6 +554,7 @@ type Game = {
   respawnAt: number;
   invincibleUntil: number;
   speedBoostUntil: number;
+  cutSparkBurstFrame?: number;
 };
 
 type PersistedGame = Omit<
@@ -1605,52 +1606,6 @@ const drawCuttingEffectCanvas = (
   context.fillStyle = '#f7c56f';
   context.fillRect(cell * 0.39, -cell * 0.045, cell * 0.08, cell * 0.09);
   context.restore();
-};
-
-type CutSparkSegment = {
-  start: Point;
-  end: Point;
-  color: string;
-  opacity: number;
-  width: number;
-};
-
-// Keep a visible fan of molten sparks without allocating dozens of short-lived
-// particle objects every frame. The sparks begin just behind the cutting
-// sprite so they remain visible instead of being hidden underneath its atlas.
-const cutSparkSegments = (
-  player: Point,
-  direction: Direction,
-  cell: number,
-  frame: number,
-): CutSparkSegment[] => {
-  if (direction.x === 0 && direction.y === 0) return [];
-  const point = cuttingPoint(player, direction, cell);
-  const backward = { x: -direction.x, y: -direction.y };
-  const normal = { x: -direction.y, y: direction.x };
-  const colors = ['#ffffff', '#fff35c', '#ffb02e', '#ff8a00', '#ffffff'];
-
-  return Array.from({ length: 5 }, (_, index) => {
-    const phase = frame * 0.22 + index * 1.25;
-    const travel = 0.7 + (Math.sin(phase) * 0.5 + 0.5) * 0.34;
-    const lateral = Math.sin(phase * 1.17) * 0.28;
-    const start = {
-      x: point.x + backward.x * cell * travel + normal.x * cell * lateral,
-      y: point.y + backward.y * cell * travel + normal.y * cell * lateral,
-    };
-    const length = 0.16 + (Math.cos(phase * 0.83) * 0.5 + 0.5) * 0.24;
-    const end = {
-      x: start.x + backward.x * cell * length + normal.x * cell * lateral * 0.35,
-      y: start.y + backward.y * cell * length + normal.y * cell * lateral * 0.35,
-    };
-    return {
-      start,
-      end,
-      color: colors[index],
-      opacity: 0.56 + (Math.sin(phase * 1.4) * 0.5 + 0.5) * 0.4,
-      width: cell * (0.028 + (index % 3) * 0.008),
-    };
-  });
 };
 
 const drawCuttingSpriteCanvas = (
@@ -2853,9 +2808,6 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   );
   const activeCut = snapshot.trail.length > 0
     && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
-  const cutSparks = activeCut
-    ? cutSparkSegments(snapshot.player, snapshot.direction, snapshot.cell, snapshot.frame)
-    : [];
   const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
   const cutPulse = 0.72 + Math.sin(Date.now() * 0.012) * 0.2;
   const cutFrame = Math.floor(Date.now() / 55) % CUTTING_SPRITE_FRAME_COUNT;
@@ -3005,19 +2957,6 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         </G>
       )}
-      {cutSparks.map((spark, index) => (
-        <Line
-          key={`cut-spark-${index}`}
-          x1={spark.start.x}
-          y1={spark.start.y}
-          x2={spark.end.x}
-          y2={spark.end.y}
-          stroke={spark.color}
-          strokeWidth={spark.width}
-          strokeLinecap="round"
-          opacity={spark.opacity}
-        />
-      ))}
       {snapshot.particles.map((particle, index) => (
         particle.streak ? (
           <Line
@@ -4676,6 +4615,31 @@ export default function GameScreen() {
     let cancelled = false;
 
     const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
+
+    const emitCutSparkBurst = (g: Game) => {
+      if (g.cutSparkBurstFrame !== undefined && g.frame - g.cutSparkBurstFrame < 6) return;
+      if (g.particles.length >= 72) return;
+      g.cutSparkBurstFrame = g.frame;
+
+      const backwards = Math.atan2(-g.cutDir.y, -g.cutDir.x);
+      const colors = ['#ffffff', '#fff35c', '#ffb02e', '#ff8a00', '#ffffff', '#ff5500'];
+      // A short, pooled-feeling burst: six sparks every ~100 ms, each alive
+      // for only a fraction of a second. This reads as a gerbe, not a trail.
+      for (let index = 0; index < 6; index += 1) {
+        const angle = backwards + (Math.random() - 0.5) * (Math.PI * 0.92);
+        const speed = 135 + Math.random() * 175;
+        g.particles.push({
+          x: g.player.x - g.cutDir.x * g.cell * 0.82,
+          y: g.player.y - g.cutDir.y * g.cell * 0.82,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 0.18 + Math.random() * 0.1,
+          size: 1.2 + Math.random() * 1.7,
+          color: colors[index],
+          streak: true,
+        });
+      }
+    };
 
     const activateCaptureProtection = (g: Game, now: number) => {
       const protectionWasInactive = !playerIsProtected(g, now);
@@ -6412,8 +6376,7 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            // Cut sparks are rendered as a tiny deterministic fan at draw
-            // time. This avoids allocating short-lived particles per step.
+            emitCutSparkBurst(g);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
@@ -6542,20 +6505,6 @@ export default function GameScreen() {
           // the original procedural point and full SVG spark treatment.
           drawCuttingEffectCanvas(context, g.player, g.cutDir, g.cell, g.frame);
         }
-        const cutSparks = cutSparkSegments(g.player, g.cutDir, g.cell, g.frame);
-        context.save();
-        context.globalCompositeOperation = 'lighter';
-        context.lineCap = 'round';
-        cutSparks.forEach((spark) => {
-          context.globalAlpha = spark.opacity;
-          context.strokeStyle = spark.color;
-          context.lineWidth = spark.width;
-          context.beginPath();
-          context.moveTo(spark.start.x, spark.start.y);
-          context.lineTo(spark.end.x, spark.end.y);
-          context.stroke();
-        });
-        context.restore();
       }
 
       context.globalCompositeOperation = 'lighter';
