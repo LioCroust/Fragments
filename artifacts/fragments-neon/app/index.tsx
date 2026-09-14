@@ -28,8 +28,10 @@ import {
   Canvas as SkiaCanvas,
   Group as SkiaGroup,
   Image as SkiaImage,
+  select as selectSkiaValue,
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
+import { useSharedValue, useDerivedValue } from 'react-native-reanimated';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
