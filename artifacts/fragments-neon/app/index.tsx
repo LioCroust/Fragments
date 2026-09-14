@@ -198,7 +198,6 @@ const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
 const LAST_PLAYED_SECTOR_STORAGE_KEY = 'fragments-neon:last-played-sector:v1';
 const GAME_SAVE_INTERVAL_MS = 1200;
 const GAME_SAVE_VERSION = 2 as const;
-const CUTTING_SPRITE_ENABLED = true;
 const CUTTING_SPRITE_FRAME_COUNT = 8;
 const CUTTING_SPRITE_FRAME_WIDTH = 160;
 const CUTTING_SPRITE_FRAME_HEIGHT = 96;
@@ -2811,13 +2810,6 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
     0,
     1,
   );
-  const activeCut = snapshot.trail.length > 0
-    && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
-  const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
-  const cutPulse = 0.72 + Math.sin(Date.now() * 0.012) * 0.2;
-  const cutFrame = Math.floor(Date.now() / 55) % CUTTING_SPRITE_FRAME_COUNT;
-  const cutSpriteWidth = snapshot.cell * 1.62 * NON_PLAYER_RENDER_SCALE;
-  const cutSpriteHeight = cutSpriteWidth * CUTTING_SPRITE_FRAME_HEIGHT / CUTTING_SPRITE_FRAME_WIDTH;
   const diamondFrame = Math.floor(snapshot.frame / DIAMOND_SPRITE_FRAME_DURATION)
     % DIAMOND_SPRITE_FRAME_COUNT;
   const scanIntervals = snapshot.pendingCapturePolygons.flatMap((polygon) => (
@@ -2897,70 +2889,6 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
               );
             })}
         </>
-      )}
-      {CUTTING_SPRITE_ENABLED && activeCut && (
-        <>
-          <Defs>
-            <ClipPath id="cutting-sprite-frame-clip">
-              <Rect
-                x={-cutSpriteWidth / 2}
-                y={-cutSpriteHeight / 2}
-                width={cutSpriteWidth}
-                height={cutSpriteHeight}
-              />
-            </ClipPath>
-          </Defs>
-          <G transform={`translate(${cutPoint.x} ${cutPoint.y}) rotate(${angle * (180 / Math.PI)})`}>
-            <G clipPath="url(#cutting-sprite-frame-clip)">
-              <SvgImage
-                href={cuttingSpriteSource}
-                x={-cutSpriteWidth / 2 - cutFrame * cutSpriteWidth}
-                y={-cutSpriteHeight / 2}
-                width={cutSpriteWidth * CUTTING_SPRITE_FRAME_COUNT}
-                height={cutSpriteHeight}
-                opacity={0.94}
-              />
-            </G>
-          </G>
-        </>
-      )}
-      {!CUTTING_SPRITE_ENABLED && activeCut && (
-        <G transform={`translate(${cutPoint.x} ${cutPoint.y}) rotate(${angle * (180 / Math.PI)})`}>
-          <Line
-            x1={-snapshot.cell * 0.5}
-            y1={0}
-            x2={snapshot.cell * 0.38}
-            y2={0}
-            stroke="#ff6a22"
-            strokeWidth={snapshot.cell * 0.16}
-            strokeLinecap="round"
-            opacity={0.34 + cutPulse * 0.2}
-          />
-          <Line
-            x1={snapshot.cell * 0.03}
-            y1={0}
-            x2={snapshot.cell * 0.29}
-            y2={0}
-            stroke="#fff5cf"
-            strokeWidth={snapshot.cell * 0.07}
-            strokeLinecap="round"
-            opacity={0.78 + cutPulse * 0.18}
-          />
-          <Polygon
-            points={`${snapshot.cell * 0.24},${-snapshot.cell * 0.12} ${snapshot.cell * 0.42},${-snapshot.cell * 0.09} ${snapshot.cell * 0.42},${snapshot.cell * 0.09} ${snapshot.cell * 0.24},${snapshot.cell * 0.12}`}
-            fill="#9b542f"
-            opacity={0.86}
-          />
-          <Line
-            x1={snapshot.cell * 0.4}
-            y1={0}
-            x2={snapshot.cell * 0.5}
-            y2={0}
-            stroke="#f7c56f"
-            strokeWidth={snapshot.cell * 0.09}
-            strokeLinecap="round"
-          />
-        </G>
       )}
       {snapshot.particles.map((particle, index) => (
         particle.streak ? (
@@ -3336,7 +3264,6 @@ export default function GameScreen() {
   const diamondSpriteImageRef = useRef<any>(null);
   const speedBoostImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
-  const cuttingSpriteImageRef = useRef<any>(null);
   const shipSmokeSpriteImageRef = useRef<any>(null);
   const sectorBackgroundImageRefs = useRef<Record<number, any>>({});
   const sectorBackgroundLoadPromisesRef = useRef<Record<number, Promise<void>>>({});
@@ -3773,7 +3700,6 @@ export default function GameScreen() {
         playerSource,
         playerMissileSource,
         cockpitInteriorSource,
-        cuttingSpriteSource,
         shipSmokeSpriteSource,
         coreReactorSpriteSource,
         sevenFireOrbSource,
@@ -3946,13 +3872,6 @@ export default function GameScreen() {
       if (!cancelled) playerImageRef.current = playerImage;
     };
     playerImage.src = resolvedPlayer?.uri ?? playerSource;
-    const resolvedCuttingSprite = (RNImage as any).resolveAssetSource?.(cuttingSpriteSource);
-    const cuttingSpriteImage = new (globalThis as any).Image();
-    cuttingSpriteImage.decoding = 'async';
-    cuttingSpriteImage.onload = () => {
-      if (!cancelled) cuttingSpriteImageRef.current = cuttingSpriteImage;
-    };
-    cuttingSpriteImage.src = resolvedCuttingSprite?.uri ?? cuttingSpriteSource;
     const resolvedShipSmokeSprite = (RNImage as any).resolveAssetSource?.(shipSmokeSpriteSource);
     const shipSmokeSpriteImage = new (globalThis as any).Image();
     shipSmokeSpriteImage.decoding = 'async';
@@ -3970,7 +3889,6 @@ export default function GameScreen() {
       playerMissileImageRef.current = null;
       spiderWebImageRef.current = null;
       playerImageRef.current = null;
-      cuttingSpriteImageRef.current = null;
       shipSmokeSpriteImageRef.current = null;
       sectorBackgroundImageRefs.current = {};
       sectorBackgroundLoadPromisesRef.current = {};
@@ -6493,24 +6411,6 @@ export default function GameScreen() {
         drawTrail(g.trail);
         context.lineCap = 'butt';
         context.lineJoin = 'miter';
-      }
-
-      if (g.trail.length > 0) {
-        const cuttingSpriteImage = cuttingSpriteImageRef.current;
-        if (CUTTING_SPRITE_ENABLED && cuttingSpriteImage) {
-          drawCuttingSpriteCanvas(
-            context,
-            cuttingSpriteImage,
-            g.player,
-            g.cutDir,
-            g.cell,
-            Math.floor(g.frame / CUTTING_SPRITE_FRAME_DURATION) % CUTTING_SPRITE_FRAME_COUNT,
-          );
-        } else {
-          // Reversible fallback: set CUTTING_SPRITE_ENABLED to false to use
-          // the original procedural point and full SVG spark treatment.
-          drawCuttingEffectCanvas(context, g.player, g.cutDir, g.cell, g.frame);
-        }
       }
 
       context.globalCompositeOperation = 'lighter';
@@ -11487,13 +11387,6 @@ export default function GameScreen() {
       if (!cancelled) playerImageRef.current = playerImage;
     };
     playerImage.src = resolvedPlayer?.uri ?? playerSource;
-    const resolvedCuttingSprite = (RNImage as any).resolveAssetSource?.(cuttingSpriteSource);
-    const cuttingSpriteImage = new (globalThis as any).Image();
-    cuttingSpriteImage.decoding = 'async';
-    cuttingSpriteImage.onload = () => {
-      if (!cancelled) cuttingSpriteImageRef.current = cuttingSpriteImage;
-    };
-    cuttingSpriteImage.src = resolvedCuttingSprite?.uri ?? cuttingSpriteSource;
     const resolvedShipSmokeSprite = (RNImage as any).resolveAssetSource?.(shipSmokeSpriteSource);
     const shipSmokeSpriteImage = new (globalThis as any).Image();
     shipSmokeSpriteImage.decoding = 'async';
@@ -11501,6 +11394,13 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
+    const resolvedCuttingSprite = (RNImage as any).resolveAssetSource?.(cuttingSpriteSource);
+    const cuttingSpriteImage = new (globalThis as any).Image();
+    cuttingSpriteImage.decoding = 'async';
+    cuttingSpriteImage.onload = () => {
+      if (!cancelled) cuttingSpriteImageRef.current = cuttingSpriteImage;
+    };
+    cuttingSpriteImage.src = resolvedCuttingSprite?.uri ?? cuttingSpriteSource;
     Object.entries(LEVEL_BACKGROUND_SOURCES).forEach(([level, source]) => {
       const resolvedBackground = (RNImage as any).resolveAssetSource?.(source);
       const backgroundImage = new (globalThis as any).Image();
