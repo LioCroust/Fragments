@@ -7199,7 +7199,7 @@ const styles = StyleSheet.create({
   },
   tutorialGuide: {
     position: 'absolute',
-    top: '48%',
+    top: '56%',
     left: 0,
     right: 0,
     alignItems: 'center',
