@@ -1,4 +1,5 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..');
@@ -6,6 +7,7 @@ const packagePath = path.join(projectRoot, 'package.json');
 const lockfilePath = path.resolve(projectRoot, '..', '..', 'pnpm-lock.yaml');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const lockfile = fs.readFileSync(lockfilePath, 'utf8');
+const lifecycleScript = process.env.npm_lifecycle_script ?? '';
 const importerHeader = '  artifacts/fragments-neon:\n';
 const importerStart = lockfile.indexOf(importerHeader);
 const importerContentStart = importerStart >= 0
@@ -52,6 +54,29 @@ console.log('[FragmentsNeon][preflight] runtime', {
   hasDevDomain: Boolean(process.env.REPLIT_DEV_DOMAIN),
   hasReplitId: Boolean(process.env.REPL_ID),
 });
+
+const cacheCandidates = [
+  path.join(projectRoot, '.expo'),
+  path.join(projectRoot, 'node_modules', '.cache'),
+  path.join(workspaceRoot, 'node_modules', '.cache'),
+  path.join(os.homedir(), '.cache', 'metro'),
+];
+console.log(
+  '[FragmentsNeon][preflight] metro cache policy',
+  {
+    preservesCache: !lifecycleScript.includes('--clear'),
+    cacheCandidates: cacheCandidates.map((candidate) => ({
+      path: candidate,
+      exists: fs.existsSync(candidate),
+    })),
+  },
+);
+if (lifecycleScript.includes('--clear')) {
+  console.error(
+    '[FragmentsNeon][preflight] WARNING: --clear detected; ' +
+    'cold Metro bundle requests can time out in Expo Go',
+  );
+}
 
 for (const name of trackedPackages) {
   const packageSpecifier = packageSpecFor(name);
