@@ -2821,25 +2821,6 @@ type SkiaMotionState = {
   angle: number;
   visible: number;
   frame: number;
-  matrix: number[];
-};
-
-const spriteMatrix = (
-  x: number,
-  y: number,
-  angle: number,
-  width: number,
-  height: number,
-) => {
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  return [
-    cos, sin, 0,
-    -sin, cos, 0,
-    x - cos * width / 2 + sin * height / 2,
-    y - sin * width / 2 - cos * height / 2,
-    1,
-  ];
 };
 
 const SkiaDynamicArena = React.memo(({
@@ -2861,9 +2842,11 @@ const SkiaDynamicArena = React.memo(({
   const playerSize = playerSpriteSize(cell);
   const shipSize = enemyRenderSize('SHIP', cell);
   const playerOpacity = selectSkiaValue(playerMotion, 'visible');
-  const playerMatrix = selectSkiaValue(playerMotion, 'matrix');
+  const playerX = selectSkiaValue(playerMotion, 'x');
+  const playerY = selectSkiaValue(playerMotion, 'y');
   const shipOpacity = selectSkiaValue(shipMotion, 'visible');
-  const shipMatrix = selectSkiaValue(shipMotion, 'matrix');
+  const shipX = selectSkiaValue(shipMotion, 'x');
+  const shipY = selectSkiaValue(shipMotion, 'y');
 
   if (!playerImage || !shipImage) return null;
 
@@ -2882,20 +2865,18 @@ const SkiaDynamicArena = React.memo(({
     >
       <SkiaImage
         image={playerImage}
-        x={0}
-        y={0}
+        x={playerX}
+        y={playerY}
         width={playerSize.width}
         height={playerSize.height}
-        matrix={playerMatrix}
         opacity={playerOpacity}
       />
       <SkiaImage
         image={shipImage}
-        x={0}
-        y={0}
+        x={shipX}
+        y={shipY}
         width={shipSize.width}
         height={shipSize.height}
-        matrix={shipMatrix}
         opacity={shipOpacity}
       />
     </SkiaCanvas>
