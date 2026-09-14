@@ -3220,7 +3220,7 @@ const SkiaDynamicArena = React.memo(({
   const dragonImages = spriteFrames.DRAGON.map((source) => useSkiaImage(source));
   const sevenImages = spriteFrames.SEVEN.map((source) => useSkiaImage(source));
   const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
-  const picture = useSharedValue<any>(null);
+  const pictureViewRef = useRef<any>(null);
 
   useEffect(() => {
     const imageSet: NativeSkiaImageSet = {
@@ -3255,7 +3255,9 @@ const SkiaDynamicArena = React.memo(({
     ].every(Boolean);
     if (!allImagesReady) return undefined;
     const publisher: NativePicturePublisher = (game, now) => {
-      picture.value = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
+      const picture = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
+      pictureViewRef.current?.setPicture(picture);
+      pictureViewRef.current?.redraw();
     };
     publisherRef.current = publisher;
     onReady();
@@ -3278,13 +3280,14 @@ const SkiaDynamicArena = React.memo(({
     dragonImages,
     sevenImages,
     spiderImages,
-    picture,
+    pictureViewRef,
   ]);
 
-  if (!snapshot || !picture) return null;
+  if (!snapshot) return null;
 
   return (
-    <SkiaCanvas
+    <SkiaPictureView
+      ref={pictureViewRef}
       style={[
         StyleSheet.absoluteFill,
         {
@@ -3295,11 +3298,16 @@ const SkiaDynamicArena = React.memo(({
         },
       ]}
       pointerEvents="none"
-    >
-      <SkiaPicture picture={picture as any} />
-    </SkiaCanvas>
+    />
   );
-});
+}, (previous, next) => (
+  previous.snapshot.width === next.snapshot.width
+  && previous.snapshot.height === next.snapshot.height
+  && previous.snapshot.cell === next.snapshot.cell
+  && previous.renderMargin === next.renderMargin
+  && previous.publisherRef === next.publisherRef
+  && previous.onReady === next.onReady
+));
 
 const NativeArenaDynamic = React.memo(({
   snapshot,
