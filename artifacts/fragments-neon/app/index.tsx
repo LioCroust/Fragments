@@ -35,7 +35,9 @@ import {
 
 const COLS = 12;
 const PERIMETER_HORIZONTAL_INSET_CELLS = 0.65;
-const PERIMETER_VERTICAL_INSET_CELLS = 2;
+// Keep a little more cockpit breathing room above and below the playfield on
+// every sector, including the tutorial.
+const PERIMETER_VERTICAL_INSET_CELLS = 2.35;
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
@@ -2984,7 +2986,9 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
   const arrowStyle = (direction: TutorialDirection) => (
     counts[direction] >= TUTORIAL_SWIPE_REPETITIONS
       ? styles.tutorialArrowDone
-      : styles.tutorialArrow
+      : counts[direction] > 0
+        ? styles.tutorialArrowProgress
+        : styles.tutorialArrow
   );
 
   return (
@@ -3108,6 +3112,7 @@ export default function GameScreen() {
   const tutorialCompletionBannerShownRef = useRef(false);
   const tutorialCaptureCompletionBannerShownRef = useRef(false);
   const tutorialEnemyCaptureCompletionBannerShownRef = useRef(false);
+  const tutorialEnemyDestructionCompletionBannerShownRef = useRef(false);
   const tutorialStepRef = useRef<1 | 2 | 3 | 4>(1);
   const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
     ...EMPTY_TUTORIAL_SWIPE_COUNTS,
@@ -3695,6 +3700,7 @@ export default function GameScreen() {
       tutorialCompletionBannerShownRef.current = false;
       tutorialCaptureCompletionBannerShownRef.current = false;
       tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+      tutorialEnemyDestructionCompletionBannerShownRef.current = false;
       tutorialStepRef.current = 1;
       setTutorialStep(1);
       setTutorialSwipeCounts({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
@@ -3977,6 +3983,7 @@ export default function GameScreen() {
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyDestructionCompletionBannerShownRef.current = false;
     setTutorialStep(2);
     enqueueBanner({
       kind: 'TUTORIAL',
@@ -4027,12 +4034,91 @@ export default function GameScreen() {
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyDestructionCompletionBannerShownRef.current = false;
     setTutorialStep(3);
     enqueueBanner({
       kind: 'TUTORIAL',
       tutorialStep: 3,
     });
   }, [enqueueBanner, resetGame]);
+
+  const beginTutorialDestructionStep = useCallback(() => {
+    const game = gameRef.current;
+    if (game.level !== TUTORIAL_SECTOR) return;
+    resetGame(false, false, TUTORIAL_SECTOR);
+    const tutorialGame = gameRef.current;
+    const bounds = perimeterBounds(tutorialGame.width, tutorialGame.height, tutorialGame.cell);
+    const baseEnemy = createEnemies(
+      tutorialGame.width,
+      tutorialGame.height,
+      tutorialGame.cell,
+      1,
+    )[0];
+    if (baseEnemy) {
+      const enemyX = (bounds.left + bounds.right) * 0.5;
+      const enemyY = (bounds.top + bounds.bottom) * 0.5;
+      tutorialGame.enemies = [{
+        ...baseEnemy,
+        x: enemyX,
+        y: enemyY,
+        vx: 20,
+        vy: 14,
+        speed: 34,
+        agility: 0.58,
+        phase: 0.4,
+        routePhase: 0.3,
+        targetX: enemyX,
+        targetY: enemyY,
+        thinkTimer: 0,
+        respawnAt: 0,
+        edgeTurnTimer: 0,
+        edgeDirectionX: 0,
+        edgeDirectionY: 0,
+        isBoss: false,
+        isMini: false,
+        splitLevel: undefined,
+        visualRotation: Math.atan2(14, 20) + Math.PI / 2,
+      }];
+    }
+    tutorialGame.missiles.length = 0;
+    tutorialStepRef.current = 4;
+    tutorialCompletionBannerShownRef.current = true;
+    tutorialCaptureCompletionBannerShownRef.current = true;
+    tutorialEnemyCaptureCompletionBannerShownRef.current = true;
+    tutorialEnemyDestructionCompletionBannerShownRef.current = false;
+    setTutorialStep(4);
+    enqueueBanner({
+      kind: 'TUTORIAL',
+      tutorialStep: 4,
+    });
+  }, [enqueueBanner, resetGame]);
+
+  const restartTutorialStep = useCallback((step: 1 | 2 | 3 | 4) => {
+    if (gameRef.current.level !== TUTORIAL_SECTOR) return;
+    if (step === 2) {
+      beginTutorialCaptureStep();
+      return;
+    }
+    if (step === 3) {
+      beginTutorialEnemyStep();
+      return;
+    }
+    if (step === 4) {
+      beginTutorialDestructionStep();
+      return;
+    }
+    resetGame(false, false, TUTORIAL_SECTOR);
+    enqueueBanner({
+      kind: 'TUTORIAL',
+      tutorialStep: 1,
+    });
+  }, [
+    beginTutorialCaptureStep,
+    beginTutorialDestructionStep,
+    beginTutorialEnemyStep,
+    enqueueBanner,
+    resetGame,
+  ]);
 
   const registerTutorialSwipe = useCallback((direction: Direction) => {
     const game = gameRef.current;
@@ -4631,6 +4717,15 @@ export default function GameScreen() {
         && tutorialStepRef.current === 3
         && fromCapture
       );
+      const suppressTutorialDestructionBanner = (
+        g.level === TUTORIAL_SECTOR
+        && tutorialStepRef.current === 4
+        && fromMissile
+      );
+      const suppressTutorialCompletionBanner = (
+        suppressTutorialEnemyBanner
+        || suppressTutorialDestructionBanner
+      );
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
       for (let i = 0; i < 200; i += 1) {
         const angle = Math.random() * Math.PI * 2;
@@ -4665,21 +4760,24 @@ export default function GameScreen() {
       enemy.vy = 0;
       if (splitOnMissile) {
         g.enemies.push(...splitShips);
-        if (!suppressTutorialEnemyBanner) {
+        if (!suppressTutorialCompletionBanner) {
           enqueueBanner({
             kind: enemy.isBoss ? 'BOSS_SPLIT' : 'SPLIT',
             points: ENEMY_SCORE[enemy.kind],
             enemyKind: enemy.kind,
           });
         }
-      } else if (!suppressTutorialEnemyBanner) {
+      } else if (!suppressTutorialCompletionBanner) {
         enqueueBanner({
           kind: 'ENEMY',
           points: enemyPoints,
           enemyKind: enemy.kind,
         });
       }
-      if (!suppressTutorialEnemyBanner && g.enemies.every((candidate) => enemyIsDestroyed(candidate))) {
+      if (
+        !suppressTutorialCompletionBanner
+        && g.enemies.every((candidate) => enemyIsDestroyed(candidate))
+      ) {
         enqueueBanner({ kind: 'CLEAN' });
       }
       if (enemy.kind === 'SHIP') {
@@ -4736,6 +4834,22 @@ export default function GameScreen() {
           if (touched) {
             burstEnemy(g, enemy, now, true);
             hitTarget = true;
+            if (
+              g.level === TUTORIAL_SECTOR
+              && tutorialStepRef.current === 4
+              && !tutorialEnemyDestructionCompletionBannerShownRef.current
+            ) {
+              tutorialEnemyDestructionCompletionBannerShownRef.current = true;
+              g.inputDir = ZERO;
+              g.cutDir = ZERO;
+              g.hasMoveCommand = false;
+              enqueueBanner({
+                kind: 'TUTORIAL',
+                tutorialStep: 4,
+                tutorialCompleted: true,
+                onComplete: () => teleportToSector(1),
+              });
+            }
             break;
           }
         }
@@ -5553,12 +5667,14 @@ export default function GameScreen() {
                   kind: 'TUTORIAL',
                   tutorialStep: 3,
                   tutorialCompleted: true,
+                  onComplete: beginTutorialDestructionStep,
                 });
               }
             }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (
               g.level === TUTORIAL_SECTOR
+              && tutorialStepRef.current === 2
               && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
               && !tutorialCaptureCompletionBannerShownRef.current
             ) {
@@ -6385,8 +6501,10 @@ export default function GameScreen() {
     preloadSectorForBanner,
     revealGameAfterInitialLoad,
     resetGame,
+    restartTutorialStep,
     restoreSavedGame,
     saveGameProgress,
+    teleportToSector,
   ]);
 
   const renderNativeArena = () => {
@@ -6484,6 +6602,9 @@ export default function GameScreen() {
             <Animated.View
               style={[
                 styles.arcadeBanner,
+                banner.kind === 'TUTORIAL'
+                  ? styles.tutorialBanner
+                  : null,
                 banner.kind === 'RECORD'
                   ? styles.recordBanner
                   : banner.kind === 'DIAMOND'
@@ -6510,7 +6631,9 @@ export default function GameScreen() {
               <View style={styles.bannerAccent} />
               <Text
                 style={[
-                  styles.bannerTitle,
+                  banner.kind === 'TUTORIAL'
+                    ? styles.tutorialBannerTitle
+                    : styles.bannerTitle,
                 ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
@@ -6527,14 +6650,18 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR SÉCURISÉ À 80%'
                         : banner.kind === 'TUTORIAL'
-                          ? banner.tutorialStep === 3
+                          ? banner.tutorialStep === 4
                             ? banner.tutorialCompleted
                               ? 'OBJECTIF ATTEINT !'
-                              : 'TUTORIEL 3/4'
-                            : banner.tutorialStep === 2
+                              : 'TUTORIEL 4/4'
+                            : banner.tutorialStep === 3
                               ? banner.tutorialCompleted
                                 ? 'OBJECTIF ATTEINT !'
-                                : 'TUTORIEL 2/4'
+                                : 'TUTORIEL 3/4'
+                              : banner.tutorialStep === 2
+                                ? banner.tutorialCompleted
+                                  ? 'OBJECTIF ATTEINT !'
+                                  : 'TUTORIEL 2/4'
                             : banner.tutorialCompleted
                               ? 'DIRIGER LE DRONE 1/4'
                               : 'TUTORIEL 1/4'
@@ -6553,7 +6680,12 @@ export default function GameScreen() {
                             : 'ENNEMI DÉTRUIT'}
               </Text>
               {banner.kind !== 'SECTOR_START' && (
-                <Text style={styles.bannerScore} numberOfLines={1}>
+                <Text
+                  style={banner.kind === 'TUTORIAL' ? styles.tutorialBannerScore : styles.bannerScore}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                >
                   {banner.kind === 'RECORD'
                     ? `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`
                     : banner.kind === 'DIAMOND'
@@ -6565,14 +6697,18 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'PASSAGE SECTEUR SUIVANT'
                       : banner.kind === 'TUTORIAL'
-                        ? banner.tutorialStep === 3
+                        ? banner.tutorialStep === 4
                           ? banner.tutorialCompleted
-                            ? '✓ ENNEMI CAPTURÉ'
-                            : 'CAPTURE LE VAISSEAU ENNEMI'
-                          : banner.tutorialStep === 2
+                            ? '✓ ENNEMI DÉTRUIT'
+                            : 'FERME UNE ZONE VIDE POUR TIRER'
+                          : banner.tutorialStep === 3
                             ? banner.tutorialCompleted
-                              ? '✓ ZONE SÉCURISÉE À 80%'
-                              : 'SÉCURISE 80% DE LA ZONE'
+                              ? '✓ ENNEMI CAPTURÉ'
+                              : 'CAPTURE LE VAISSEAU ENNEMI'
+                            : banner.tutorialStep === 2
+                              ? banner.tutorialCompleted
+                                ? '✓ ZONE SÉCURISÉE À 80%'
+                                : 'SÉCURISE 80% DE LA ZONE'
                           : banner.tutorialCompleted
                             ? '✓ OBJECTIF VALIDÉ'
                             : 'DIRIGE LE DRONE AVEC DES SWIPES'
@@ -6908,31 +7044,46 @@ const styles = StyleSheet.create({
   tutorialArrow: {
     width: 42,
     height: 38,
+    color: '#7e879b',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 31,
+    lineHeight: 36,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(126, 135, 155, 0.65)',
+    borderRadius: 3,
+    backgroundColor: 'rgba(32, 38, 50, 0.72)',
+    textShadowColor: '#7e879b',
+    textShadowRadius: 6,
+  },
+  tutorialArrowProgress: {
+    width: 42,
+    height: 38,
+    color: '#ff8a00',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 31,
+    lineHeight: 36,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#ff8a00',
+    borderRadius: 3,
+    backgroundColor: 'rgba(64, 28, 4, 0.72)',
+    textShadowColor: '#ff8a00',
+    textShadowRadius: 8,
+  },
+  tutorialArrowDone: {
+    width: 42,
+    height: 38,
     color: '#b8ff4a',
     fontFamily: 'Inter_700Bold',
     fontSize: 31,
     lineHeight: 36,
     textAlign: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(184, 255, 74, 0.58)',
+    borderColor: '#b8ff4a',
     borderRadius: 3,
-    backgroundColor: 'rgba(8, 24, 18, 0.68)',
+    backgroundColor: 'rgba(18, 46, 8, 0.72)',
     textShadowColor: '#b8ff4a',
-    textShadowRadius: 8,
-  },
-  tutorialArrowDone: {
-    width: 42,
-    height: 38,
-    color: '#fff3d6',
-    fontFamily: 'Inter_700Bold',
-    fontSize: 31,
-    lineHeight: 36,
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#00f3ff',
-    borderRadius: 3,
-    backgroundColor: 'rgba(0, 243, 255, 0.18)',
-    textShadowColor: '#00f3ff',
     textShadowRadius: 10,
   },
   cockpitHeader: {
@@ -7227,11 +7378,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(24, 4, 24, 0.46)',
   },
   tutorialBanner: {
+    width: '92%',
+    paddingHorizontal: 10,
     borderColor: HUD_COLORS.cyan,
     backgroundColor: 'rgba(0, 22, 32, 0.68)',
     shadowColor: HUD_COLORS.cyan,
     shadowOpacity: 0.9,
     shadowRadius: 16,
+  },
+  tutorialBannerTitle: {
+    maxWidth: '100%',
+    color: HUD_COLORS.warmWhite,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 21,
+    lineHeight: 25,
+    letterSpacing: 1.1,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 12,
+    textShadowOffset: { width: 0, height: 0 },
   },
   bossBanner: {
     borderColor: '#ff2bb5',
@@ -7288,6 +7453,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     letterSpacing: 1.1,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  tutorialBannerScore: {
+    maxWidth: '100%',
+    marginTop: 4,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.45,
     textAlign: 'center',
     textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 8,
@@ -12102,10 +12280,20 @@ export default function GameScreen() {
 
       if (g.status === 'RESPAWN') {
         if (now >= g.respawnAt) {
+          const tutorialStepToRestart = g.level === TUTORIAL_SECTOR
+            && tutorialStepRef.current >= 3
+            ? tutorialStepRef.current
+            : null;
           if (g.shields <= 0) {
             enqueueBanner({ kind: 'GAME_OVER', score: g.score });
             clearSavedGameProgress();
-            resetGame(false);
+            if (tutorialStepToRestart) {
+              restartTutorialStep(tutorialStepToRestart);
+            } else {
+              resetGame(false);
+            }
+          } else if (tutorialStepToRestart) {
+            restartTutorialStep(tutorialStepToRestart);
           } else {
             resetGame(true);
           }
