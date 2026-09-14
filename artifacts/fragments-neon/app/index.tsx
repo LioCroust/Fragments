@@ -3000,19 +3000,19 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
       <View style={styles.tutorialArrowGrid}>
         <View style={styles.tutorialArrowRow}>
           <View style={styles.tutorialArrowSlot} />
-          <Text style={arrowStyle('up')}>↑</Text>
+          <Text style={arrowStyle('up')}>▲</Text>
           <View style={styles.tutorialArrowSlot} />
         </View>
         <View style={styles.tutorialArrowRow}>
-          <Text style={arrowStyle('left')}>←</Text>
+          <Text style={arrowStyle('left')}>◀</Text>
           <View style={styles.tutorialCenterSlot}>
             <Text style={styles.tutorialCenterMark}>✦</Text>
           </View>
-          <Text style={arrowStyle('right')}>→</Text>
+          <Text style={arrowStyle('right')}>▶</Text>
         </View>
         <View style={styles.tutorialArrowRow}>
           <View style={styles.tutorialArrowSlot} />
-          <Text style={arrowStyle('down')}>↓</Text>
+          <Text style={arrowStyle('down')}>▼</Text>
           <View style={styles.tutorialArrowSlot} />
         </View>
       </View>
@@ -6973,7 +6973,7 @@ export default function GameScreen() {
             <RNImage
               source={loadingCoverSource}
               style={styles.loadingArtwork}
-              resizeMode="cover"
+              resizeMode="contain"
               accessibilityLabel="Illustration Fragments Neon"
             />
             <View style={styles.loadingArtworkShade} />
@@ -7015,9 +7015,8 @@ const styles = StyleSheet.create({
   },
   loadingArtworkFrame: {
     position: 'relative',
-    width: '82%',
-    maxWidth: 330,
-    maxHeight: '84%',
+    width: '70%',
+    maxWidth: 280,
     aspectRatio: 688 / 1543,
     overflow: 'hidden',
     borderWidth: 1,
@@ -7206,80 +7205,91 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   tutorialArrowGrid: {
-    width: 150,
-    marginTop: 9,
-    gap: 3,
+    width: 156,
+    marginTop: 10,
+    gap: 4,
   },
   tutorialArrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 38,
+    height: 40,
   },
   tutorialArrowSlot: {
-    width: 42,
-    height: 38,
+    width: 44,
+    height: 40,
   },
   tutorialCenterSlot: {
-    width: 42,
-    height: 38,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 243, 255, 0.42)',
-    borderRadius: 3,
-    backgroundColor: 'rgba(0, 16, 28, 0.66)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 243, 255, 0.68)',
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 16, 28, 0.82)',
+    shadowColor: '#00f3ff',
+    shadowOpacity: 0.72,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 5,
   },
   tutorialCenterMark: {
     color: '#00f3ff',
-    fontSize: 15,
+    fontSize: 14,
     textShadowColor: '#00f3ff',
-    textShadowRadius: 8,
+    textShadowRadius: 10,
   },
   tutorialArrow: {
-    width: 42,
-    height: 38,
+    width: 44,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     color: '#7e879b',
     fontFamily: 'Inter_700Bold',
-    fontSize: 31,
-    lineHeight: 36,
+    fontSize: 20,
+    lineHeight: 24,
     textAlign: 'center',
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: 'rgba(126, 135, 155, 0.65)',
-    borderRadius: 3,
-    backgroundColor: 'rgba(32, 38, 50, 0.72)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(32, 38, 50, 0.82)',
     textShadowColor: '#7e879b',
-    textShadowRadius: 6,
+    textShadowRadius: 9,
   },
   tutorialArrowProgress: {
-    width: 42,
-    height: 38,
+    width: 44,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     color: '#ff8a00',
     fontFamily: 'Inter_700Bold',
-    fontSize: 31,
-    lineHeight: 36,
+    fontSize: 20,
+    lineHeight: 24,
     textAlign: 'center',
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: '#ff8a00',
-    borderRadius: 3,
-    backgroundColor: 'rgba(64, 28, 4, 0.72)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(64, 28, 4, 0.82)',
     textShadowColor: '#ff8a00',
-    textShadowRadius: 8,
+    textShadowRadius: 11,
   },
   tutorialArrowDone: {
-    width: 42,
-    height: 38,
+    width: 44,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     color: '#b8ff4a',
     fontFamily: 'Inter_700Bold',
-    fontSize: 31,
-    lineHeight: 36,
+    fontSize: 20,
+    lineHeight: 24,
     textAlign: 'center',
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: '#b8ff4a',
-    borderRadius: 3,
-    backgroundColor: 'rgba(18, 46, 8, 0.72)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(18, 46, 8, 0.82)',
     textShadowColor: '#b8ff4a',
-    textShadowRadius: 10,
+    textShadowRadius: 13,
   },
   cockpitHeader: {
     position: 'absolute',
