@@ -2921,28 +2921,52 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
 
 const DebugSectorSelector = ({
   currentSector,
+  tutorialStep,
   onSelect,
   onSkipTutorial,
   bottomInset,
 }: {
   currentSector: number;
+  tutorialStep: 1 | 2 | 3 | 4;
   onSelect: (sector: number) => void;
   onSkipTutorial: () => void;
   bottomInset: number;
 }) => {
   if (!DEBUG_SECTOR_SELECTOR_ENABLED) return null;
+  const tutorialInstruction = (
+    tutorialStep === 1
+      ? 'SWIPES 4 DIRECTIONS'
+      : tutorialStep === 2
+        ? 'SÉCURISE 80% DE LA ZONE'
+        : tutorialStep === 3
+          ? 'CAPTURE LE MINI-VAISSEAU + 80%'
+          : 'DÉTRUIS LE VAISSEAU + 80%'
+  );
   return (
     <View style={[styles.debugSectorSelector, { bottom: bottomInset }]}>
       {currentSector === TUTORIAL_SECTOR && (
-        <Pressable
-          style={styles.skipTutorialButton}
-          onPress={onSkipTutorial}
-          accessibilityRole="button"
-          accessibilityLabel="Passer le tutoriel et reprendre au dernier secteur joué"
-          testID="skip-tutorial"
-        >
-          <Text style={styles.skipTutorialButtonText}>PASSER LE TUTORIEL</Text>
-        </Pressable>
+        <View style={styles.tutorialControlRow}>
+          <Pressable
+            style={styles.skipTutorialButton}
+            onPress={onSkipTutorial}
+            accessibilityRole="button"
+            accessibilityLabel="Passer le tutoriel et reprendre au dernier secteur joué"
+            testID="skip-tutorial"
+          >
+            <Text style={styles.skipTutorialButtonText}>PASSER LE TUTORIEL</Text>
+          </Pressable>
+          <View style={styles.tutorialInstruction}>
+            <Text style={styles.tutorialInstructionLabel}>OBJECTIF</Text>
+            <Text
+              style={styles.tutorialInstructionText}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.68}
+            >
+              {tutorialInstruction}
+            </Text>
+          </View>
+        </View>
       )}
       <ScrollView
         horizontal
@@ -6961,6 +6985,7 @@ export default function GameScreen() {
 
       <DebugSectorSelector
         currentSector={hud.level}
+        tutorialStep={tutorialStep}
         onSelect={teleportToSector}
         onSkipTutorial={() => teleportToSector(
           lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : 1,
@@ -7146,16 +7171,48 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  tutorialControlRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 5,
+    marginBottom: 5,
+  },
   skipTutorialButton: {
-    alignSelf: 'stretch',
+    flex: 1.08,
     minHeight: 31,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 5,
     borderWidth: 1,
     borderColor: 'rgba(255, 176, 46, 0.82)',
     borderRadius: 2,
     backgroundColor: 'rgba(255, 85, 0, 0.16)',
+  },
+  tutorialInstruction: {
+    flex: 0.92,
+    minHeight: 31,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 243, 255, 0.48)',
+    borderRadius: 2,
+    backgroundColor: 'rgba(0, 24, 34, 0.72)',
+  },
+  tutorialInstructionLabel: {
+    color: '#00f3ff',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 6,
+    letterSpacing: 1,
+    lineHeight: 8,
+  },
+  tutorialInstructionText: {
+    color: '#fff3d6',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7.5,
+    letterSpacing: 0.35,
+    lineHeight: 10,
+    textShadowColor: '#00f3ff',
+    textShadowRadius: 4,
   },
   skipTutorialButtonText: {
     color: '#fff3d6',
