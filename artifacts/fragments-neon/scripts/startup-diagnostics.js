@@ -45,8 +45,8 @@ const packageSpecFor = (name) => (
   ?? null
 );
 
-console.log('[FragmentsNeon][preflight] startup diagnostics');
-console.log('[FragmentsNeon][preflight] runtime', {
+console.log('[Fragments][preflight] startup diagnostics');
+console.log('[Fragments][preflight] runtime', {
   node: process.version,
   platform: process.platform,
   cwd: projectRoot,
@@ -63,7 +63,7 @@ const cacheCandidates = [
   path.join(os.homedir(), '.cache', 'metro'),
 ];
 console.log(
-  '[FragmentsNeon][preflight] metro cache policy',
+  '[Fragments][preflight] metro cache policy',
   {
     preservesCache: !lifecycleScript.includes('--clear'),
     cacheCandidates: cacheCandidates.map((candidate) => ({
@@ -74,7 +74,7 @@ console.log(
 );
 if (lifecycleScript.includes('--clear')) {
   console.error(
-    '[FragmentsNeon][preflight] WARNING: --clear detected; ' +
+    '[Fragments][preflight] WARNING: --clear detected; ' +
     'cold Metro bundle requests can time out in Expo Go',
   );
 }
@@ -83,14 +83,14 @@ for (const name of trackedPackages) {
   const packageSpecifier = packageSpecFor(name);
   const lockSpecifier = lockSpecifierFor(name);
   const aligned = packageSpecifier === lockSpecifier;
-  console.log(`[FragmentsNeon][preflight] dependency ${name}`, {
+  console.log(`[Fragments][preflight] dependency ${name}`, {
     packageSpecifier,
     lockSpecifier,
     aligned,
   });
   if (!aligned) {
     console.error(
-      `[FragmentsNeon][preflight] dependency mismatch for ${name}; ` +
+      `[Fragments][preflight] dependency mismatch for ${name}; ` +
       'package.json and pnpm-lock.yaml may be out of sync',
     );
   }
@@ -98,8 +98,8 @@ for (const name of trackedPackages) {
 
 for (const requiredPath of ['app.json', 'app/index.tsx', 'node_modules/expo-router/entry.js']) {
   const exists = fs.existsSync(path.join(projectRoot, requiredPath));
-  console.log('[FragmentsNeon][preflight] required path', { path: requiredPath, exists });
+  console.log('[Fragments][preflight] required path', { path: requiredPath, exists });
   if (!exists) {
-    console.error(`[FragmentsNeon][preflight] missing required path: ${requiredPath}`);
+    console.error(`[Fragments][preflight] missing required path: ${requiredPath}`);
   }
 }

@@ -30,7 +30,7 @@ popd
 
 echo.
 echo [3/3] Copie de l'APK...
-copy /Y "%APP_DIR%\android\app\build\outputs\apk\release\app-release.apk" "%APP_DIR%\Fragments-Neon-release.apk" >nul
+copy /Y "%APP_DIR%\android\app\build\outputs\apk\release\app-release.apk" "%APP_DIR%\Fragments-release.apk" >nul
 if errorlevel 1 (
   echo Impossible de copier l'APK final.
   popd
@@ -40,6 +40,6 @@ popd
 
 echo.
 echo APK cree :
-echo %APP_DIR%\Fragments-Neon-release.apk
+echo %APP_DIR%\Fragments-release.apk
 echo.
 pause

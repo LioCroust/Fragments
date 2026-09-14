@@ -75,7 +75,7 @@ const HUD_COLORS = {
 } as const;
 const diagnosticLog = (event: string, details: Record<string, unknown> = {}) => {
   if (__DEV__) {
-    console.log(`[FragmentsNeon][diagnostic] ${event}`, details);
+    console.log(`[Fragments][diagnostic] ${event}`, details);
   }
 };
 const ZERO = { x: 0 as const, y: 0 as const };
@@ -7493,7 +7493,7 @@ export default function GameScreen() {
               source={loadingCoverSource}
               style={styles.loadingArtwork}
               resizeMode="cover"
-              accessibilityLabel="Illustration Fragments Neon"
+              accessibilityLabel="Illustration Fragments"
             />
             <View style={styles.loadingArtworkShade} />
             <View style={styles.loadingOverlay}>

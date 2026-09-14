@@ -11,10 +11,10 @@ let shuttingDown = false;
 
 function log(message, details) {
   if (details === undefined) {
-    console.log(`[FragmentsNeon][metro] ${message}`);
+    console.log(`[Fragments][metro] ${message}`);
     return;
   }
-  console.log(`[FragmentsNeon][metro] ${message}`, details);
+  console.log(`[Fragments][metro] ${message}`, details);
 }
 
 function pipeOutput(stream, label) {
@@ -99,7 +99,7 @@ async function warmAndroidBundle() {
 
   if (elapsedMs >= slowBundleThresholdMs) {
     console.warn(
-      `[FragmentsNeon][metro] SLOW COLD ANDROID BUNDLE (${elapsedMs}ms); ` +
+      `[Fragments][metro] SLOW COLD ANDROID BUNDLE (${elapsedMs}ms); ` +
       'Metro cache may have been cleared or invalidated',
       details,
     );
@@ -134,7 +134,7 @@ async function main() {
 
   metroProcess.once('exit', (code, signal) => {
     if (!shuttingDown) {
-      console.error(`[FragmentsNeon][metro] Metro exited unexpectedly`, {
+      console.error(`[Fragments][metro] Metro exited unexpectedly`, {
         code,
         signal,
       });
@@ -146,7 +146,7 @@ async function main() {
   try {
     await warmAndroidBundle();
   } catch (error) {
-    console.error('[FragmentsNeon][metro] bundle warmup failed', error);
+    console.error('[Fragments][metro] bundle warmup failed', error);
   }
 }
 
@@ -155,7 +155,7 @@ process.on('SIGTERM', () => stopMetro('SIGTERM'));
 process.on('SIGHUP', () => stopMetro('SIGHUP'));
 
 main().catch((error) => {
-  console.error('[FragmentsNeon][metro] startup failed', error);
+  console.error('[Fragments][metro] startup failed', error);
   stopMetro('startup failure');
   process.exitCode = 1;
 });

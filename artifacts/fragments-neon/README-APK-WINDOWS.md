@@ -1,4 +1,4 @@
-# Compiler Fragments Neon en APK sans Android Studio
+# Compiler Fragments en APK sans Android Studio
 
 La méthode la plus simple consiste à utiliser **GitHub Desktop pour envoyer le
 projet**, puis **GitHub Actions pour compiler automatiquement l’APK**. Android
@@ -24,12 +24,22 @@ Après le push, la compilation démarre automatiquement.
 
 1. Ouvrir le dépôt sur GitHub.com.
 2. Cliquer sur l’onglet **Actions**.
-3. Ouvrir **Build Fragments Neon APK**.
+3. Ouvrir **Build Fragments APK**.
 4. Attendre que l’exécution affiche une coche verte.
 5. Ouvrir l’exécution terminée.
 6. Dans la section **Artifacts**, télécharger :
-   `fragments-neon-apk-...`.
+   `fragments-apk-...`.
 7. Décompresser le fichier téléchargé.
+
+La version Android augmente automatiquement à chaque compilation GitHub. Le
+dernier numéro de l'exécution est utilisé comme numéro de build :
+
+- par exemple `1.0.1` ;
+- puis `1.0.2` à l'exécution suivante ;
+- et ainsi de suite.
+
+Le numéro de version Android (`versionCode`) suit le même numéro de build, ce
+qui permet d’installer une nouvelle APK par-dessus la précédente.
 
 L’APK à installer est :
 
@@ -40,7 +50,7 @@ app-release.apk
 Pour lancer une compilation manuellement sans modifier le code :
 
 1. Aller dans **Actions**.
-2. Choisir **Build Fragments Neon APK**.
+2. Choisir **Build Fragments APK**.
 3. Cliquer sur **Run workflow**.
 4. Cliquer à nouveau sur **Run workflow**.
 
@@ -110,7 +120,7 @@ manquants lors de la première synchronisation.
 L’APK sera copié ici :
 
 ```text
-artifacts\fragments-neon\Fragments-Neon-release.apk
+artifacts\fragments-neon\Fragments-release.apk
 ```
 
 Le fichier `.apk` est ignoré par Git afin de ne pas être ajouté au dépôt par
