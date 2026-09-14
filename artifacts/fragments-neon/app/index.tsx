@@ -434,7 +434,9 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
 };
 const DIAMOND_SCORE = 750;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
-const MAX_SMOKE_PUFFS = 28;
+const MAX_PARTICLES = 60;
+const MAX_FUSION_SPARKS = 40;
+const MAX_SMOKE_PUFFS = 30;
 const DRAGON_NOMINAL_SPEED = 28;
 const DRAGON_ATTACK_SPEED = 68;
 const dragonSpeedFor = (enemy: Enemy, attacking: boolean) => {
