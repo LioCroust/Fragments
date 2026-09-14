@@ -648,6 +648,7 @@ const isPersistedGame = (value: unknown): value is PersistedGame => {
     && candidate.player !== undefined
     && Array.isArray(candidate.enemies)
     && Array.isArray(candidate.diamonds)
+    && Array.isArray(candidate.speedBoosts)
     && Array.isArray(candidate.bombs)
     && Array.isArray(candidate.claimedPolygons)
     && Array.isArray(candidate.pendingCapturePolygons)
@@ -702,6 +703,14 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   invincibleRemainingMs: Math.max(0, game.invincibleUntil - now),
   speedBoostRemainingMs: Math.max(0, game.speedBoostUntil - now),
 });
+
+const playerSpeedFor = (game: Game, now: number) => (
+  game.level !== TUTORIAL_SECTOR
+  && !isBossSector(game.level)
+  && game.speedBoostUntil > now
+    ? PLAYER_MOVE_SPEED * SPEED_BOOST_MULTIPLIER
+    : PLAYER_MOVE_SPEED
+);
 
 const cardinalDirection = (dx: number, dy: number): Direction => {
   if (Math.abs(dx) >= Math.abs(dy)) return { x: dx >= 0 ? 1 : -1, y: 0 };
@@ -1366,6 +1375,95 @@ const createDiamonds = (width: number, height: number, cell: number, count: numb
     diamonds.push(candidate);
   }
   return diamonds;
+};
+
+const createSpeedBoosts = (width: number, height: number, cell: number, level: number): SpeedBoost[] => {
+  if (level === TUTORIAL_SECTOR || isBossSector(level)) return [];
+  const bounds = perimeterBounds(width, height, cell);
+  return [{
+    x: bounds.left + cell * (1.4 + Math.random() * Math.max(1, (bounds.right - bounds.left) / cell - 2.8)),
+    y: bounds.top + cell * (1.4 + Math.random() * Math.max(1, (bounds.bottom - bounds.top) / cell - 2.8)),
+    phase: Math.random() * Math.PI * 2,
+    collected: false,
+  }];
+};
+
+const placeSpeedBoostsInOpenSurface = (
+  speedBoosts: SpeedBoost[],
+  enemies: Enemy[],
+  diamonds: Diamond[],
+  bombs: Bomb[],
+  width: number,
+  height: number,
+  cell: number,
+  claimedPolygons: Point[][],
+  protectedTrails: Point[][],
+  activeTrail: Point[],
+  player: Point,
+) => {
+  const bounds = perimeterBounds(width, height, cell);
+  const radius = speedBoostRadius(cell);
+  const candidates = [
+    ...Array.from({ length: 28 }, () => ({
+      x: bounds.left + radius + Math.random() * Math.max(0, bounds.right - bounds.left - radius * 2),
+      y: bounds.top + radius + Math.random() * Math.max(0, bounds.bottom - bounds.top - radius * 2),
+    })),
+    ...Array.from({ length: 7 }, (_, row) => (
+      Array.from({ length: 7 }, (_, column) => ({
+        x: bounds.left + (bounds.right - bounds.left) * ((column + 0.5) / 7),
+        y: bounds.top + (bounds.bottom - bounds.top) * ((row + 0.5) / 7),
+      }))
+    )).flat(),
+  ];
+
+  speedBoosts.forEach((speedBoost) => {
+    if (speedBoost.collected) return;
+    const candidate = [{ x: speedBoost.x, y: speedBoost.y }, ...candidates].find((point) => {
+      const x = clamp(point.x, bounds.left + radius, bounds.right - radius);
+      const y = clamp(point.y, bounds.top + radius, bounds.bottom - radius);
+      const candidatePoint = { x, y };
+      const clearOfClaimed = !pointInsideClaimedSurface(candidatePoint, claimedPolygons, cell * 0.12);
+      const clearOfProtected = protectedTrails.every((trail) => (
+        trail.slice(1).every((trailPoint, index) => (
+          distanceToSegment(candidatePoint, trail[index], trailPoint)
+            > radius + PERIMETER_STROKE_WIDTH * 0.5
+        ))
+      ));
+      const clearOfActiveTrail = activeTrail.length < 2 || !pathTouchesPolygon(
+        activeTrail,
+        [
+          { x: x - radius, y: y - radius },
+          { x: x + radius, y: y - radius },
+          { x: x + radius, y: y + radius },
+          { x: x - radius, y: y + radius },
+        ],
+        PERIMETER_STROKE_WIDTH * 0.5,
+      );
+      const clearOfPlayer = Math.hypot(x - player.x, y - player.y)
+        > radius + playerBodyRadius(cell) * 1.8;
+      const clearOfEnemies = enemies
+        .filter((enemy) => !enemyIsDestroyed(enemy))
+        .every((enemy) => Math.hypot(x - enemy.x, y - enemy.y)
+          > radius + enemyVisualRadius(enemy, cell) * 0.72);
+      const clearOfDiamonds = diamonds
+        .filter((diamond) => !diamond.collected)
+        .every((diamond) => Math.hypot(x - diamond.x, y - diamond.y) > radius + cell * 0.7);
+      const clearOfBombs = bombs
+        .filter((bomb) => !bomb.destroyed)
+        .every((bomb) => Math.hypot(x - bomb.x, y - bomb.y) > radius + bombRadius(cell));
+      return clearOfClaimed
+        && clearOfProtected
+        && clearOfActiveTrail
+        && clearOfPlayer
+        && clearOfEnemies
+        && clearOfDiamonds
+        && clearOfBombs;
+    });
+    if (candidate) {
+      speedBoost.x = clamp(candidate.x, bounds.left + radius, bounds.right - radius);
+      speedBoost.y = clamp(candidate.y, bounds.top + radius, bounds.bottom - radius);
+    }
+  });
 };
 
 const diamondCountForLevel = (level: number) => {
@@ -2430,6 +2528,41 @@ const DiamondSprite = React.memo(
   ),
 );
 
+const SpeedBoostSprite = React.memo(
+  ({ speedBoost, cell, speedBoostSource }: any) => {
+    if (speedBoost.collected) return null;
+    const size = pickupVisualSize(cell) * 0.92;
+    return (
+      <G
+        transform={`translate(${speedBoost.x} ${speedBoost.y + Math.sin(speedBoost.phase) * cell * 0.08})`}
+      >
+        <Circle
+          cx={0}
+          cy={0}
+          r={size * 0.46}
+          fill="#00f3ff"
+          opacity={0.14}
+        />
+        <SvgImage
+          href={speedBoostSource}
+          x={-size / 2}
+          y={-size / 2}
+          width={size}
+          height={size}
+          opacity={0.98}
+        />
+      </G>
+    );
+  },
+  (previous: any, next: any) => (
+    previous.speedBoost.x === next.speedBoost.x
+      && previous.speedBoost.y === next.speedBoost.y
+      && previous.speedBoost.collected === next.speedBoost.collected
+      && previous.speedBoost.phase === next.speedBoost.phase
+      && previous.cell === next.cell
+  ),
+);
+
 const SpiderThreadSprite = React.memo(
   ({ thread, spiderWebSource, cell }: any) => {
     const active = useMemo(
@@ -2659,6 +2792,14 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           frame={diamondFrame}
           pickupSize={pickupSize}
           diamondSpriteSource={diamondSpriteSource}
+        />
+      ))}
+      {snapshot.speedBoosts.map((speedBoost, index) => (
+        <SpeedBoostSprite
+          key={`speed-boost-${index}`}
+          speedBoost={speedBoost}
+          cell={snapshot.cell}
+          speedBoostSource={speedBoostSource}
         />
       ))}
       {SHIP_SMOKE_RENDER_MODE === 'SPRITE' && (
@@ -3086,6 +3227,7 @@ export default function GameScreen() {
     protectedTrails: [],
     enemies: [],
     diamonds: [],
+    speedBoosts: [],
     bombs: [],
     projectiles: [],
     missiles: [],
@@ -3113,6 +3255,7 @@ export default function GameScreen() {
     status: 'PLAYING',
     respawnAt: 0,
     invincibleUntil: 0,
+    speedBoostUntil: 0,
   });
 
   const [hud, setHud] = useState<Hud>({
@@ -3134,6 +3277,7 @@ export default function GameScreen() {
   const playerMissileImageRef = useRef<any>(null);
   const spiderWebImageRef = useRef<any>(null);
   const diamondSpriteImageRef = useRef<any>(null);
+  const speedBoostImageRef = useRef<any>(null);
   const playerImageRef = useRef<any>(null);
   const cuttingSpriteImageRef = useRef<any>(null);
   const shipSmokeSpriteImageRef = useRef<any>(null);
@@ -3529,6 +3673,7 @@ export default function GameScreen() {
         coreReactorSpriteSource,
         sevenFireOrbSource,
         diamondSpriteSource,
+        speedBoostSource,
         spiderWebSource,
       ];
       const uniqueAssetModules = Array.from(new Set(imageModules));
@@ -3653,6 +3798,13 @@ export default function GameScreen() {
       if (!cancelled) diamondSpriteImageRef.current = diamondImage;
     };
     diamondImage.src = resolvedDiamond?.uri ?? diamondSpriteSource;
+    const resolvedSpeedBoost = (RNImage as any).resolveAssetSource?.(speedBoostSource);
+    const speedBoostImage = new (globalThis as any).Image();
+    speedBoostImage.decoding = 'async';
+    speedBoostImage.onload = () => {
+      if (!cancelled) speedBoostImageRef.current = speedBoostImage;
+    };
+    speedBoostImage.src = resolvedSpeedBoost?.uri ?? speedBoostSource;
     const resolvedCoreReactorSprite = (RNImage as any).resolveAssetSource?.(coreReactorSpriteSource);
     const coreReactorImage = new (globalThis as any).Image();
     coreReactorImage.decoding = 'async';
@@ -3707,6 +3859,7 @@ export default function GameScreen() {
       spriteImagesRef.current = {};
       coreReactorImageRef.current = null;
       diamondSpriteImageRef.current = null;
+      speedBoostImageRef.current = null;
       sevenFireOrbImageRef.current = null;
       playerMissileImageRef.current = null;
       spiderWebImageRef.current = null;
@@ -3732,6 +3885,9 @@ export default function GameScreen() {
     const previousInvincibleUntil = preserveStats && resetBoard
       ? (g.invincibleUntil ?? 0)
       : 0;
+    const previousSpeedBoostUntil = preserveStats && !resetBoard
+      ? (g.speedBoostUntil ?? 0)
+      : 0;
     const previousLevel = levelOverride ?? (preserveStats ? g.level : 1);
     const previousClaimedPolygons = preserveStats && !resetBoard
       ? g.claimedPolygons.map((polygon) => polygon.map((point) => ({ ...point })))
@@ -3745,6 +3901,10 @@ export default function GameScreen() {
       : previousLevel === TUTORIAL_SECTOR
         ? []
         : createDiamonds(width, height, width / COLS, diamondCountForLevel(previousLevel));
+    const preserveSpeedBoostLayout = preserveStats && !resetBoard;
+    const previousSpeedBoosts = preserveSpeedBoostLayout
+      ? g.speedBoosts.map((speedBoost) => ({ ...speedBoost }))
+      : createSpeedBoosts(width, height, width / COLS, previousLevel);
     const previousEnemies = preserveStats && !resetBoard ? g.enemies : [];
     const preserveBombLayout = preserveStats && !resetBoard;
     const previousBombs = preserveBombLayout
@@ -3818,6 +3978,21 @@ export default function GameScreen() {
         respawnPlayer,
       );
     }
+    if (!preserveSpeedBoostLayout) {
+      placeSpeedBoostsInOpenSurface(
+        previousSpeedBoosts,
+        enemies,
+        previousDiamonds,
+        bombs,
+        width,
+        height,
+        cell,
+        previousClaimedPolygons,
+        previousProtectedTrails,
+        [],
+        respawnPlayer,
+      );
+    }
 
     gameRef.current = {
       ...g,
@@ -3835,6 +4010,7 @@ export default function GameScreen() {
       protectedTrails: previousProtectedTrails,
       enemies,
       diamonds: previousDiamonds,
+      speedBoosts: previousSpeedBoosts,
       bombs,
       projectiles: [],
       missiles: [],
@@ -3866,6 +4042,7 @@ export default function GameScreen() {
       status: 'PLAYING',
       respawnAt: 0,
       invincibleUntil: previousInvincibleUntil,
+      speedBoostUntil: previousSpeedBoostUntil,
     };
     diagnosticLog('game-reset', {
       level: previousLevel,
@@ -3975,6 +4152,11 @@ export default function GameScreen() {
       x: diamond.x * scaleX,
       y: diamond.y * scaleY,
     }));
+    game.speedBoosts = saved.speedBoosts.map((speedBoost) => ({
+      ...speedBoost,
+      x: speedBoost.x * scaleX,
+      y: speedBoost.y * scaleY,
+    }));
     game.bombs = saved.bombs.map((bomb) => ({
       ...bomb,
       x: bomb.x * scaleX,
@@ -4026,6 +4208,7 @@ export default function GameScreen() {
     game.status = 'PLAYING';
     game.respawnAt = 0;
     game.invincibleUntil = Date.now() + Math.max(0, saved.invincibleRemainingMs);
+    game.speedBoostUntil = Date.now() + Math.max(0, saved.speedBoostRemainingMs);
     game.initialized = true;
     savedGameRef.current = null;
     setHud({
@@ -4561,6 +4744,37 @@ export default function GameScreen() {
         )
       ));
       if (bomb) explode(g, now);
+    };
+
+    const activateSpeedBoost = (g: Game, speedBoost: SpeedBoost, now: number) => {
+      if (
+        speedBoost.collected
+        || g.level === TUTORIAL_SECTOR
+        || isBossSector(g.level)
+      ) {
+        return;
+      }
+      speedBoost.collected = true;
+      g.speedBoostUntil = Math.max(now, g.speedBoostUntil) + SPEED_BOOST_DURATION_MS;
+      enqueueBanner({ kind: 'SPEED_BOOST' });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    };
+
+    const collectSpeedBoostsAlongSegment = (
+      g: Game,
+      from: Point,
+      to: Point,
+      now: number,
+    ) => {
+      const contactRadius = speedBoostRadius(g.cell) + playerBodyRadius(g.cell);
+      g.speedBoosts.forEach((speedBoost) => {
+        if (
+          !speedBoost.collected
+          && distanceToSegment(speedBoost, from, to) <= contactRadius
+        ) {
+          activateSpeedBoost(g, speedBoost, now);
+        }
+      });
     };
 
     const moveProjectiles = (g: Game, dt: number, now: number) => {
@@ -5276,8 +5490,8 @@ export default function GameScreen() {
               ? (g.trail.length > 0 ? 0.42 : 0.68)
               : 0;
             const predictedPlayer = {
-              x: clamp(g.player.x + playerDirection.x * PLAYER_MOVE_SPEED * predictionTime, minX, maxX),
-              y: clamp(g.player.y + playerDirection.y * PLAYER_MOVE_SPEED * predictionTime, minY, maxY),
+              x: clamp(g.player.x + playerDirection.x * playerSpeedFor(g, now) * predictionTime, minX, maxX),
+              y: clamp(g.player.y + playerDirection.y * playerSpeedFor(g, now) * predictionTime, minY, maxY),
             };
             const planningCenter = isDragon ? predictedPlayer : g.player;
             const playerAngle = Math.atan2(planningCenter.y - enemy.y, planningCenter.x - enemy.x);
@@ -5521,8 +5735,8 @@ export default function GameScreen() {
                 ? g.facingDir
                 : ZERO;
           const droneVelocity = {
-              x: droneDirection.x * PLAYER_MOVE_SPEED,
-              y: droneDirection.y * PLAYER_MOVE_SPEED,
+              x: droneDirection.x * playerSpeedFor(g, now),
+              y: droneDirection.y * playerSpeedFor(g, now),
           };
           const offsetX = g.player.x - enemy.x;
           const offsetY = g.player.y - enemy.y;
@@ -5646,6 +5860,9 @@ export default function GameScreen() {
       // Keep hot-reloaded sessions compatible with the new web state.
       g.spiderThreads ??= [];
       g.invincibleUntil ??= 0;
+      g.speedBoosts ??= [];
+      g.speedBoostUntil ??= 0;
+      if (g.speedBoostUntil <= now) g.speedBoostUntil = 0;
       let activeParticleCount = 0;
       for (let index = 0; index < g.particles.length; index += 1) {
         const particle = g.particles[index];
@@ -5747,6 +5964,18 @@ export default function GameScreen() {
                   size: 1 + Math.random() * 2.8,
                   color: ['#ffffff', '#00f3ff', '#ff2bb5', '#b8ff4a'][particleIndex % 4],
                 });
+              }
+            });
+            g.speedBoosts.forEach((speedBoost) => {
+              if (
+                !speedBoost.collected
+                && captureRegionsOverlapCircle(
+                  speedBoost,
+                  speedBoostRadius(g.cell),
+                  completedPolygons,
+                )
+              ) {
+                activateSpeedBoost(g, speedBoost, now);
               }
             });
             const capturedEnemies = g.enemies.filter((enemy) => {
@@ -5893,7 +6122,8 @@ export default function GameScreen() {
             ? g.facingDir
             : ZERO;
       if (direction.x !== 0 || direction.y !== 0) g.facingDir = direction;
-      const baseSpeed = PLAYER_MOVE_SPEED;
+      collectSpeedBoostsAlongSegment(g, g.player, g.player, now);
+      const baseSpeed = playerSpeedFor(g, now);
       const baseDistance = baseSpeed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
         const steps = Math.max(1, Math.ceil(baseDistance));
@@ -5975,6 +6205,7 @@ export default function GameScreen() {
           next.x = clamp(next.x, outerBounds.left, outerBounds.right);
           next.y = clamp(next.y, outerBounds.top, outerBounds.bottom);
           g.player = next;
+            collectSpeedBoostsAlongSegment(g, previous, g.player, now);
            const movementHitBomb = g.bombs.some((bomb) => (
              !bomb.destroyed && bombTouchesSegment(bomb, g.cell, previous, g.player)
            ));
@@ -6350,6 +6581,25 @@ export default function GameScreen() {
            context.restore();
          });
        }
+        const speedBoostImage = speedBoostImageRef.current;
+        if (speedBoostImage) {
+          const speedBoostSize = pickupVisualSize(g.cell) * 0.92;
+          g.speedBoosts.forEach((speedBoost) => {
+            if (speedBoost.collected) return;
+            const y = speedBoost.y + Math.sin(g.frame * 0.05 + speedBoost.phase) * g.cell * 0.08;
+            context.save();
+            context.globalCompositeOperation = 'source-over';
+            context.globalAlpha = 0.98;
+            context.drawImage(
+              speedBoostImage,
+              speedBoost.x - speedBoostSize / 2,
+              y - speedBoostSize / 2,
+              speedBoostSize,
+              speedBoostSize,
+            );
+            context.restore();
+          });
+        }
        const coreReactorImage = coreReactorImageRef.current;
        if (coreReactorImage) {
          const bombFrame = Math.floor(g.frame / CORE_REACTOR_SPRITE_FRAME_DURATION)
@@ -6583,6 +6833,7 @@ export default function GameScreen() {
              direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
+               speedBoosts: g.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
                projectiles: g.projectiles.map((projectile) => ({ ...projectile })),
               missiles: g.missiles.map((missile) => ({ ...missile })),
@@ -6762,7 +7013,9 @@ export default function GameScreen() {
                     ? styles.diamondBanner
                     : banner.kind === 'BOMB'
                       ? styles.bombBanner
-                          : banner.kind === 'SHIELD'
+                      : banner.kind === 'SPEED_BOOST'
+                        ? styles.speedBoostBanner
+                        : banner.kind === 'SHIELD'
                             ? styles.shieldBanner
                       : banner.kind === 'SECTOR'
                         ? styles.sectorBanner
@@ -6796,6 +7049,8 @@ export default function GameScreen() {
                     ? 'BONUS DIAMANT CAPTURÉ'
                     : banner.kind === 'BOMB'
                       ? 'BOMBE NEUTRALISÉE'
+                    : banner.kind === 'SPEED_BOOST'
+                      ? 'BOOST DE VITESSE'
                     : banner.kind === 'SHIELD'
                       ? 'BOUCLIER ACTIVÉ'
                       : banner.kind === 'SECTOR'
@@ -6847,6 +7102,8 @@ export default function GameScreen() {
                       ? `+${banner.points ?? DIAMOND_SCORE} POINTS`
                       : banner.kind === 'BOMB'
                         ? `+${banner.points ?? BOMB_SCORE} POINTS`
+                    : banner.kind === 'SPEED_BOOST'
+                      ? 'VITESSE +50%  •  5 SECONDES'
                       : banner.kind === 'SHIELD'
                         ? 'INVINCIBILITÉ  •  10 SECONDES'
                       : banner.kind === 'SECTOR'
@@ -7676,6 +7933,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 24, 34, 0.24)',
     shadowColor: HUD_COLORS.cyan,
     shadowOpacity: 0.7,
+  },
+  speedBoostBanner: {
+    borderColor: HUD_COLORS.lime,
+    backgroundColor: 'rgba(18, 34, 8, 0.5)',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.9,
   },
   sectorBanner: {
     borderColor: HUD_COLORS.magenta,

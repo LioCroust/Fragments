@@ -26,3 +26,4 @@
 - [Native drone clipping](native-drone-clipping.md) — Native SVG needs transparent viewport margin plus visible arena overflow when the drone starts outside the blue frame.
 - [Sector loading gate](sector-loading-gate.md) — Hide the complete game behind black until local images actually finish decoding, then reveal before the sector banner.
 - [Split enemy respawn](split-enemy-respawn.md) — Same-sector collision restarts preserve all live split enemy kinds and keep already destroyed ones absent.
+- [Active game loop boundary](active-game-loop-boundary.md) — The historical second game copy is inside a block comment; edits and removals must target the first compiled loop explicitly.
