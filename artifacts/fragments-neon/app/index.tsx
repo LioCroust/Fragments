@@ -6990,7 +6990,7 @@ export default function GameScreen() {
             invincibleUntil: g.invincibleUntil,
           });
         }
-        if (g.frame % 6 === 0) {
+        if (g.frame % 2 === 0) {
           setHud({
             score: g.score,
             bestScore: bestScoreRef.current,
@@ -7112,30 +7112,27 @@ export default function GameScreen() {
   };
 
   const zoneProgress = clamp(hud.capture / LEVEL_CAPTURE_TARGET, 0, 1);
-  const zoneProgressAnimated = useRef(new Animated.Value(zoneProgress)).current;
-  const zoneShimmer = useRef(new Animated.Value(-1)).current;
+  const zoneGlow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const animation = Animated.timing(zoneProgressAnimated, {
-      toValue: zoneProgress,
-      duration: 125,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [zoneProgress, zoneProgressAnimated]);
-  useEffect(() => {
-    const shimmerLoop = Animated.loop(
-      Animated.timing(zoneShimmer, {
-        toValue: 1,
-        duration: 1150,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(zoneGlow, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        Animated.timing(zoneGlow, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: false,
+        }),
+      ]),
     );
-    shimmerLoop.start();
-    return () => shimmerLoop.stop();
-  }, [zoneShimmer]);
+    glowLoop.start();
+    return () => glowLoop.stop();
+  }, [zoneGlow]);
   const shieldSegments = Array.from({ length: 3 });
 
   return (
@@ -7417,24 +7414,11 @@ export default function GameScreen() {
                   style={[
                     styles.zoneProgressFill,
                     {
-                      width: zoneProgressAnimated.interpolate({
+                      width: `${zoneProgress * 100}%`,
+                      opacity: zoneGlow.interpolate({
                         inputRange: [0, 1],
-                        outputRange: ['0%', '100%'],
+                        outputRange: [0.92, 1],
                       }),
-                    },
-                  ]}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.zoneProgressShimmer,
-                    {
-                      transform: [{
-                        translateX: zoneShimmer.interpolate({
-                          inputRange: [-1, 1],
-                          outputRange: [-36, 196],
-                        }),
-                      }],
                     },
                   ]}
                 />
@@ -8057,17 +8041,6 @@ const styles = StyleSheet.create({
     shadowColor: HUD_COLORS.cyan,
     shadowOpacity: 1,
     shadowRadius: 7,
-  },
-  zoneProgressShimmer: {
-    position: 'absolute',
-    top: -2,
-    bottom: -2,
-    width: 24,
-    opacity: 0.58,
-    backgroundColor: '#ffffff',
-    shadowColor: '#ffffff',
-    shadowOpacity: 1,
-    shadowRadius: 8,
   },
   zoneProgressTicks: {
     ...StyleSheet.absoluteFill,
