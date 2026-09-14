@@ -27,4 +27,4 @@
 - [Sector loading gate](sector-loading-gate.md) — Hide the complete game behind black until local images actually finish decoding, then reveal before the sector banner.
 - [Split enemy respawn](split-enemy-respawn.md) — Same-sector collision restarts preserve all live split enemy kinds and keep already destroyed ones absent.
 - [Active game loop boundary](active-game-loop-boundary.md) — The historical second game copy is inside a block comment; edits and removals must target the first compiled loop explicitly.
-- [Skia animated transforms](skia-animated-transforms.md) — In Expo Go, use `useDerivedValue` for Skia sprite props; selectors and animated matrices can crash the recorder.
+- [Skia animated transforms](skia-animated-transforms.md) — Expo Go is reliable with numeric snapshot props in the hybrid Skia layer; shared-value sprite motion remains unverified.

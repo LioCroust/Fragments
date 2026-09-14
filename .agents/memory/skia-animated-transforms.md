@@ -3,8 +3,8 @@ name: Skia animated transforms
 description: Non-obvious React Native Skia and Reanimated constraints for the game’s native render path.
 ---
 
-In Expo Go, Skia shared values should drive sprite movement through direct `x`, `y`, and `opacity` props backed by `useDerivedValue`. Avoid passing a `select(...)` selector or shared-value selector to `matrix`.
+For this Expo Go runtime, the reliable hybrid path is to pass numeric `x`, `y`, `opacity`, and plain rotation props from the current game snapshot into the Skia layer. Shared-value sprite motion remains unverified and should not replace the snapshot path without an on-device test.
 
-**Why:** The installed Skia types accept shared-value selectors for direct animated props, but Expo Go’s runtime rejected the selector object with an “invalid float prop value” error. A shared matrix selector previously caused an “object is an object, expected an array” error. Nested transform selectors are also rejected by TypeScript.
+**Why:** Shared matrix selectors crashed the Reanimated recorder, direct selectors produced invalid float errors, and derived shared values left sprites visually frozen in Expo Go. Plain numeric props avoid all three failure modes.
 
-**How to apply:** Keep player and simple enemy positions in Reanimated shared values, expose them to Skia through `useDerivedValue`, update those values from the game loop, and publish full React snapshots only when SVG effects need them. Keep rotated SVG fallback or use a runtime-supported transform strategy once verified on-device.
+**How to apply:** Keep player and enemy positions in the game state, pass numeric snapshot values to Skia, and use the SVG path as fallback for multi-enemy cases. Only revisit shared-value motion after a minimal isolated device test.

@@ -26,14 +26,10 @@ import Svg, {
 } from 'react-native-svg';
 import {
   Canvas as SkiaCanvas,
+  Group as SkiaGroup,
   Image as SkiaImage,
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
-import {
-  useDerivedValue,
-  useSharedValue,
-  type SharedValue,
-} from 'react-native-reanimated';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -2806,30 +2802,16 @@ const NativeArenaStatic = React.memo(({
 });
 
 type SkiaDynamicArenaProps = {
-  width: number;
-  height: number;
-  cell: number;
+  snapshot: Snapshot;
   renderMargin: number;
-  playerMotion: SharedValue<SkiaMotionState>;
-  shipMotion: SharedValue<SkiaMotionState>;
+  renderShip: boolean;
   onReady: () => void;
 };
 
-type SkiaMotionState = {
-  x: number;
-  y: number;
-  angle: number;
-  visible: number;
-  frame: number;
-};
-
 const SkiaDynamicArena = React.memo(({
-  width,
-  height,
-  cell,
+  snapshot,
   renderMargin,
-  playerMotion,
-  shipMotion,
+  renderShip,
   onReady,
 }: SkiaDynamicArenaProps) => {
   const playerImage = useSkiaImage(playerSource);
@@ -2839,16 +2821,21 @@ const SkiaDynamicArena = React.memo(({
     if (playerImage && shipImage) onReady();
   }, [onReady, playerImage, shipImage]);
 
-  const playerSize = playerSpriteSize(cell);
-  const shipSize = enemyRenderSize('SHIP', cell);
-  const playerOpacity = useDerivedValue(() => playerMotion.value.visible);
-  const playerX = useDerivedValue(() => playerMotion.value.x);
-  const playerY = useDerivedValue(() => playerMotion.value.y);
-  const shipOpacity = useDerivedValue(() => shipMotion.value.visible);
-  const shipX = useDerivedValue(() => shipMotion.value.x);
-  const shipY = useDerivedValue(() => shipMotion.value.y);
-
   if (!playerImage || !shipImage) return null;
+
+  const playerSize = playerSpriteSize(snapshot.cell);
+  const playerX = snapshot.player.x + renderMargin;
+  const playerY = snapshot.player.y + renderMargin;
+  const playerAngle = Math.atan2(snapshot.direction.y, snapshot.direction.x) + Math.PI / 2;
+  const liveShip = snapshot.enemies.find((enemy) => (
+    enemy.kind === 'SHIP'
+    && !enemyIsDestroyed(enemy)
+    && enemy.respawnAt <= Date.now()
+  ));
+  const shipMotion = liveShip ? enemyAnimationTransform(liveShip, snapshot.cell) : null;
+  const shipSize = liveShip
+    ? enemyRenderSize(liveShip.kind, snapshot.cell, liveShip.isMini)
+    : enemyRenderSize('SHIP', snapshot.cell);
 
   return (
     <SkiaCanvas
@@ -2857,28 +2844,41 @@ const SkiaDynamicArena = React.memo(({
         {
           left: -renderMargin,
           top: -renderMargin,
-          width: width + renderMargin * 2,
-          height: height + renderMargin * 2,
+          width: snapshot.width + renderMargin * 2,
+          height: snapshot.height + renderMargin * 2,
         },
       ]}
       pointerEvents="none"
     >
-      <SkiaImage
-        image={playerImage}
-        x={playerX}
-        y={playerY}
-        width={playerSize.width}
-        height={playerSize.height}
-        opacity={playerOpacity}
-      />
-      <SkiaImage
-        image={shipImage}
-        x={shipX}
-        y={shipY}
-        width={shipSize.width}
-        height={shipSize.height}
-        opacity={shipOpacity}
-      />
+      <SkiaGroup
+        transform={[{ rotate: playerAngle }]}
+        origin={{ x: playerX, y: playerY }}
+      >
+        <SkiaImage
+          image={playerImage}
+          x={playerX - playerSize.width / 2}
+          y={playerY - playerSize.height / 2}
+          width={playerSize.width}
+          height={playerSize.height}
+        />
+      </SkiaGroup>
+      {renderShip && liveShip && shipMotion && (
+        <SkiaGroup
+          transform={[{ rotate: shipMotion.rotation }]}
+          origin={{
+            x: liveShip.x + renderMargin,
+            y: liveShip.y + shipMotion.offsetY + renderMargin,
+          }}
+        >
+          <SkiaImage
+            image={shipImage}
+            x={liveShip.x + renderMargin - shipSize.width / 2}
+            y={liveShip.y + shipMotion.offsetY + renderMargin - shipSize.height / 2}
+            width={shipSize.width}
+            height={shipSize.height}
+          />
+        </SkiaGroup>
+      )}
     </SkiaCanvas>
   );
 });
@@ -3354,20 +3354,6 @@ export default function GameScreen() {
   const [fps, setFps] = useState(0);
   const [skiaReady, setSkiaReady] = useState(false);
   const handleSkiaReady = useCallback(() => setSkiaReady(true), []);
-  const skiaPlayerMotion = useSharedValue<SkiaMotionState>({
-    x: 0,
-    y: 0,
-    angle: Math.PI / 2,
-    visible: 1,
-    frame: 0,
-  });
-  const skiaShipMotion = useSharedValue<SkiaMotionState>({
-    x: 0,
-    y: 0,
-    angle: 0,
-    visible: 0,
-    frame: 0,
-  });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
@@ -6960,50 +6946,7 @@ export default function GameScreen() {
         drawCanvas(g, now);
         if (Platform.OS !== 'web') {
           const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
-          const nativeRenderMargin = Math.max(g.cell * 2.2, 28);
-          skiaPlayerMotion.value = {
-            x: g.player.x + nativeRenderMargin - playerSpriteSize(g.cell).width / 2,
-            y: g.player.y + nativeRenderMargin - playerSpriteSize(g.cell).height / 2,
-            angle: Math.atan2(currentDirection.y, currentDirection.x) + Math.PI / 2,
-            visible: 1,
-            frame: 0,
-          };
-          const firstLiveShip = g.enemies.find((enemy) => (
-            enemy.kind === 'SHIP'
-            && !enemyIsDestroyed(enemy)
-            && enemy.respawnAt <= now
-          ));
-          if (firstLiveShip) {
-            const shipMotion = enemyAnimationTransform(firstLiveShip, g.cell);
-            skiaShipMotion.value = {
-              x: firstLiveShip.x + nativeRenderMargin - enemyRenderSize('SHIP', g.cell).width / 2,
-              y: firstLiveShip.y + shipMotion.offsetY + nativeRenderMargin
-                - enemyRenderSize('SHIP', g.cell).height / 2,
-              angle: shipMotion.rotation,
-              visible: 1,
-              frame: enemyFrameIndex(firstLiveShip),
-            };
-          } else {
-            skiaShipMotion.value = {
-              x: 0,
-              y: 0,
-              angle: 0,
-              visible: 0,
-              frame: 0,
-            };
-          }
-          const hasHighFrequencySvgMotion = (
-            g.trail.length > 1
-            || g.pendingCapturePolygons.length > 0
-            || g.projectiles.length > 0
-            || g.missiles.length > 0
-            || g.spiderThreads.length > 0
-            || g.particles.length > 0
-            || g.fusion !== null
-            || g.fusionSparks.length > 0
-          );
-          if (hasHighFrequencySvgMotion || g.frame % 2 === 0) {
-            setNativeSnapshot({
+          setNativeSnapshot({
             width: g.width,
             height: g.height,
             cell: g.cell,
@@ -7047,8 +6990,7 @@ export default function GameScreen() {
              pendingCapturePolygons: g.pendingCapturePolygons,
             scanY: g.scanY,
             invincibleUntil: g.invincibleUntil,
-            });
-          }
+          });
         }
         if (g.frame % 2 === 0) {
           const nextHud = {
@@ -7190,12 +7132,9 @@ export default function GameScreen() {
         </Svg>
         {SKIA_DYNAMIC_RENDER_ENABLED && (
           <SkiaDynamicArena
-            width={snapshot.width}
-            height={snapshot.height}
-            cell={snapshot.cell}
+            snapshot={snapshot}
             renderMargin={renderMargin}
-            playerMotion={skiaPlayerMotion}
-            shipMotion={skiaShipMotion}
+            renderShip={skiaShipReady}
             onReady={handleSkiaReady}
           />
         )}
