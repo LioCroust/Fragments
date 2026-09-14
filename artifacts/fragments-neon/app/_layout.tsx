@@ -83,6 +83,7 @@ export default function RootLayout() {
     });
     try {
       NavigationBar.setStyle('dark');
+      NavigationBar.setHidden(true);
     } catch (error) {
       console.error('[FragmentsNeon][startup] navigation-bar-style-failed', error);
     }
@@ -92,8 +93,13 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <NativeStatusBar barStyle="light-content" backgroundColor="#000000" translucent={false} />
-      <NavigationBar style="dark" />
+      <NativeStatusBar
+        barStyle="light-content"
+        backgroundColor="#000000"
+        translucent={false}
+        hidden={Platform.OS === 'android'}
+      />
+      <NavigationBar style="dark" hidden />
       <ErrorBoundary
         onError={(error, componentStack) => {
           console.error('[FragmentsNeon][runtime] react-error-boundary', {

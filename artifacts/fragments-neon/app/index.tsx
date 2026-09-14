@@ -51,7 +51,6 @@ const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
 const TUTORIAL_SECTOR = 0;
 const TUTORIAL_SWIPE_REPETITIONS = 2;
-// Temporary QA control. __DEV__ hides it automatically from production builds.
 // Keep the sector strip and tutorial controls available in the APK as well as
 // during development. They are part of the game's tutorial/navigation UI.
 const DEBUG_SECTOR_SELECTOR_ENABLED = true;
@@ -7408,7 +7407,7 @@ export default function GameScreen() {
         onSkipTutorial={() => teleportToSector(
           lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : 1,
         )}
-        bottomInset={Math.max(insets.bottom, 6)}
+        bottomInset={Math.max(insets.bottom, 6) + 18}
       />
 
       {isLoadingScreenVisible && (
@@ -7429,26 +7428,14 @@ export default function GameScreen() {
             <RNImage
               source={loadingCoverSource}
               style={styles.loadingArtwork}
-              resizeMode="contain"
+              resizeMode="cover"
               accessibilityLabel="Illustration Fragments Neon"
             />
             <View style={styles.loadingArtworkShade} />
             <View style={styles.loadingOverlay}>
-              <Text style={styles.loadingBannerTitle}>CHARGEMENT...</Text>
-              <Text style={styles.loadingBannerSubtitle}>
-                {isInitialLoadingReady ? 'TOUCHER POUR DÉMARRER' : 'PRÉPARATION DU SYSTÈME'}
-              </Text>
-              <View style={styles.loadingProgressTrack}>
-                <View
-                  style={[
-                    styles.loadingProgressFill,
-                    { width: `${Math.round(loadingProgress * 100)}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.loadingProgressLabel}>
-                {Math.round(loadingProgress * 100)}%
-              </Text>
+              {isInitialLoadingReady && (
+                <Text style={styles.loadingBannerSubtitle}>TOUCHER POUR DÉMARRER</Text>
+              )}
             </View>
           </Animated.View>
         </View>
@@ -7468,24 +7455,12 @@ const styles = StyleSheet.create({
     zIndex: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
     backgroundColor: '#000000',
   },
   loadingArtworkFrame: {
-    position: 'relative',
-    width: '72%',
-    maxWidth: 280,
-    height: '70%',
-    maxHeight: 620,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 30, 56, 0.78)',
     backgroundColor: '#020208',
-    shadowColor: '#ff1e38',
-    shadowOpacity: 0.8,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
   },
   loadingArtwork: {
     width: '100%',
@@ -7499,7 +7474,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 24,
     right: 24,
-    bottom: 24,
+    bottom: 34,
     alignItems: 'center',
   },
   loadingProgressTrack: {
@@ -7574,10 +7549,10 @@ const styles = StyleSheet.create({
   },
   arena: {
     position: 'absolute',
-    top: 174,
+    top: 160,
     left: 0,
     right: 0,
-    bottom: 4,
+    bottom: 28,
     backgroundColor: '#000000',
     overflow: 'hidden',
   },
@@ -7791,7 +7766,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 220,
+    height: 206,
     zIndex: 1,
     overflow: 'hidden',
     backgroundColor: '#050509',
@@ -7808,17 +7783,17 @@ const styles = StyleSheet.create({
   },
   hud: {
     position: 'absolute',
-    top: 0,
+    top: -9,
     left: 18,
     right: 18,
     zIndex: 3,
   },
   nativeArenaDynamicLayer: {
     position: 'absolute',
-    top: 174,
+    top: 160,
     left: 0,
     right: 0,
-    bottom: 4,
+    bottom: 28,
     zIndex: 2,
     overflow: 'visible',
   },
