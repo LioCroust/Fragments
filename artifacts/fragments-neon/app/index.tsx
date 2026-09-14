@@ -2794,7 +2794,7 @@ const NativeArenaStatic = React.memo(({
   );
 });
 
-const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
+const NativeArenaDynamic = React.memo(({ snapshot }: { snapshot: Snapshot }) => {
   const arenaBounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
@@ -3058,7 +3058,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
       </G>
     </>
   );
-};
+});
 
 const DebugSectorSelector = ({
   currentSector,
@@ -6889,7 +6889,7 @@ export default function GameScreen() {
           });
         }
         if (g.frame % 2 === 0) {
-          setHud({
+          const nextHud = {
             score: g.score,
             bestScore: bestScoreRef.current,
             shields: Math.max(0, g.shields),
@@ -6908,8 +6908,19 @@ export default function GameScreen() {
             ),
             level: g.level,
             mode: g.mode,
-             feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : '',
-          });
+            feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : '',
+          };
+          setHud((current) => (
+            current.score === nextHud.score
+              && current.bestScore === nextHud.bestScore
+              && current.shields === nextHud.shields
+              && current.capture === nextHud.capture
+              && current.level === nextHud.level
+              && current.mode === nextHud.mode
+              && current.feedback === nextHud.feedback
+              ? current
+              : nextHud
+          ));
         }
       }
       animationFrame = requestAnimationFrame(loop);
