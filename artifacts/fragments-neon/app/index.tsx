@@ -3360,7 +3360,6 @@ export default function GameScreen() {
     angle: Math.PI / 2,
     visible: 1,
     frame: 0,
-    matrix: spriteMatrix(0, 0, Math.PI / 2, 1, 1),
   });
   const skiaShipMotion = useSharedValue<SkiaMotionState>({
     x: 0,
@@ -3368,7 +3367,6 @@ export default function GameScreen() {
     angle: 0,
     visible: 0,
     frame: 0,
-    matrix: spriteMatrix(0, 0, 0, 1, 1),
   });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
@@ -6964,18 +6962,11 @@ export default function GameScreen() {
           const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
           const nativeRenderMargin = Math.max(g.cell * 2.2, 28);
           skiaPlayerMotion.value = {
-            x: g.player.x + nativeRenderMargin,
-            y: g.player.y + nativeRenderMargin,
+            x: g.player.x + nativeRenderMargin - playerSpriteSize(g.cell).width / 2,
+            y: g.player.y + nativeRenderMargin - playerSpriteSize(g.cell).height / 2,
             angle: Math.atan2(currentDirection.y, currentDirection.x) + Math.PI / 2,
             visible: 1,
             frame: 0,
-            matrix: spriteMatrix(
-              g.player.x + nativeRenderMargin,
-              g.player.y + nativeRenderMargin,
-              Math.atan2(currentDirection.y, currentDirection.x) + Math.PI / 2,
-              playerSpriteSize(g.cell).width,
-              playerSpriteSize(g.cell).height,
-            ),
           };
           const firstLiveShip = g.enemies.find((enemy) => (
             enemy.kind === 'SHIP'
@@ -6985,18 +6976,12 @@ export default function GameScreen() {
           if (firstLiveShip) {
             const shipMotion = enemyAnimationTransform(firstLiveShip, g.cell);
             skiaShipMotion.value = {
-              x: firstLiveShip.x + nativeRenderMargin,
-              y: firstLiveShip.y + shipMotion.offsetY + nativeRenderMargin,
+              x: firstLiveShip.x + nativeRenderMargin - enemyRenderSize('SHIP', g.cell).width / 2,
+              y: firstLiveShip.y + shipMotion.offsetY + nativeRenderMargin
+                - enemyRenderSize('SHIP', g.cell).height / 2,
               angle: shipMotion.rotation,
               visible: 1,
               frame: enemyFrameIndex(firstLiveShip),
-              matrix: spriteMatrix(
-                firstLiveShip.x + nativeRenderMargin,
-                firstLiveShip.y + shipMotion.offsetY + nativeRenderMargin,
-                shipMotion.rotation,
-                enemyRenderSize('SHIP', g.cell).width,
-                enemyRenderSize('SHIP', g.cell).height,
-              ),
             };
           } else {
             skiaShipMotion.value = {
@@ -7005,7 +6990,6 @@ export default function GameScreen() {
               angle: 0,
               visible: 0,
               frame: 0,
-              matrix: spriteMatrix(0, 0, 0, 1, 1),
             };
           }
           const hasHighFrequencySvgMotion = (
