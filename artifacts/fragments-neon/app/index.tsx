@@ -3107,6 +3107,7 @@ export default function GameScreen() {
   const tutorialSwipeGestureDirectionRef = useRef<TutorialDirection | null>(null);
   const tutorialCompletionBannerShownRef = useRef(false);
   const tutorialCaptureCompletionBannerShownRef = useRef(false);
+  const tutorialEnemyCaptureCompletionBannerShownRef = useRef(false);
   const tutorialStepRef = useRef<1 | 2 | 3 | 4>(1);
   const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
     ...EMPTY_TUTORIAL_SWIPE_COUNTS,
@@ -3254,7 +3255,7 @@ export default function GameScreen() {
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(820),
+        Animated.delay(next.kind === 'TUTORIAL' ? 2400 : 820),
         Animated.timing(bannerTranslateX, {
           toValue: -30,
           duration: 60,
@@ -3693,6 +3694,7 @@ export default function GameScreen() {
       tutorialSwipeGestureDirectionRef.current = null;
       tutorialCompletionBannerShownRef.current = false;
       tutorialCaptureCompletionBannerShownRef.current = false;
+      tutorialEnemyCaptureCompletionBannerShownRef.current = false;
       tutorialStepRef.current = 1;
       setTutorialStep(1);
       setTutorialSwipeCounts({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
@@ -3974,10 +3976,61 @@ export default function GameScreen() {
     tutorialStepRef.current = 2;
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyCaptureCompletionBannerShownRef.current = false;
     setTutorialStep(2);
     enqueueBanner({
       kind: 'TUTORIAL',
       tutorialStep: 2,
+    });
+  }, [enqueueBanner, resetGame]);
+
+  const beginTutorialEnemyStep = useCallback(() => {
+    const game = gameRef.current;
+    if (game.level !== TUTORIAL_SECTOR) return;
+    resetGame(false, false, TUTORIAL_SECTOR);
+    const tutorialGame = gameRef.current;
+    const bounds = perimeterBounds(tutorialGame.width, tutorialGame.height, tutorialGame.cell);
+    const baseEnemy = createEnemies(
+      tutorialGame.width,
+      tutorialGame.height,
+      tutorialGame.cell,
+      1,
+    )[0];
+    if (baseEnemy) {
+      const enemyX = (bounds.left + bounds.right) * 0.5;
+      const enemyY = (bounds.top + bounds.bottom) * 0.5;
+      tutorialGame.enemies = [{
+        ...baseEnemy,
+        x: enemyX,
+        y: enemyY,
+        vx: 16,
+        vy: 11,
+        speed: 22,
+        agility: 0.42,
+        phase: 0.4,
+        routePhase: 0.3,
+        targetX: enemyX,
+        targetY: enemyY,
+        thinkTimer: 0,
+        respawnAt: 0,
+        edgeTurnTimer: 0,
+        edgeDirectionX: 0,
+        edgeDirectionY: 0,
+        isBoss: false,
+        isMini: true,
+        splitLevel: undefined,
+        visualRotation: Math.atan2(11, 16) + Math.PI / 2,
+      }];
+    }
+    tutorialGame.missiles.length = 0;
+    tutorialStepRef.current = 3;
+    tutorialCompletionBannerShownRef.current = true;
+    tutorialCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+    setTutorialStep(3);
+    enqueueBanner({
+      kind: 'TUTORIAL',
+      tutorialStep: 3,
     });
   }, [enqueueBanner, resetGame]);
 
@@ -4573,6 +4626,11 @@ export default function GameScreen() {
     ) => {
       const splitOnMissile = fromMissile
         && !enemy.isMini;
+      const suppressTutorialEnemyBanner = (
+        g.level === TUTORIAL_SECTOR
+        && tutorialStepRef.current === 3
+        && fromCapture
+      );
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
       for (let i = 0; i < 200; i += 1) {
         const angle = Math.random() * Math.PI * 2;
@@ -4607,19 +4665,21 @@ export default function GameScreen() {
       enemy.vy = 0;
       if (splitOnMissile) {
         g.enemies.push(...splitShips);
-        enqueueBanner({
-          kind: enemy.isBoss ? 'BOSS_SPLIT' : 'SPLIT',
-          points: ENEMY_SCORE[enemy.kind],
-          enemyKind: enemy.kind,
-        });
-      } else {
+        if (!suppressTutorialEnemyBanner) {
+          enqueueBanner({
+            kind: enemy.isBoss ? 'BOSS_SPLIT' : 'SPLIT',
+            points: ENEMY_SCORE[enemy.kind],
+            enemyKind: enemy.kind,
+          });
+        }
+      } else if (!suppressTutorialEnemyBanner) {
         enqueueBanner({
           kind: 'ENEMY',
           points: enemyPoints,
           enemyKind: enemy.kind,
         });
       }
-      if (g.enemies.every((candidate) => enemyIsDestroyed(candidate))) {
+      if (!suppressTutorialEnemyBanner && g.enemies.every((candidate) => enemyIsDestroyed(candidate))) {
         enqueueBanner({ kind: 'CLEAN' });
       }
       if (enemy.kind === 'SHIP') {
@@ -4642,6 +4702,10 @@ export default function GameScreen() {
     };
 
     const launchPlayerMissiles = (g: Game) => {
+      if (g.level === TUTORIAL_SECTOR && tutorialStepRef.current <= 3) {
+        g.missiles.length = 0;
+        return;
+      }
       if (!sectorHasLiveTargets(g.enemies, g.bombs)) {
         g.missiles.length = 0;
         return;
@@ -5477,6 +5541,20 @@ export default function GameScreen() {
               capturedEnemies.forEach((enemy) => {
                 burstEnemy(g, enemy, now, false, true);
               });
+              if (
+                g.level === TUTORIAL_SECTOR
+                && tutorialStepRef.current === 3
+                && !tutorialEnemyCaptureCompletionBannerShownRef.current
+              ) {
+                tutorialEnemyCaptureCompletionBannerShownRef.current = true;
+                g.inputDir = ZERO;
+                g.hasMoveCommand = false;
+                enqueueBanner({
+                  kind: 'TUTORIAL',
+                  tutorialStep: 3,
+                  tutorialCompleted: true,
+                });
+              }
             }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
             if (
@@ -5491,6 +5569,7 @@ export default function GameScreen() {
                 kind: 'TUTORIAL',
                 tutorialStep: 2,
                 tutorialCompleted: true,
+                onComplete: beginTutorialEnemyStep,
               });
             }
             if (
@@ -6448,10 +6527,14 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR SÉCURISÉ À 80%'
                         : banner.kind === 'TUTORIAL'
-                          ? banner.tutorialStep === 2
+                          ? banner.tutorialStep === 3
                             ? banner.tutorialCompleted
                               ? 'OBJECTIF ATTEINT !'
-                              : 'TUTORIEL 2/4'
+                              : 'TUTORIEL 3/4'
+                            : banner.tutorialStep === 2
+                              ? banner.tutorialCompleted
+                                ? 'OBJECTIF ATTEINT !'
+                                : 'TUTORIEL 2/4'
                             : banner.tutorialCompleted
                               ? 'DIRIGER LE DRONE 1/4'
                               : 'TUTORIEL 1/4'
@@ -6482,10 +6565,14 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'PASSAGE SECTEUR SUIVANT'
                       : banner.kind === 'TUTORIAL'
-                        ? banner.tutorialStep === 2
+                        ? banner.tutorialStep === 3
                           ? banner.tutorialCompleted
-                            ? '✓ ZONE SÉCURISÉE À 80% • BRAVO'
-                            : 'SÉCURISE 80% DE LA ZONE'
+                            ? '✓ ENNEMI CAPTURÉ'
+                            : 'CAPTURE LE VAISSEAU ENNEMI'
+                          : banner.tutorialStep === 2
+                            ? banner.tutorialCompleted
+                              ? '✓ ZONE SÉCURISÉE À 80%'
+                              : 'SÉCURISE 80% DE LA ZONE'
                           : banner.tutorialCompleted
                             ? '✓ OBJECTIF VALIDÉ'
                             : 'DIRIGE LE DRONE AVEC DES SWIPES'
