@@ -2061,7 +2061,11 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
     const curveStrength = sector >= 5
       ? clamp(0.28 + (sector - 5) * 0.012, 0.28, 0.78)
       : 0;
-    const shipCount = sector <= 2 ? 1 : sector <= 4 ? 2 : 3;
+    const shipCount = sector <= 2
+      ? 1
+      : sector <= 4 || sector === 7 || sector === 15 || sector === 25
+        ? 2
+        : 3;
     const shipSpeedStart = clamp(0.84 + (sector - 1) * 0.011, 0.84, 1.36);
     const ships: EnemySpawnSpec[] = Array.from({ length: shipCount }, (_, index) => ({
         baseIndex: index % 2 === 0 ? 0 : 2,
