@@ -4735,7 +4735,11 @@ export default function GameScreen() {
       fromCapture = false,
     ) => {
       const splitOnMissile = fromMissile
-        && !enemy.isMini;
+        && !enemy.isMini
+        && !(
+          g.level === TUTORIAL_SECTOR
+          && tutorialStepRef.current === 4
+        );
       const suppressTutorialEnemyBanner = (
         g.level === TUTORIAL_SECTOR
         && tutorialStepRef.current === 3
@@ -4873,18 +4877,30 @@ export default function GameScreen() {
             if (
               g.level === TUTORIAL_SECTOR
               && tutorialStepRef.current === 4
-              && !tutorialEnemyDestructionCompletionBannerShownRef.current
+              && !tutorialEnemyDestroyedRef.current
             ) {
-              tutorialEnemyDestructionCompletionBannerShownRef.current = true;
+              tutorialEnemyDestroyedRef.current = true;
               g.inputDir = ZERO;
               g.cutDir = ZERO;
               g.hasMoveCommand = false;
-              enqueueBanner({
-                kind: 'TUTORIAL',
-                tutorialStep: 4,
-                tutorialCompleted: true,
-                onComplete: () => teleportToSector(1),
-              });
+              const targetReached = (
+                g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
+              );
+              if (targetReached) {
+                tutorialEnemyDestructionCompletionBannerShownRef.current = true;
+                enqueueBanner({
+                  kind: 'TUTORIAL',
+                  tutorialStep: 4,
+                  tutorialCompleted: true,
+                  onComplete: () => teleportToSector(1),
+                });
+              } else {
+                enqueueBanner({
+                  kind: 'TUTORIAL',
+                  tutorialStep: 4,
+                  tutorialPrompt: 'SECURE_AREA',
+                });
+              }
             }
             break;
           }
@@ -5733,6 +5749,23 @@ export default function GameScreen() {
                 kind: 'TUTORIAL',
                 tutorialStep: 3,
                 tutorialPrompt: 'SECURE_AREA',
+              });
+            }
+            if (
+              g.level === TUTORIAL_SECTOR
+              && tutorialStepRef.current === 4
+              && tutorialEnemyDestroyedRef.current
+              && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
+              && !tutorialEnemyDestructionCompletionBannerShownRef.current
+            ) {
+              tutorialEnemyDestructionCompletionBannerShownRef.current = true;
+              g.inputDir = ZERO;
+              g.hasMoveCommand = false;
+              enqueueBanner({
+                kind: 'TUTORIAL',
+                tutorialStep: 4,
+                tutorialCompleted: true,
+                onComplete: () => teleportToSector(1),
               });
             }
             g.score += Math.max(100, Math.round((g.pendingCaptureArea / (g.cell * g.cell)) * 20));
@@ -6724,7 +6757,9 @@ export default function GameScreen() {
                           ? banner.tutorialStep === 4
                             ? banner.tutorialCompleted
                               ? 'OBJECTIF ATTEINT !'
-                              : 'TUTORIEL 4/4'
+                              : banner.tutorialPrompt === 'SECURE_AREA'
+                                ? 'ZONE À SÉCURISER'
+                                : 'TUTORIEL 4/4'
                             : banner.tutorialStep === 3
                               ? banner.tutorialCompleted
                                 ? 'OBJECTIF ATTEINT !'
@@ -6773,7 +6808,9 @@ export default function GameScreen() {
                         ? banner.tutorialStep === 4
                           ? banner.tutorialCompleted
                             ? '✓ ENNEMI DÉTRUIT'
-                            : 'FERME UNE ZONE VIDE POUR TIRER'
+                            : banner.tutorialPrompt === 'SECURE_AREA'
+                              ? 'SÉCURISE 80% DE LA ZONE'
+                              : 'FERME UNE ZONE VIDE POUR TIRER'
                           : banner.tutorialStep === 3
                             ? banner.tutorialCompleted
                               ? '✓ ENNEMI CAPTURÉ'
