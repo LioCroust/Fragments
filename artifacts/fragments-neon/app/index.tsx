@@ -4535,6 +4535,8 @@ export default function GameScreen() {
   useEffect(() => {
     let animationFrame = 0;
     let lastTime = Date.now();
+    let fpsWindowStart = lastTime;
+    let fpsWindowFrames = 0;
     let cancelled = false;
 
     const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
@@ -6275,7 +6277,6 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            emitCutSparkBurst(g);
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
@@ -6779,6 +6780,12 @@ export default function GameScreen() {
 
     const loop = () => {
       const now = Date.now();
+      fpsWindowFrames += 1;
+      if (now - fpsWindowStart >= 500) {
+        setFps(Math.round(fpsWindowFrames * 1000 / (now - fpsWindowStart)));
+        fpsWindowFrames = 0;
+        fpsWindowStart = now;
+      }
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
       const g = gameRef.current;
@@ -7299,6 +7306,7 @@ export default function GameScreen() {
             <View style={styles.zoneValueRow}>
               <Text style={[styles.zoneValue, { color: HUD_COLORS.amber }]}>{hud.capture}</Text>
               <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
+              <Text style={[styles.zoneFps, { color: HUD_COLORS.lime }]}>{fps} FPS</Text>
             </View>
             <View style={styles.zoneProgressRail}>
                 <Animated.View
@@ -7915,6 +7923,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 1,
     marginLeft: 4,
+  },
+  zoneFps: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 0.7,
+    marginLeft: 10,
   },
   zoneProgressRail: {
     width: '100%',
