@@ -65,7 +65,10 @@ const TUTORIAL_SWIPE_REPETITIONS = 2;
 // Keep the sector strip and tutorial controls available in the APK as well as
 // during development. They are part of the game's tutorial/navigation UI.
 const DEBUG_SECTOR_SELECTOR_ENABLED = true;
-const SKIA_DYNAMIC_RENDER_ENABLED = true;
+// The picture-as-shared-value path is disabled until it is validated against
+// the current Expo Go/Reanimated recorder. The SVG native fallback is stable.
+const SKIA_DYNAMIC_RENDER_ENABLED = false;
+const NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS = 33;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -7426,7 +7429,7 @@ export default function GameScreen() {
           }
           if (
             !nativeSnapshotRef.current
-            || now - lastNativeStaticPublishAtRef.current >= 100
+            || now - lastNativeStaticPublishAtRef.current >= NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS
           ) {
             const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
             const staticSnapshot: Snapshot = {
@@ -7583,6 +7586,14 @@ export default function GameScreen() {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
     const renderMargin = Math.max(snapshot.cell * 2.2, 28);
+    const expandedWidth = snapshot.width + renderMargin * 2;
+    const expandedHeight = snapshot.height + renderMargin * 2;
+    const liveShipCount = snapshot.enemies.filter((enemy) => (
+      enemy.kind === 'SHIP'
+      && !enemyIsDestroyed(enemy)
+      && enemy.respawnAt <= Date.now()
+    )).length;
+    const skiaShipReady = skiaReady && liveShipCount <= 1;
     return (
       <View style={styles.nativeArenaDynamicLayer} pointerEvents="none">
         {SKIA_DYNAMIC_RENDER_ENABLED && (
@@ -7592,6 +7603,49 @@ export default function GameScreen() {
             publisherRef={nativePicturePublisherRef}
             onReady={handleSkiaReady}
           />
+        )}
+        {!SKIA_DYNAMIC_RENDER_ENABLED && (
+          <Svg
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                left: -renderMargin,
+                top: -renderMargin,
+                width: expandedWidth,
+                height: expandedHeight,
+                overflow: 'visible',
+              },
+            ]}
+            viewBox={`${-renderMargin} ${-renderMargin} ${expandedWidth} ${expandedHeight}`}
+            preserveAspectRatio="none"
+          >
+            {snapshot.trail.length > 1 && (
+              <>
+                <Polyline
+                  points={pointsToString(snapshot.trail)}
+                  fill="none"
+                  stroke="#fff3d6"
+                  strokeWidth={12}
+                  opacity={0.16}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Polyline
+                  points={pointsToString(snapshot.trail)}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </>
+            )}
+            <NativeArenaDynamic
+              snapshot={snapshot}
+              skiaPlayerReady={skiaReady}
+              skiaShipReady={skiaShipReady}
+            />
+          </Svg>
         )}
       </View>
     );
