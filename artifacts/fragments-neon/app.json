@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fragments Neon",
+    "name": "Fragments",
     "slug": "fragments",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,6 +12,7 @@
       "bundleIdentifier": "com.fragments.app"
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon_2.png",
         "backgroundColor": "#050510"

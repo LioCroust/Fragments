@@ -3,6 +3,7 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def apkBuildNumber = (System.getenv("APK_BUILD_NUMBER") ?: "1").toInteger()
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -92,8 +93,8 @@ android {
         applicationId 'com.fragments.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode apkBuildNumber
+        versionName "1.0.${apkBuildNumber}"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

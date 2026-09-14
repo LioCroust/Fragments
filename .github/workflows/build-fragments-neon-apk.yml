@@ -1,4 +1,4 @@
-name: Build Fragments Neon APK
+name: Build Fragments APK
 
 on:
   workflow_dispatch:
@@ -40,6 +40,8 @@ jobs:
 
       - name: Build release APK
         working-directory: artifacts/fragments-neon/android
+        env:
+          APK_BUILD_NUMBER: ${{ github.run_number }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon
@@ -47,7 +49,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: fragments-neon-apk-${{ github.run_number }}
+          name: fragments-apk-${{ github.run_number }}
           path: artifacts/fragments-neon/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
