@@ -2939,7 +2939,7 @@ const DebugSectorSelector = ({
       : tutorialStep === 2
         ? 'SÉCURISE 80% DE LA ZONE'
         : tutorialStep === 3
-          ? 'CAPTURE LE MINI-VAISSEAU + 80%'
+          ? 'CAPTURE LE VAISSEAU + 80%'
           : 'DÉTRUIS LE VAISSEAU + 80%'
   );
   return (
@@ -2956,7 +2956,6 @@ const DebugSectorSelector = ({
             <Text style={styles.skipTutorialButtonText}>PASSER LE TUTORIEL</Text>
           </Pressable>
           <View style={styles.tutorialInstruction}>
-            <Text style={styles.tutorialInstructionLabel}>OBJECTIF</Text>
             <Text
               style={styles.tutorialInstructionText}
               numberOfLines={2}
@@ -7201,15 +7200,15 @@ const styles = StyleSheet.create({
   tutorialInstructionLabel: {
     color: '#00f3ff',
     fontFamily: 'Inter_700Bold',
-    fontSize: 6,
-    letterSpacing: 1,
-    lineHeight: 8,
+    fontSize: 8,
+    letterSpacing: 0.9,
+    lineHeight: 10,
   },
   tutorialInstructionText: {
-    color: '#fff3d6',
+    color: '#00f3ff',
     fontFamily: 'Inter_700Bold',
-    fontSize: 7.5,
-    letterSpacing: 0.35,
+    fontSize: 8,
+    letterSpacing: 0.9,
     lineHeight: 10,
     textShadowColor: '#00f3ff',
     textShadowRadius: 4,
@@ -7217,8 +7216,9 @@ const styles = StyleSheet.create({
   skipTutorialButtonText: {
     color: '#fff3d6',
     fontFamily: 'Inter_700Bold',
-    fontSize: 10,
-    letterSpacing: 1.3,
+    fontSize: 8,
+    lineHeight: 10,
+    letterSpacing: 0.9,
     textShadowColor: '#ff5500',
     textShadowRadius: 6,
   },
