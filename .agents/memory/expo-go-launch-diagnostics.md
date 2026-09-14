@@ -3,11 +3,11 @@ name: Expo Go launch diagnostics
 description: Durable debugging guidance for Expo Go launch regressions in Fragments Neon.
 ---
 
-When Expo Go fails to download or launch after dependency edits, compare the package manifest and lockfile first, clear Metro's cache, and preserve preflight logs for the Expo, router, asset, audio, React, and React Native versions.
+When Expo Go fails to download or launch after dependency edits, compare the package manifest and lockfile first, preserve preflight logs for the Expo, router, asset, audio, React, and React Native versions, and avoid clearing Metro's cache automatically in the workflow.
 
-**Why:** A launch failure can look like a JavaScript regression even when the cause is a stale Metro cache or an out-of-sync dependency lock; restoring the aligned runtime and clearing the cache restored the game launch.
+**Why:** In this workspace, `--clear` makes the first Android dev bundle request rebuild roughly 20 seconds, while later requests are sub-second; Expo Go and the Replit device preview can time out during that cold build even though Metro is healthy.
 
-**How to apply:** Run the app's startup preflight before Metro, inspect its alignment warnings and required-path checks, then only investigate game code after the iOS/Android bundle succeeds.
+**How to apply:** Run the app's startup preflight before Metro, inspect its alignment warnings and required-path checks, keep the Metro cache between workflow restarts, and only use a manual cache clear when stale transforms are proven to be the problem.
 
 For image preloading in this workspace, verify that a declared Expo asset package is actually installed before importing it; React Native's local-image loading APIs are the safe fallback when the workspace install is incomplete.
 
