@@ -1,0 +1,59 @@
+Étape 1 : Basculer le moteur de rendu sur Skia
+Prompt à donner à Replit :
+
+Dans mon fichier index (1).tsx, bascule le système de rendu principal sur Skia (@shopify/react-native-skia) au lieu du fallback SVG Native.
+
+Passe const SKIA_DYNAMIC_RENDER_ENABLED = true; en constante absolue.
+
+Remplace le conteneur <Svg> parent dans le JSX par le composant <Canvas> de Skia.
+
+Conserve rigoureusement tous les effets visuels existants (gradients, ombres, effets gloss, effets de lumière, traînées lumineuses et opacités de capture).
+
+Ne modifie pas la logique d'animation ni d'explosion du drone.
+
+Étape 2 : Optimiser les calculs géométriques et la détection de collisions
+Prompt à donner à Replit :
+
+Optimise la boucle de jeu dans index (1).tsx pour réduire la charge CPU sur le thread JS Android :
+
+Calcul d'aire (claimedUnionArea) : Ne calcule plus la surface claimedUnionArea() à chaque frame dans le requestAnimationFrame. Déclenche ce calcul uniquement lors de l'événement précis où une traînée se ferme et valide un nouveau polygone capturé.
+
+Broad-phase Collision : Avant d'exécuter la vérification détaillée des cercles de collision de l'ennemi (notamment pour le profil SPIDER et ses 25 sous-cercles), ajoute un test rapide par boîte englobante (Bounding Box) :
+
+TypeScript
+const dx = Math.abs(enemy.x - player.x);
+const dy = Math.abs(enemy.y - player.y);
+const maxDist = enemy.radius + player.radius + 30; // Marge de sécurité
+
+if (dx > maxDist || dy > maxDist) {
+  continue; // On passe l'ennemi trop éloigné sans tester ses 25 sous-cercles
+}
+Conserve la logique de collision exacte lorsque l'ennemi est à proximité.
+
+Étape 3 : Limiter la mémoire et la charge des particules
+Prompt à donner à Replit :
+
+Dans index (1).tsx, optimise la gestion de la mémoire pour éviter les saccades dues au Garbage Collector sur Android :
+
+Limite les tableaux de particules et d'effets visuels secondaires à un nombre maximum d'éléments simultanés pendant la boucle de rendu :
+
+particles : max 80 éléments.
+
+fusionSparks : max 50 éléments.
+
+smokePuffs : max 40 éléments.
+
+Si un tableau dépasse sa limite lors d'un push, supprime les éléments les plus anciens (shift()).
+
+Ne touche pas aux particules générées spécifiquement par l'explosion du drone.
+
+Étape 4 : Encapsuler la boucle d'animation dans du JS natif sans setState
+Prompt à donner à Replit :
+
+Dans la boucle principale d'animation (requestAnimationFrame) de index (1).tsx :
+
+Assure-toi que les mises à jour des coordonnées (x, y) du joueur, des particules et des ennemis se font directement via des références mutables (useRef) ou des variables JS locales pendant le jeu activement joué.
+
+Ne déclenche de setState React que lorsque c'est strictement nécessaire (ex: changement de score, fin de partie, déclenchement de l'explosion du drone).
+
+Garde le rendu des éléments graphiques (joueur, traînée, ennemis, gloss) synchronisé à 60 FPS sur le Canvas Skia sans re-rendre tout le composant React parent à chaque frame.
