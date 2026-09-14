@@ -1,0 +1,333 @@
+Je veux que tu optimises fortement les performances de mon jeu Android dans `index.tsx`.
+
+OBJECTIF PRIORITAIRE :
+
+* passer d'environ 18–20 FPS actuellement à 60 FPS stables si le matériel le permet ;
+* viser au minimum 55–60 FPS en gameplay normal ;
+* conserver exactement le gameplay, les collisions, les règles, les niveaux, les déplacements et l'apparence générale ;
+* ne supprimer les effets visuels que s'ils sont réellement responsables d'un coût important, et dans ce cas les remplacer par une solution moins coûteuse visuellement équivalente.
+
+IMPORTANT :
+Ne fais pas une simple optimisation superficielle.
+Analyse l'architecture actuelle du rendu avant de modifier le code.
+
+PROBLÈME PRINCIPAL IDENTIFIÉ :
+La boucle `requestAnimationFrame` appelle actuellement `setNativeSnapshot(...)` pratiquement à chaque frame sur Android.
+
+Cela copie énormément de données à chaque frame :
+
+* enemies.map(...)
+* diamonds.map(...)
+* speedBoosts.map(...)
+* bombs.map(...)
+* projectiles.map(...)
+* missiles.map(...)
+* spiderThreads.map(...)
+* particles.slice(...)
+* fusionSparks.map(...)
+* smokePuffs.map(...)
+* copie de player
+* trail / protectedTrails / polygons
+
+Cela force ensuite React Native à reconstruire le rendu SVG dynamique.
+
+Je veux donc supprimer ce chemin React/SVG du hot path autant que possible.
+
+### 1. PRIORITÉ ABSOLUE : supprimer le setState React à chaque frame
+
+Ne plus utiliser `setNativeSnapshot()` à 60 FPS pour animer le jeu.
+
+Le moteur de jeu doit conserver son état dans des refs / structures mutables, sans déclencher de render React à chaque frame.
+
+Le HUD peut continuer à être mis à jour à fréquence réduite, par exemple 10–20 FPS, car il n'a pas besoin de 60 FPS.
+
+Le compteur FPS peut également être mis à jour seulement toutes les 500 ms comme actuellement.
+
+### 2. UTILISER SKIA POUR LE RENDU DYNAMIQUE NATIF
+
+J'ai déjà `@shopify/react-native-skia` dans le projet.
+
+Je veux que le rendu dynamique Android soit réellement transféré vers Skia au lieu d'avoir simultanément :
+
+* SVG dynamique
+* * Skia dynamique.
+
+Actuellement `SkiaDynamicArena` ne dessine qu'une partie des éléments dynamiques. Étends cette architecture afin que les éléments animés principaux soient rendus directement avec Skia :
+
+* joueur
+* ennemis
+* missiles
+* projectiles
+* particules
+* fusion sparks
+* spider webs / threads
+* bombes
+* diamants
+* speed boosts
+* effet de protection
+* effet de découpe
+* fumée
+* scan de capture
+* trail actif
+
+Le SVG doit idéalement être conservé uniquement pour les éléments véritablement statiques ou rarement modifiés.
+
+IMPORTANT :
+Ne garde pas le même objet dynamique rendu simultanément par SVG et Skia.
+
+### 3. RENDU À 60 FPS SANS PASSER PAR LE THREAD JS → REACT À CHAQUE FRAME
+
+Utilise autant que possible les mécanismes natifs de Skia / valeurs partagées / Reanimated adaptés à la version actuellement installée dans le projet.
+
+L'objectif est :
+
+GAME LOOP
+→ mise à jour des données
+→ rendu Skia natif
+
+et non :
+
+GAME LOOP
+→ création de centaines d'objets JS
+→ setState
+→ React reconciliation
+→ SVG
+→ bridge
+→ rendu natif.
+
+Si une architecture avec valeurs partagées est nécessaire, mets-la en place proprement.
+
+Ne force surtout pas un `setState` à 60 FPS pour contourner le problème.
+
+### 4. NE PAS COPIER LES TABLEAUX À CHAQUE FRAME
+
+Évite les constructions comme :
+
+`g.enemies.map(enemy => ({ ...enemy }))`
+
+ou
+
+`g.smokePuffs.map(puff => ({ ...puff }))`
+
+dans la boucle de rendu.
+
+Le moteur peut conserver les objets mutables dans une structure stable.
+
+Si Skia nécessite des données différentes, crée une structure adaptée mais évite les allocations permanentes à chaque frame.
+
+### 5. OPTIMISER LES PARTICULES
+
+Les particules sont actuellement très coûteuses.
+
+Conserve l'effet visuel mais :
+
+* utilise un pool de particules réutilisable ;
+* évite les créations d'objets permanentes ;
+* limite le nombre maximal de particules actives ;
+* évite les `.push()` créant constamment de nouveaux objets ;
+* réutilise les particules mortes ;
+* conserve les grosses explosions spectaculaires mais avec un nombre raisonnable de particules.
+
+Les explosions peuvent actuellement créer jusqu'à 200 particules d'un coup.
+
+Ne supprime pas l'effet d'explosion : rends-le moins coûteux.
+
+### 6. OPTIMISER LES GLOW / SHADOW
+
+Les `shadowBlur` et effets de glow sont susceptibles de coûter très cher.
+
+Identifie tous les endroits où :
+
+* shadowBlur
+* shadowColor
+* globalCompositeOperation
+* gradients
+* save()/restore()
+
+sont utilisés à chaque frame.
+
+Remplace les effets coûteux par des sprites précomposés, images avec glow intégré ou mécanismes Skia moins coûteux lorsque c'est possible.
+
+Le rendu doit rester visuellement proche.
+
+### 7. OPTIMISER LE TRAIL
+
+Le trail du joueur devient potentiellement de plus en plus long.
+
+Ne reconstruis pas inutilement la chaîne complète à chaque frame.
+
+Évite notamment de recalculer une énorme chaîne de points ou une chaîne SVG avec `pointsToString()` à chaque frame.
+
+Utilise un chemin Skia persistant ou une représentation optimisée.
+
+Le trail doit rester parfaitement fonctionnel.
+
+### 8. OPTIMISER LA BOUCLE DE DÉPLACEMENT
+
+Dans `update()`, le déplacement utilise actuellement plusieurs sous-steps :
+
+`const steps = Math.max(1, Math.ceil(baseDistance));`
+
+Puis plusieurs calculs de collision sont exécutés pour chaque step.
+
+Analyse si cette logique peut être optimisée sans modifier la précision du gameplay.
+
+IMPORTANT :
+Ne remplace pas aveuglément cette logique par un seul déplacement si cela peut provoquer des collisions manquées.
+
+Si nécessaire :
+
+* conserve les sous-steps pour les collisions critiques ;
+* mais optimise les calculs ;
+* pré-calcule les valeurs constantes ;
+* évite de recalculer `perimeterBounds()` dans chaque sous-step ;
+* évite les allocations `{ ...g.player }` inutiles ;
+* évite les recherches `.find()`, `.some()`, `.filter()` répétitives dans les parties critiques lorsqu'elles peuvent être remplacées par des boucles simples.
+
+### 9. OPTIMISER LES COLLISIONS
+
+Les fonctions comme :
+
+* `pointInsideClaimedSurface`
+* `pointInPolygon`
+* `polygonBoundaryDistance`
+* `polygonsIntersect`
+* `distanceToSegment`
+* `pointTouchesOldTrail`
+
+peuvent être appelées très souvent.
+
+Analyse-les et ajoute des optimisations sans modifier leur comportement.
+
+En particulier :
+
+* bounding boxes des polygones ;
+* cache des bounds ;
+* éviter de tester des polygones manifestement trop éloignés ;
+* éviter de recalculer des métriques identiques ;
+* réutiliser les valeurs calculées.
+
+Ne change pas les règles de collision.
+
+### 10. OPTIMISER `claimedUnionArea`
+
+Cette fonction effectue un balayage de nombreux niveaux Y et des intersections de polygones.
+
+Elle ne doit surtout pas être exécutée inutilement à chaque frame.
+
+Trouve où elle est appelée et vérifie qu'elle n'est calculée que lorsque la géométrie capturée change.
+
+Mettre en cache son résultat si possible.
+
+### 11. RENDU STATIQUE
+
+Tout ce qui ne bouge pas doit être sorti du rendu dynamique :
+
+* décor ;
+* périmètre ;
+* zones déjà capturées lorsqu'elles ne changent pas ;
+* éléments statiques du niveau.
+
+Si nécessaire, crée un rendu/cache statique Skia ou une texture précomposée et ne le redessine que lorsqu'un changement réel survient.
+
+### 12. CONSERVER LE HUD EN REACT
+
+Le HUD n'a pas besoin de 60 FPS.
+
+Conserve `setHud`, mais limite ses mises à jour à environ 10–20 fois par seconde ou uniquement lorsque les valeurs visibles changent réellement.
+
+Ne fais pas de `setHud` à chaque frame.
+
+### 13. MODE PRODUCTION
+
+Vérifie également que les performances sont mesurées correctement.
+
+Si le compteur FPS actuel est affiché dans l'interface, conserve-le pour le diagnostic mais indique clairement si le résultat est obtenu en :
+
+* Expo Go / développement ;
+* APK release ;
+* build production.
+
+Le test final doit être réalisé sur un build Android release, car Expo Go et le mode développement peuvent fortement dégrader les performances.
+
+### 14. NE PAS CASSER LE JEU
+
+Avant et après optimisation, vérifie particulièrement :
+
+* déplacement dans les 4 directions ;
+* entrée/sortie de zone ;
+* création du trail ;
+* fermeture d'une zone ;
+* capture ;
+* remplissage de zone ;
+* collisions avec le trail ;
+* ennemis ;
+* mini-vaisseaux ;
+* boss ;
+* araignées ;
+* toiles ;
+* bombes ;
+* projectiles ;
+* missiles ;
+* diamants ;
+* speed boost ;
+* explosions ;
+* fusion ;
+* invincibilité ;
+* changement de secteur ;
+* sauvegarde ;
+* restauration ;
+* tutoriel.
+
+### 15. AJOUTER UN VRAI DIAGNOSTIC DE PERFORMANCE
+
+Ajoute temporairement un petit système de diagnostic qui mesure séparément :
+
+* temps passé dans `update()` ;
+* temps passé dans le rendu ;
+* temps passé dans les collisions ;
+* nombre d'ennemis ;
+* nombre de particules ;
+* longueur du trail ;
+* nombre de polygones capturés ;
+* FPS réel.
+
+Je veux pouvoir déterminer si le problème restant vient du CPU JavaScript, de React Native, de SVG ou du GPU.
+
+### 16. ORDRE DE PRIORITÉ
+
+Fais les modifications dans cet ordre :
+
+1. supprimer le `setNativeSnapshot()` à chaque frame ;
+2. supprimer le rendu SVG dynamique à chaque frame ;
+3. transférer le rendu dynamique vers Skia ;
+4. éviter les allocations/copies à chaque frame ;
+5. optimiser les particules ;
+6. optimiser les glow/shadow ;
+7. optimiser les collisions ;
+8. optimiser le trail ;
+9. optimiser le HUD ;
+10. profiler et mesurer.
+
+NE fais pas de changement fonctionnel au jeu pour gagner artificiellement des FPS.
+
+### 17. CRITÈRE DE RÉUSSITE
+
+Après modification :
+
+* gameplay normal : objectif 60 FPS ;
+* minimum acceptable : environ 55 FPS ;
+* explosions et captures : éviter les chutes brutales sous 45–50 FPS ;
+* aucun comportement de jeu perdu ;
+* aucun élément important supprimé ;
+* aucun double rendu SVG + Skia inutile.
+
+À la fin, donne-moi :
+
+1. la liste précise des modifications réalisées ;
+2. les principaux goulots d'étranglement trouvés ;
+3. le FPS avant/après ;
+4. les compromis visuels éventuels ;
+5. les fichiers modifiés.
+
+Ne me donne pas seulement des conseils : implémente réellement les optimisations dans le projet.
