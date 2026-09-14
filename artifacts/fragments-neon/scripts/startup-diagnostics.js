@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..');
+const workspaceRoot = path.resolve(projectRoot, '..', '..');
 const packagePath = path.join(projectRoot, 'package.json');
 const lockfilePath = path.resolve(projectRoot, '..', '..', 'pnpm-lock.yaml');
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));

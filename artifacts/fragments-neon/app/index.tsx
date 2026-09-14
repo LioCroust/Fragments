@@ -52,7 +52,9 @@ const MAX_LEVEL = 50;
 const TUTORIAL_SECTOR = 0;
 const TUTORIAL_SWIPE_REPETITIONS = 2;
 // Temporary QA control. __DEV__ hides it automatically from production builds.
-const DEBUG_SECTOR_SELECTOR_ENABLED = __DEV__;
+// Keep the sector strip and tutorial controls available in the APK as well as
+// during development. They are part of the game's tutorial/navigation UI.
+const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -221,8 +223,8 @@ const PLAYER_MOVE_SPEED = 126;
 const SPEED_BOOST_MULTIPLIER = 2;
 const SPEED_BOOST_DURATION_MS = 5000;
 const SPEED_BOOST_RADIUS_CELLS = 0.72;
-const PICKUP_FLOAT_AMPLITUDE_CELLS = 0.18;
-const PICKUP_FLOAT_SPEED = 0.055;
+const PICKUP_FLOAT_AMPLITUDE_CELLS = 0.34;
+const PICKUP_FLOAT_SPEED = 0.095;
 const BOSS_SPEED_BOOST = 1.06;
 const CAPTURE_INVINCIBILITY_DURATION = 10;
 const SEVEN_PROJECTILE_COUNT = 7;
@@ -3048,15 +3050,26 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
         />
       ))}
       {scanIntervals.map(([startX, endX], index) => (
-        <Line
-          key={`capture-scan-${index}`}
-          x1={startX}
-          y1={snapshot.scanY}
-          x2={endX}
-          y2={snapshot.scanY}
-          stroke="#ffffff"
-          strokeWidth={2}
-        />
+        <React.Fragment key={`capture-scan-${index}`}>
+          <Line
+            x1={startX}
+            y1={snapshot.scanY}
+            x2={endX}
+            y2={snapshot.scanY}
+            stroke="#ffffff"
+            strokeWidth={8}
+            opacity={0.2}
+          />
+          <Line
+            x1={startX}
+            y1={snapshot.scanY}
+            x2={endX}
+            y2={snapshot.scanY}
+            stroke="#ffffff"
+            strokeWidth={2}
+            opacity={0.98}
+          />
+        </React.Fragment>
       ))}
       {isParticleSmokeMode(SHIP_SMOKE_RENDER_MODE) && snapshot.smokePuffs.map((puff, index) => {
         const opacity = clamp(puff.life / puff.maxLife, 0, 1);
@@ -3302,6 +3315,7 @@ export default function GameScreen() {
   });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
+  const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const spriteImagesRef = useRef<Record<string, any>>({});
@@ -3332,6 +3346,8 @@ export default function GameScreen() {
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const initialLoadingRevealStartedRef = useRef(false);
+  const initialLoadingTapHandledRef = useRef(false);
+  const initialLoadingBannerRef = useRef<Banner | null>(null);
   const loadingBannerTranslateX = useRef(new Animated.Value(0)).current;
   const lastPlayedSectorRef = useRef(0);
   const lastPlayedSectorHydratedRef = useRef(false);
@@ -3518,6 +3534,20 @@ export default function GameScreen() {
     if (initialLoadingRevealStartedRef.current) return;
     initialLoadingRevealStartedRef.current = true;
     setLoadingProgress(1);
+    initialLoadingBannerRef.current = nextBanner;
+    setIsInitialLoadingReady(true);
+  }, []);
+
+  const handleInitialLoadingTap = useCallback(() => {
+    if (
+      !isLoadingScreenVisible
+      || !isInitialLoadingReady
+      || initialLoadingTapHandledRef.current
+    ) {
+      return;
+    }
+    initialLoadingTapHandledRef.current = true;
+    audioUnlockedRef.current = true;
     loadingBannerTranslateX.stopAnimation();
     Animated.timing(loadingBannerTranslateX, {
       toValue: Math.max(sizeRef.current.width, 360) + 180,
@@ -3527,9 +3557,17 @@ export default function GameScreen() {
     }).start(({ finished }) => {
       if (!finished) return;
       setIsLoadingScreenVisible(false);
-      enqueueBanner(nextBanner);
+      setIsInitialLoadingReady(false);
+      const nextBanner = initialLoadingBannerRef.current;
+      initialLoadingBannerRef.current = null;
+      if (nextBanner) enqueueBanner(nextBanner);
     });
-  }, [enqueueBanner, loadingBannerTranslateX]);
+  }, [
+    enqueueBanner,
+    isInitialLoadingReady,
+    isLoadingScreenVisible,
+    loadingBannerTranslateX,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4572,7 +4610,7 @@ export default function GameScreen() {
     let cancelled = false;
 
     const addParticle = (g: Game, direction: Direction) => {
-      if (g.particles.length >= (CUTTING_SPRITE_ENABLED ? 56 : 96)) return;
+      if (g.particles.length >= (CUTTING_SPRITE_ENABLED ? 36 : 64)) return;
       const backwards = Math.atan2(-direction.y, -direction.x);
       // Spread around the backward axis so sparks visibly fan above and below
       // the cut instead of forming a single narrow exhaust line.
@@ -4607,7 +4645,7 @@ export default function GameScreen() {
     const explode = (g: Game, now: number) => {
       if (g.status !== 'PLAYING') return;
       if (playerIsProtected(g, now)) return;
-      for (let i = 0; i < 170; i += 1) {
+      for (let i = 0; i < 90; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 300;
         g.particles.push({
@@ -4633,7 +4671,7 @@ export default function GameScreen() {
       pathDistance: number,
       initialSpread = 1,
     ) => {
-      if (g.fusionSparks.length >= 180) return;
+      if (g.fusionSparks.length >= 100) return;
       const sample = pointOnPolyline(
         sequence.path,
         sequence.cumulativeLengths,
@@ -4751,7 +4789,7 @@ export default function GameScreen() {
       }
       g.fusionSparks.length = activeSparkCount;
 
-      const sparksToEmit = sequence.elapsed < sequence.travelDuration ? 7 : 2;
+      const sparksToEmit = sequence.elapsed < sequence.travelDuration ? 4 : 1;
       for (let index = 0; index < sparksToEmit; index += 1) {
         addFusionSpark(
           g,
@@ -4774,7 +4812,7 @@ export default function GameScreen() {
       bomb.destroyed = true;
       g.score += BOMB_SCORE;
       enqueueBanner({ kind: 'BOMB', points: BOMB_SCORE });
-      for (let index = 0; index < 120; index += 1) {
+      for (let index = 0; index < 60; index += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 35 + Math.random() * 190;
         g.particles.push({
@@ -5078,7 +5116,7 @@ export default function GameScreen() {
         || suppressTutorialDestructionBanner
       );
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
-      for (let i = 0; i < 200; i += 1) {
+      for (let i = 0; i < 110; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 45 + Math.random() * 260;
         const life = 0.55 + Math.random() * 0.85;
@@ -6020,7 +6058,7 @@ export default function GameScreen() {
               diamondCaptured = true;
               playDiamondCapture();
               enqueueBanner({ kind: 'DIAMOND', points: DIAMOND_SCORE });
-              for (let particleIndex = 0; particleIndex < 90; particleIndex += 1) {
+              for (let particleIndex = 0; particleIndex < 45; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 35 + Math.random() * 180;
                 g.particles.push({
@@ -6809,8 +6847,18 @@ export default function GameScreen() {
         context.save();
         context.globalCompositeOperation = 'source-over';
         context.strokeStyle = '#ffffff';
-        context.shadowColor = 'transparent';
-        context.shadowBlur = 0;
+        context.shadowColor = '#ffffff';
+        context.shadowBlur = g.cell * 0.18;
+        context.globalAlpha = 0.22;
+        context.lineWidth = 7;
+        scanIntervals.forEach(([startX, endX]) => {
+          context.beginPath();
+          context.moveTo(startX, g.scanY);
+          context.lineTo(endX, g.scanY);
+          context.stroke();
+        });
+        context.globalAlpha = 1;
+        context.shadowBlur = g.cell * 0.08;
         context.lineWidth = 2;
         scanIntervals.forEach(([startX, endX]) => {
           context.beginPath();
@@ -6858,8 +6906,11 @@ export default function GameScreen() {
         setLoadingProgress(0.03);
         void preloadSectorForBanner(initialLevel, setLoadingProgress).then(() => {
           if (cancelled || gameRef.current.initialized) return;
-          if (savedGame) restoreSavedGame(savedGame);
-          else resetGame(false, false, initialLevel);
+          // The loading screen is the launch gate. Once the player taps it,
+          // always begin at the start of the remembered sector rather than
+          // dropping them into a mid-cut snapshot from the previous session.
+          resetGame(false, false, initialLevel);
+          savedGameRef.current = null;
           if (gameRef.current.initialized) {
             revealGameAfterInitialLoad({
               kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
@@ -6917,7 +6968,7 @@ export default function GameScreen() {
                 end: { ...thread.end },
                 target: { ...thread.target },
               })),
-              particles: g.particles.slice(-200),
+              particles: g.particles.slice(-120),
               fusionSparks: g.fusionSparks.map((spark) => ({ ...spark })),
               fusionHead: g.fusion
                 ? pointOnPolyline(
@@ -6947,7 +6998,16 @@ export default function GameScreen() {
             shields: Math.max(0, g.shields),
             capture: Math.min(
               LEVEL_CAPTURE_TARGET,
-              Math.floor(clamp(g.capturedArea / g.totalPlayableArea, 0, 1) * 100),
+              Math.floor(clamp(
+                (
+                  g.capturedArea
+                  + (g.fillQueue.length > 0
+                    ? g.pendingCaptureArea * g.fillCursor / Math.max(1, g.fillQueue.length)
+                    : 0)
+                ) / g.totalPlayableArea,
+                0,
+                1,
+              ) * 100),
             ),
             level: g.level,
             mode: g.mode,
@@ -7026,14 +7086,25 @@ export default function GameScreen() {
           preserveAspectRatio="none"
         >
           {snapshot.trail.length > 1 && (
-            <Polyline
-              points={pointsToString(snapshot.trail)}
-              fill="none"
-              stroke="#ff5500"
-              strokeWidth={5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <>
+              <Polyline
+                points={pointsToString(snapshot.trail)}
+                fill="none"
+                stroke="#fff3d6"
+                strokeWidth={12}
+                opacity={0.16}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <Polyline
+                points={pointsToString(snapshot.trail)}
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth={5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </>
           )}
           <NativeArenaDynamic snapshot={snapshot} />
         </Svg>
@@ -7341,7 +7412,13 @@ export default function GameScreen() {
       />
 
       {isLoadingScreenVisible && (
-        <View style={styles.loadingScreen} pointerEvents="auto">
+        <View
+          style={styles.loadingScreen}
+          pointerEvents="auto"
+          onStartShouldSetResponder={() => isInitialLoadingReady}
+          onResponderRelease={handleInitialLoadingTap}
+          testID="initial-loading-screen"
+        >
           <Animated.View
             style={[
               styles.loadingArtworkFrame,
@@ -7358,7 +7435,9 @@ export default function GameScreen() {
             <View style={styles.loadingArtworkShade} />
             <View style={styles.loadingOverlay}>
               <Text style={styles.loadingBannerTitle}>CHARGEMENT...</Text>
-              <Text style={styles.loadingBannerSubtitle}>PRÉPARATION DU SYSTÈME</Text>
+              <Text style={styles.loadingBannerSubtitle}>
+                {isInitialLoadingReady ? 'TOUCHER POUR DÉMARRER' : 'PRÉPARATION DU SYSTÈME'}
+              </Text>
               <View style={styles.loadingProgressTrack}>
                 <View
                   style={[
@@ -13890,14 +13969,25 @@ export default function GameScreen() {
           protectedTrailCount={snapshot.protectedTrails.length}
         />
         {snapshot.trail.length > 1 && (
-          <Polyline
-            points={pointsToString(snapshot.trail)}
-            fill="none"
-            stroke="#ff5500"
-            strokeWidth={5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <>
+            <Polyline
+              points={pointsToString(snapshot.trail)}
+              fill="none"
+              stroke="#fff3d6"
+              strokeWidth={12}
+              opacity={0.16}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Polyline
+              points={pointsToString(snapshot.trail)}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth={5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
         )}
         <NativeArenaDynamic snapshot={snapshot} />
       </Svg>
