@@ -34,6 +34,7 @@ import {
 } from '../components/captureGeometry';
 
 const COLS = 12;
+const INITIAL_BACKGROUND_PRELOAD_COUNT = 10;
 const PERIMETER_HORIZONTAL_INSET_CELLS = 0.65;
 // Keep a little more cockpit breathing room above and below the playfield on
 // every sector, including the tutorial.
@@ -3476,7 +3477,6 @@ export default function GameScreen() {
         sevenFireOrbSource,
         diamondSpriteSource,
         spiderWebSource,
-        ...Object.values(LEVEL_BACKGROUND_SOURCES),
       ];
       const uniqueAssetModules = Array.from(new Set(imageModules));
       allGameAssetsPromiseRef.current = Promise.allSettled(
@@ -3526,6 +3526,18 @@ export default function GameScreen() {
     sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
     return promise;
   }, [loadWebImageAsset]);
+
+  const preloadBackgroundWindow = useCallback((
+    startLevel: number,
+    count = INITIAL_BACKGROUND_PRELOAD_COUNT,
+  ) => {
+    const firstLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(startLevel)));
+    const levels = Array.from(
+      { length: Math.max(1, Math.min(count, MAX_LEVEL - firstLevel + 1)) },
+      (_, index) => firstLevel + index,
+    );
+    return Promise.all(levels.map((level) => loadWebBackground(level)));
+  }, [loadWebBackground]);
 
   const preloadSectorForBanner = useCallback(async (level: number) => {
     const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
@@ -3633,10 +3645,6 @@ export default function GameScreen() {
       if (!cancelled) shipSmokeSpriteImageRef.current = shipSmokeSpriteImage;
     };
     shipSmokeSpriteImage.src = resolvedShipSmokeSprite?.uri ?? shipSmokeSpriteSource;
-    Object.keys(LEVEL_BACKGROUND_SOURCES).forEach((level) => {
-      void loadWebBackground(Number(level));
-    });
-
     return () => {
       cancelled = true;
       spriteImagesRef.current = {};
@@ -6407,6 +6415,9 @@ export default function GameScreen() {
               tutorialStep: initialLevel === TUTORIAL_SECTOR ? 1 : undefined,
               level: gameRef.current.level,
             });
+            void preloadBackgroundWindow(
+              initialLevel === TUTORIAL_SECTOR ? 1 : initialLevel,
+            );
           }
         });
       }
@@ -6508,6 +6519,7 @@ export default function GameScreen() {
     playSevenFireShot,
     playSectorTransition,
     playShieldLossExplosion,
+    preloadBackgroundWindow,
     preloadSectorForBanner,
     revealGameAfterInitialLoad,
     resetGame,
