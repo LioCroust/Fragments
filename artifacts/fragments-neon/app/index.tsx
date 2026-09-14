@@ -1366,6 +1366,7 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 };
 const diamondSource = require('../assets/images/neon-diamond-fragment.png');
 const playerSource = require('../assets/images/player-drone-prism-arrow.png');
+const electricThrustSource = require('../assets/images/player-drone-prism-arrow-electric-thrust.png');
 const playerMissileSource = require('../assets/images/player-missile-transparent.png');
 
 const createDiamond = (width: number, height: number, cell: number): Diamond => {
@@ -2815,18 +2816,48 @@ const SkiaDynamicArena = React.memo(({
   onReady,
 }: SkiaDynamicArenaProps) => {
   const playerImage = useSkiaImage(playerSource);
+  const thrustImage = useSkiaImage(electricThrustSource);
   const shipImage = useSkiaImage(spriteFrames.SHIP[0]);
 
   useEffect(() => {
-    if (playerImage && shipImage) onReady();
-  }, [onReady, playerImage, shipImage]);
+    if (playerImage && thrustImage && shipImage) onReady();
+  }, [onReady, playerImage, thrustImage, shipImage]);
 
-  if (!playerImage || !shipImage) return null;
+  if (!playerImage || !thrustImage || !shipImage) return null;
 
   const playerSize = playerSpriteSize(snapshot.cell);
   const playerX = snapshot.player.x + renderMargin;
   const playerY = snapshot.player.y + renderMargin;
   const playerAngle = Math.atan2(snapshot.direction.y, snapshot.direction.x) + Math.PI / 2;
+  const thrustPulse = 0.92 + Math.sin(snapshot.frame * 0.62) * 0.1;
+  const thrustDrift = Math.sin(snapshot.frame * 0.37) * snapshot.cell * 0.035;
+  const thrustTop = playerY + playerSize.height * 0.36;
+  const thrustVariants = [
+    {
+      x: playerX + thrustDrift,
+      y: thrustTop,
+      width: snapshot.cell * 0.38 * thrustPulse,
+      height: snapshot.cell * 0.82 * (0.96 + Math.sin(snapshot.frame * 0.71) * 0.08),
+      opacity: 0.82,
+      rotation: 0,
+    },
+    {
+      x: playerX - snapshot.cell * 0.2 - thrustDrift * 0.35,
+      y: thrustTop + snapshot.cell * 0.06,
+      width: snapshot.cell * 0.24 * (0.94 + Math.sin(snapshot.frame * 0.53) * 0.08),
+      height: snapshot.cell * 0.56 * thrustPulse,
+      opacity: 0.52,
+      rotation: -0.2,
+    },
+    {
+      x: playerX + snapshot.cell * 0.2 - thrustDrift * 0.25,
+      y: thrustTop + snapshot.cell * 0.03,
+      width: snapshot.cell * 0.25 * (0.94 + Math.sin(snapshot.frame * 0.47) * 0.08),
+      height: snapshot.cell * 0.6 * thrustPulse,
+      opacity: 0.56,
+      rotation: 0.2,
+    },
+  ];
   const liveShip = snapshot.enemies.find((enemy) => (
     enemy.kind === 'SHIP'
     && !enemyIsDestroyed(enemy)
@@ -2854,6 +2885,22 @@ const SkiaDynamicArena = React.memo(({
         transform={[{ rotate: playerAngle }]}
         origin={{ x: playerX, y: playerY }}
       >
+        {thrustVariants.map((thrust, index) => (
+          <SkiaGroup
+            key={`skia-player-thrust-${index}`}
+            transform={thrust.rotation === 0 ? undefined : [{ rotate: thrust.rotation }]}
+            origin={{ x: thrust.x, y: thrust.y }}
+          >
+            <SkiaImage
+              image={thrustImage}
+              x={thrust.x - thrust.width / 2}
+              y={thrust.y}
+              width={thrust.width}
+              height={thrust.height}
+              opacity={thrust.opacity}
+            />
+          </SkiaGroup>
+        ))}
         <SkiaImage
           image={playerImage}
           x={playerX - playerSize.width / 2}
@@ -3147,6 +3194,32 @@ const NativeArenaDynamic = React.memo(({
       )}
       {!skiaPlayerReady && (
         <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
+          <SvgImage
+            href={electricThrustSource}
+            x={-snapshot.cell * 0.19}
+            y={playerSize.height * 0.36}
+            width={snapshot.cell * 0.38}
+            height={snapshot.cell * 0.82}
+            opacity={0.82}
+          />
+          <SvgImage
+            href={electricThrustSource}
+            x={-snapshot.cell * 0.33}
+            y={playerSize.height * 0.42}
+            width={snapshot.cell * 0.24}
+            height={snapshot.cell * 0.56}
+            opacity={0.52}
+            transform={`rotate(-11 ${-snapshot.cell * 0.21} ${playerSize.height * 0.42})`}
+          />
+          <SvgImage
+            href={electricThrustSource}
+            x={snapshot.cell * 0.09}
+            y={playerSize.height * 0.39}
+            width={snapshot.cell * 0.25}
+            height={snapshot.cell * 0.6}
+            opacity={0.56}
+            transform={`rotate(11 ${snapshot.cell * 0.215} ${playerSize.height * 0.39})`}
+          />
           <SvgImage
             href={playerSource}
             x={-playerSize.width / 2}
@@ -3801,6 +3874,7 @@ export default function GameScreen() {
         ...Object.values(spriteFrames).flat(),
         diamondSource,
         playerSource,
+        electricThrustSource,
         playerMissileSource,
         cockpitInteriorSource,
         shipSmokeSpriteSource,
