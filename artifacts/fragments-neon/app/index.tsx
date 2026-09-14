@@ -7112,6 +7112,30 @@ export default function GameScreen() {
   };
 
   const zoneProgress = clamp(hud.capture / LEVEL_CAPTURE_TARGET, 0, 1);
+  const zoneProgressAnimated = useRef(new Animated.Value(zoneProgress)).current;
+  const zoneShimmer = useRef(new Animated.Value(-1)).current;
+  useEffect(() => {
+    const animation = Animated.timing(zoneProgressAnimated, {
+      toValue: zoneProgress,
+      duration: 125,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [zoneProgress, zoneProgressAnimated]);
+  useEffect(() => {
+    const shimmerLoop = Animated.loop(
+      Animated.timing(zoneShimmer, {
+        toValue: 1,
+        duration: 1150,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    );
+    shimmerLoop.start();
+    return () => shimmerLoop.stop();
+  }, [zoneShimmer]);
   const shieldSegments = Array.from({ length: 3 });
 
   return (
@@ -7389,7 +7413,31 @@ export default function GameScreen() {
               <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
             </View>
             <View style={styles.zoneProgressRail}>
-              <View style={[styles.zoneProgressFill, { width: `${zoneProgress * 100}%` }]} />
+                <Animated.View
+                  style={[
+                    styles.zoneProgressFill,
+                    {
+                      width: zoneProgressAnimated.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.zoneProgressShimmer,
+                    {
+                      transform: [{
+                        translateX: zoneShimmer.interpolate({
+                          inputRange: [-1, 1],
+                          outputRange: [-36, 196],
+                        }),
+                      }],
+                    },
+                  ]}
+                />
               <View style={styles.zoneProgressTicks}>
                 {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
               </View>
@@ -7783,7 +7831,7 @@ const styles = StyleSheet.create({
   },
   hud: {
     position: 'absolute',
-    top: -9,
+    top: -17,
     left: 18,
     right: 18,
     zIndex: 3,
@@ -7968,7 +8016,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
-    transform: [{ translateX: -7 }, { translateY: -29 }],
+    transform: [{ translateX: -7 }, { translateY: -45 }],
   },
   zoneCard: {
     width: '56%',
@@ -8009,6 +8057,17 @@ const styles = StyleSheet.create({
     shadowColor: HUD_COLORS.cyan,
     shadowOpacity: 1,
     shadowRadius: 7,
+  },
+  zoneProgressShimmer: {
+    position: 'absolute',
+    top: -2,
+    bottom: -2,
+    width: 24,
+    opacity: 0.58,
+    backgroundColor: '#ffffff',
+    shadowColor: '#ffffff',
+    shadowOpacity: 1,
+    shadowRadius: 8,
   },
   zoneProgressTicks: {
     ...StyleSheet.absoluteFill,
