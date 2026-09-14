@@ -4626,16 +4626,16 @@ export default function GameScreen() {
       if (g.particles.length >= 72) return;
       g.cutSparkBurstFrame = g.frame;
 
-      const backwards = Math.atan2(-g.cutDir.y, -g.cutDir.x);
       const colors = ['#ffffff', '#fff35c', '#ffb02e', '#ff8a00', '#ffffff', '#ff5500'];
-      // A short, pooled-feeling burst: six sparks every ~100 ms, each alive
-      // for only a fraction of a second. This reads as a gerbe, not a trail.
+      const origin = cuttingPoint(g.player, g.cutDir, g.cell);
+      // A short radial burst: six sparks every ~100 ms, each alive for only a
+      // fraction of a second. It reads as a torch flame, not a line.
       for (let index = 0; index < 6; index += 1) {
-        const angle = backwards + (Math.random() - 0.5) * (Math.PI * 0.92);
+        const angle = Math.random() * Math.PI * 2;
         const speed = 135 + Math.random() * 175;
         g.particles.push({
-          x: g.player.x - g.cutDir.x * g.cell * 0.82,
-          y: g.player.y - g.cutDir.y * g.cell * 0.82,
+          x: origin.x,
+          y: origin.y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           life: 0.18 + Math.random() * 0.1,
