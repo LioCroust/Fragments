@@ -218,9 +218,11 @@ const ENEMY_RENDER_SCALE = 0.88;
 const BOSS_RENDER_SCALE = 1.72;
 const PICKUP_VISUAL_SIZE_CELLS = 1.34;
 const PLAYER_MOVE_SPEED = 126;
-const SPEED_BOOST_MULTIPLIER = 1.5;
+const SPEED_BOOST_MULTIPLIER = 2;
 const SPEED_BOOST_DURATION_MS = 5000;
 const SPEED_BOOST_RADIUS_CELLS = 0.72;
+const PICKUP_FLOAT_AMPLITUDE_CELLS = 0.18;
+const PICKUP_FLOAT_SPEED = 0.055;
 const BOSS_SPEED_BOOST = 1.06;
 const CAPTURE_INVINCIBILITY_DURATION = 10;
 const SEVEN_PROJECTILE_COUNT = 7;
@@ -1647,6 +1649,9 @@ const enemyRenderSize = (kind: EnemyKind, cell: number, isMini = false) => {
 
 const pickupVisualSize = (cell: number) => cell * PICKUP_VISUAL_SIZE_CELLS;
 const speedBoostRadius = (cell: number) => cell * SPEED_BOOST_RADIUS_CELLS;
+const pickupFloatOffset = (frame: number, phase: number, cell: number) => (
+  Math.sin(frame * PICKUP_FLOAT_SPEED + phase) * cell * PICKUP_FLOAT_AMPLITUDE_CELLS
+);
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
   const miniScale = enemy.isMini ? 0.5 : 1;
@@ -2457,8 +2462,9 @@ const PlayerMissileSprite = React.memo(
 const BombSprite = React.memo(
   ({ bomb, pickupSize, frame, coreReactorSpriteSource }: any) => {
     if (bomb.destroyed) return null;
+    const floatY = pickupFloatOffset(frame, bomb.x * 0.013 + bomb.y * 0.007, pickupSize);
     return (
-      <G transform={`translate(${bomb.x} ${bomb.y})`}>
+      <G transform={`translate(${bomb.x} ${bomb.y + floatY})`}>
         <Defs>
           <ClipPath id="bomb-clip">
             <Rect
@@ -2494,8 +2500,9 @@ const BombSprite = React.memo(
 const DiamondSprite = React.memo(
   ({ diamond, pickupSize, frame, diamondSpriteSource }: any) => {
     if (diamond.collected) return null;
+    const floatY = pickupFloatOffset(frame, diamond.phase, pickupSize);
     return (
-      <G transform={`translate(${diamond.x} ${diamond.y})`}>
+      <G transform={`translate(${diamond.x} ${diamond.y + floatY})`}>
         <Defs>
           <ClipPath id="diamond-clip">
             <Rect
@@ -2529,12 +2536,13 @@ const DiamondSprite = React.memo(
 );
 
 const SpeedBoostSprite = React.memo(
-  ({ speedBoost, cell, speedBoostSource }: any) => {
+  ({ speedBoost, cell, frame, speedBoostSource }: any) => {
     if (speedBoost.collected) return null;
     const size = pickupVisualSize(cell) * 0.92;
+    const floatY = pickupFloatOffset(frame, speedBoost.phase, cell);
     return (
       <G
-        transform={`translate(${speedBoost.x} ${speedBoost.y + Math.sin(speedBoost.phase) * cell * 0.08})`}
+        transform={`translate(${speedBoost.x} ${speedBoost.y + floatY})`}
       >
         <Circle
           cx={0}
@@ -2559,6 +2567,7 @@ const SpeedBoostSprite = React.memo(
       && previous.speedBoost.y === next.speedBoost.y
       && previous.speedBoost.collected === next.speedBoost.collected
       && previous.speedBoost.phase === next.speedBoost.phase
+      && previous.frame === next.frame
       && previous.cell === next.cell
   ),
 );
@@ -2799,6 +2808,7 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           key={`speed-boost-${index}`}
           speedBoost={speedBoost}
           cell={snapshot.cell}
+          frame={snapshot.frame}
           speedBoostSource={speedBoostSource}
         />
       ))}
@@ -6560,10 +6570,10 @@ export default function GameScreen() {
          g.diamonds.forEach((diamond) => {
            if (diamond.collected) return;
            context.save();
-           context.translate(
-             diamond.x,
-             diamond.y + Math.sin(g.frame * 0.05 + diamond.phase) * g.cell * 0.08,
-           );
+            context.translate(
+              diamond.x,
+              diamond.y + pickupFloatOffset(g.frame, diamond.phase, g.cell),
+            );
             context.globalCompositeOperation = 'source-over';
             context.shadowColor = 'transparent';
             context.shadowBlur = 0;
@@ -6586,7 +6596,7 @@ export default function GameScreen() {
           const speedBoostSize = pickupVisualSize(g.cell) * 0.92;
           g.speedBoosts.forEach((speedBoost) => {
             if (speedBoost.collected) return;
-            const y = speedBoost.y + Math.sin(g.frame * 0.05 + speedBoost.phase) * g.cell * 0.08;
+            const y = speedBoost.y + pickupFloatOffset(g.frame, speedBoost.phase, g.cell);
             context.save();
             context.globalCompositeOperation = 'source-over';
             context.globalAlpha = 0.98;
@@ -6610,6 +6620,11 @@ export default function GameScreen() {
            context.save();
            context.globalCompositeOperation = 'source-over';
            context.globalAlpha = 0.98;
+           const floatY = pickupFloatOffset(
+             g.frame,
+             bomb.x * 0.013 + bomb.y * 0.007,
+             g.cell,
+           );
            context.drawImage(
              coreReactorImage,
              bombFrame * CORE_REACTOR_SPRITE_FRAME_SIZE,
@@ -6617,7 +6632,7 @@ export default function GameScreen() {
              CORE_REACTOR_SPRITE_FRAME_SIZE,
              CORE_REACTOR_SPRITE_FRAME_SIZE,
              bomb.x - bombSize / 2,
-             bomb.y - bombSize / 2,
+             bomb.y + floatY - bombSize / 2,
              bombSize,
              bombSize,
            );
@@ -7103,7 +7118,7 @@ export default function GameScreen() {
                       : banner.kind === 'BOMB'
                         ? `+${banner.points ?? BOMB_SCORE} POINTS`
                     : banner.kind === 'SPEED_BOOST'
-                      ? 'VITESSE +50%  •  5 SECONDES'
+                      ? 'VITESSE +100%  •  5 SECONDES'
                       : banner.kind === 'SHIELD'
                         ? 'INVINCIBILITÉ  •  10 SECONDES'
                       : banner.kind === 'SECTOR'
