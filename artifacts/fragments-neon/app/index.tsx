@@ -2996,7 +2996,14 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
 
   return (
     <View style={styles.tutorialGuide} pointerEvents="none">
-      <Text style={styles.tutorialGuideLabel}>SWIPE DANS LES 4 DIRECTIONS</Text>
+      <Text
+        style={styles.tutorialGuideLabel}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.65}
+      >
+        SWIPE D&apos;UN GESTE DANS LES 4 DIRECTIONS
+      </Text>
       <View style={styles.tutorialArrowGrid}>
         <View style={styles.tutorialArrowRow}>
           <View style={styles.tutorialArrowSlot} />
@@ -7015,9 +7022,10 @@ const styles = StyleSheet.create({
   },
   loadingArtworkFrame: {
     position: 'relative',
-    width: '70%',
+    width: '72%',
     maxWidth: 280,
-    aspectRatio: 688 / 1543,
+    height: '70%',
+    maxHeight: 620,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 30, 56, 0.78)',
@@ -7029,7 +7037,8 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   loadingArtwork: {
-    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
   },
   loadingArtworkShade: {
     ...StyleSheet.absoluteFill,
@@ -7197,10 +7206,12 @@ const styles = StyleSheet.create({
     zIndex: 12,
   },
   tutorialGuideLabel: {
+    maxWidth: '94%',
     color: '#fff3d6',
     fontFamily: 'Inter_700Bold',
-    fontSize: 10,
-    letterSpacing: 1.35,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    textAlign: 'center',
     textShadowColor: '#00f3ff',
     textShadowRadius: 8,
   },
