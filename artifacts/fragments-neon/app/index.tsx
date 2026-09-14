@@ -26,13 +26,11 @@ import Svg, {
 } from 'react-native-svg';
 import {
   Canvas as SkiaCanvas,
-  Group as SkiaGroup,
   Image as SkiaImage,
   select as selectSkiaValue,
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
 import {
-  useDerivedValue,
   useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -2823,6 +2821,25 @@ type SkiaMotionState = {
   angle: number;
   visible: number;
   frame: number;
+  matrix: number[];
+};
+
+const spriteMatrix = (
+  x: number,
+  y: number,
+  angle: number,
+  width: number,
+  height: number,
+) => {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [
+    cos, sin, 0,
+    -sin, cos, 0,
+    x - cos * width / 2 + sin * height / 2,
+    y - sin * width / 2 - cos * height / 2,
+    1,
+  ];
 };
 
 const SkiaDynamicArena = React.memo(({
@@ -2843,14 +2860,10 @@ const SkiaDynamicArena = React.memo(({
 
   const playerSize = playerSpriteSize(cell);
   const shipSize = enemyRenderSize('SHIP', cell);
-  const playerX = useDerivedValue(() => playerMotion.value.x + renderMargin);
-  const playerY = useDerivedValue(() => playerMotion.value.y + renderMargin);
-  const playerAngle = useDerivedValue(() => playerMotion.value.angle);
-  const playerOpacity = useDerivedValue(() => playerMotion.value.visible);
-  const shipX = useDerivedValue(() => shipMotion.value.x + renderMargin);
-  const shipY = useDerivedValue(() => shipMotion.value.y + renderMargin);
-  const shipAngle = useDerivedValue(() => shipMotion.value.angle);
-  const shipOpacity = useDerivedValue(() => shipMotion.value.visible);
+  const playerOpacity = selectSkiaValue(playerMotion, 'visible');
+  const playerMatrix = selectSkiaValue(playerMotion, 'matrix');
+  const shipOpacity = selectSkiaValue(shipMotion, 'visible');
+  const shipMatrix = selectSkiaValue(shipMotion, 'matrix');
 
   if (!playerImage || !shipImage) return null;
 
@@ -2867,42 +2880,24 @@ const SkiaDynamicArena = React.memo(({
       ]}
       pointerEvents="none"
     >
-      <SkiaGroup
-        transform={[
-          { translateX: playerX },
-          { translateY: playerY },
-          { rotate: playerAngle },
-          { translateX: -playerSize.width / 2 },
-          { translateY: -playerSize.height / 2 },
-        ]}
+      <SkiaImage
+        image={playerImage}
+        x={0}
+        y={0}
+        width={playerSize.width}
+        height={playerSize.height}
+        matrix={playerMatrix}
         opacity={playerOpacity}
-      >
-        <SkiaImage
-          image={playerImage}
-          x={0}
-          y={0}
-          width={playerSize.width}
-          height={playerSize.height}
-        />
-      </SkiaGroup>
-      <SkiaGroup
-        transform={[
-          { translateX: shipX },
-          { translateY: shipY },
-          { rotate: shipAngle },
-          { translateX: -shipSize.width / 2 },
-          { translateY: -shipSize.height / 2 },
-        ]}
+      />
+      <SkiaImage
+        image={shipImage}
+        x={0}
+        y={0}
+        width={shipSize.width}
+        height={shipSize.height}
+        matrix={shipMatrix}
         opacity={shipOpacity}
-      >
-        <SkiaImage
-          image={shipImage}
-          x={0}
-          y={0}
-          width={shipSize.width}
-          height={shipSize.height}
-        />
-      </SkiaGroup>
+      />
     </SkiaCanvas>
   );
 });
@@ -3378,6 +3373,22 @@ export default function GameScreen() {
   const [fps, setFps] = useState(0);
   const [skiaReady, setSkiaReady] = useState(false);
   const handleSkiaReady = useCallback(() => setSkiaReady(true), []);
+  const skiaPlayerMotion = useSharedValue<SkiaMotionState>({
+    x: 0,
+    y: 0,
+    angle: Math.PI / 2,
+    visible: 1,
+    frame: 0,
+    matrix: spriteMatrix(0, 0, Math.PI / 2, 1, 1),
+  });
+  const skiaShipMotion = useSharedValue<SkiaMotionState>({
+    x: 0,
+    y: 0,
+    angle: 0,
+    visible: 0,
+    frame: 0,
+    matrix: spriteMatrix(0, 0, 0, 1, 1),
+  });
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
@@ -6969,7 +6980,65 @@ export default function GameScreen() {
         }
         drawCanvas(g, now);
         if (Platform.OS !== 'web') {
-          setNativeSnapshot({
+          const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
+          const nativeRenderMargin = Math.max(g.cell * 2.2, 28);
+          skiaPlayerMotion.value = {
+            x: g.player.x + nativeRenderMargin,
+            y: g.player.y + nativeRenderMargin,
+            angle: Math.atan2(currentDirection.y, currentDirection.x) + Math.PI / 2,
+            visible: 1,
+            frame: 0,
+            matrix: spriteMatrix(
+              g.player.x + nativeRenderMargin,
+              g.player.y + nativeRenderMargin,
+              Math.atan2(currentDirection.y, currentDirection.x) + Math.PI / 2,
+              playerSpriteSize(g.cell).width,
+              playerSpriteSize(g.cell).height,
+            ),
+          };
+          const firstLiveShip = g.enemies.find((enemy) => (
+            enemy.kind === 'SHIP'
+            && !enemyIsDestroyed(enemy)
+            && enemy.respawnAt <= now
+          ));
+          if (firstLiveShip) {
+            const shipMotion = enemyAnimationTransform(firstLiveShip, g.cell);
+            skiaShipMotion.value = {
+              x: firstLiveShip.x + nativeRenderMargin,
+              y: firstLiveShip.y + shipMotion.offsetY + nativeRenderMargin,
+              angle: shipMotion.rotation,
+              visible: 1,
+              frame: enemyFrameIndex(firstLiveShip),
+              matrix: spriteMatrix(
+                firstLiveShip.x + nativeRenderMargin,
+                firstLiveShip.y + shipMotion.offsetY + nativeRenderMargin,
+                shipMotion.rotation,
+                enemyRenderSize('SHIP', g.cell).width,
+                enemyRenderSize('SHIP', g.cell).height,
+              ),
+            };
+          } else {
+            skiaShipMotion.value = {
+              x: 0,
+              y: 0,
+              angle: 0,
+              visible: 0,
+              frame: 0,
+              matrix: spriteMatrix(0, 0, 0, 1, 1),
+            };
+          }
+          const hasHighFrequencySvgMotion = (
+            g.trail.length > 1
+            || g.pendingCapturePolygons.length > 0
+            || g.projectiles.length > 0
+            || g.missiles.length > 0
+            || g.spiderThreads.length > 0
+            || g.particles.length > 0
+            || g.fusion !== null
+            || g.fusionSparks.length > 0
+          );
+          if (hasHighFrequencySvgMotion || g.frame % 2 === 0) {
+            setNativeSnapshot({
             width: g.width,
             height: g.height,
             cell: g.cell,
@@ -6979,7 +7048,7 @@ export default function GameScreen() {
             trail: g.trail,
              protectedTrails: g.protectedTrails,
             player: { ...g.player },
-             direction: g.trail.length > 0 ? g.cutDir : g.facingDir,
+              direction: currentDirection,
              enemies: g.enemies.map((enemy) => ({ ...enemy })),
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
                speedBoosts: g.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
@@ -7013,7 +7082,8 @@ export default function GameScreen() {
              pendingCapturePolygons: g.pendingCapturePolygons,
             scanY: g.scanY,
             invincibleUntil: g.invincibleUntil,
-          });
+            });
+          }
         }
         if (g.frame % 2 === 0) {
           const nextHud = {
@@ -7104,6 +7174,12 @@ export default function GameScreen() {
     const renderMargin = Math.max(snapshot.cell * 2.2, 28);
     const expandedWidth = snapshot.width + renderMargin * 2;
     const expandedHeight = snapshot.height + renderMargin * 2;
+    const liveShipCount = snapshot.enemies.filter((enemy) => (
+      enemy.kind === 'SHIP'
+      && !enemyIsDestroyed(enemy)
+      && enemy.respawnAt <= Date.now()
+    )).length;
+    const skiaShipReady = skiaReady && liveShipCount <= 1;
     return (
       <View style={styles.nativeArenaDynamicLayer} pointerEvents="none">
         <Svg
@@ -7141,12 +7217,20 @@ export default function GameScreen() {
               />
             </>
           )}
-          <NativeArenaDynamic snapshot={snapshot} skiaReady={skiaReady} />
+          <NativeArenaDynamic
+            snapshot={snapshot}
+            skiaPlayerReady={skiaReady}
+            skiaShipReady={skiaShipReady}
+          />
         </Svg>
         {SKIA_DYNAMIC_RENDER_ENABLED && (
           <SkiaDynamicArena
-            snapshot={snapshot}
+            width={snapshot.width}
+            height={snapshot.height}
+            cell={snapshot.cell}
             renderMargin={renderMargin}
+            playerMotion={skiaPlayerMotion}
+            shipMotion={skiaShipMotion}
             onReady={handleSkiaReady}
           />
         )}
