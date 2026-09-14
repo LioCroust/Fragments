@@ -2943,8 +2943,8 @@ const DebugSectorSelector = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.debugSectorContent}
       >
-        {Array.from({ length: MAX_LEVEL }, (_, index) => {
-          const sector = index + 1;
+        {Array.from({ length: MAX_LEVEL + 1 }, (_, index) => {
+          const sector = index;
           const selected = sector === currentSector;
           return (
             <Pressable
@@ -2955,7 +2955,11 @@ const DebugSectorSelector = ({
               ]}
               onPress={() => onSelect(sector)}
               accessibilityRole="button"
-              accessibilityLabel={`Téléporter au secteur ${sector}`}
+              accessibilityLabel={
+                sector === TUTORIAL_SECTOR
+                  ? 'Téléporter au tutoriel secteur 0'
+                  : `Téléporter au secteur ${sector}`
+              }
               accessibilityState={{ selected }}
               testID={`debug-sector-${sector}`}
             >
@@ -3997,17 +4001,21 @@ export default function GameScreen() {
     const g = gameRef.current;
     if (!g.initialized) return;
     const previousLevel = g.level;
-    const nextLevel = Math.round(clamp(sector, 1, MAX_LEVEL));
-    rememberLastPlayedSector(nextLevel);
+    const nextLevel = Math.round(clamp(sector, TUTORIAL_SECTOR, MAX_LEVEL));
+    if (nextLevel > TUTORIAL_SECTOR) rememberLastPlayedSector(nextLevel);
     g.status = 'SECTOR_TRANSITION';
     void preloadSectorForBanner(nextLevel).then(() => {
       const transitionGame = gameRef.current;
       if (transitionGame.status !== 'SECTOR_TRANSITION') return;
       transitionGame.level = nextLevel;
       releaseSectorBackground(previousLevel, nextLevel);
-      resetGame(true, true);
+      if (nextLevel === TUTORIAL_SECTOR) {
+        resetGame(false, false, TUTORIAL_SECTOR);
+      } else {
+        resetGame(true, true);
+      }
       enqueueBanner({
-        kind: 'SECTOR_START',
+        kind: nextLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
         level: nextLevel,
       });
     });
@@ -6946,9 +6954,9 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     fontFamily: 'Inter_700Bold',
-    fontSize: 31,
+    fontSize: 28,
     letterSpacing: 2,
-    lineHeight: 35,
+    lineHeight: 32,
     textShadowColor: HUD_COLORS.amber,
     textShadowRadius: 9,
     textShadowOffset: { width: 0, height: 0 },
