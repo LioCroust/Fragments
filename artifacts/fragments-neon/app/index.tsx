@@ -1366,7 +1366,7 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 };
 const diamondSource = require('../assets/images/neon-diamond-fragment.png');
 const playerSource = require('../assets/images/player-drone-prism-arrow.png');
-const electricThrustSource = require('../assets/images/player-drone-prism-arrow-electric-thrust.png');
+const electricThrustSource = require('../assets/images/player-drone-prism-arrow-electric-thrust-transparent.png');
 const playerMissileSource = require('../assets/images/player-missile-transparent.png');
 
 const createDiamond = (width: number, height: number, cell: number): Diamond => {

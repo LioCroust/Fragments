@@ -28,3 +28,4 @@
 - [Split enemy respawn](split-enemy-respawn.md) — Same-sector collision restarts preserve all live split enemy kinds and keep already destroyed ones absent.
 - [Active game loop boundary](active-game-loop-boundary.md) — The historical second game copy is inside a block comment; edits and removals must target the first compiled loop explicitly.
 - [Skia animated transforms](skia-animated-transforms.md) — Expo Go is reliable with numeric snapshot props in the hybrid Skia layer; shared-value sprite motion remains unverified.
+- [Transparent generated sprites](transparent-generated-sprites.md) — Validate alpha because generated PNGs can contain a baked checkerboard despite requesting transparency.
