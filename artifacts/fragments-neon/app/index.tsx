@@ -38,7 +38,7 @@ const INITIAL_BACKGROUND_PRELOAD_COUNT = 10;
 const PERIMETER_HORIZONTAL_INSET_CELLS = 0.65;
 // Keep a little more cockpit breathing room above and below the playfield on
 // every sector, including the tutorial.
-const PERIMETER_VERTICAL_INSET_CELLS = 2.35;
+const PERIMETER_VERTICAL_INSET_CELLS = 1.35;
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
@@ -215,9 +215,12 @@ const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
 const DIAMOND_SPRITE_FRAME_COUNT = 4;
 const DIAMOND_SPRITE_FRAME_SIZE = 256;
 const DIAMOND_SPRITE_FRAME_DURATION = 7;
-const ENEMY_RENDER_SCALE = 0.88;
-const BOSS_RENDER_SCALE = 1.72;
-const PICKUP_VISUAL_SIZE_CELLS = 1.34;
+// Non-player artwork is intentionally rendered at 80% of the previous size
+// to reduce fill-rate and SVG/Canvas work. Gameplay geometry stays unchanged.
+const NON_PLAYER_RENDER_SCALE = 0.8;
+const ENEMY_RENDER_SCALE = 0.88 * NON_PLAYER_RENDER_SCALE;
+const BOSS_RENDER_SCALE = 1.72 * NON_PLAYER_RENDER_SCALE;
+const PICKUP_VISUAL_SIZE_CELLS = 1.34 * NON_PLAYER_RENDER_SCALE;
 const PLAYER_MOVE_SPEED = 126;
 const SPEED_BOOST_MULTIPLIER = 2;
 const SPEED_BOOST_DURATION_MS = 5000;
@@ -231,7 +234,7 @@ const SEVEN_PROJECTILE_INTERVAL = 7;
 const SEVEN_PROJECTILE_SPEED = 42;
 const SEVEN_PROJECTILE_MAX_LIFE = 9;
 const SEVEN_PROJECTILE_RADIUS_CELLS = 0.16;
-const SEVEN_PROJECTILE_SIZE_CELLS = 0.82;
+const SEVEN_PROJECTILE_SIZE_CELLS = 0.82 * NON_PLAYER_RENDER_SCALE;
 const SHIP_ROTATION_SPEED = 8.5;
 
 type Direction = { x: -1 | 0 | 1; y: -1 | 0 | 1 };
@@ -1604,6 +1607,52 @@ const drawCuttingEffectCanvas = (
   context.restore();
 };
 
+type CutSparkSegment = {
+  start: Point;
+  end: Point;
+  color: string;
+  opacity: number;
+  width: number;
+};
+
+// Keep the attractive fan of molten sparks without allocating dozens of
+// short-lived particle objects every frame. Three deterministic segments are
+// enough to preserve the look while keeping both Canvas and native SVG light.
+const cutSparkSegments = (
+  player: Point,
+  direction: Direction,
+  cell: number,
+  frame: number,
+): CutSparkSegment[] => {
+  if (direction.x === 0 && direction.y === 0) return [];
+  const point = cuttingPoint(player, direction, cell);
+  const backward = { x: -direction.x, y: -direction.y };
+  const normal = { x: -direction.y, y: direction.x };
+  const colors = ['#fff35c', '#ff8a00', '#ffffff'];
+
+  return Array.from({ length: 3 }, (_, index) => {
+    const phase = frame * 0.22 + index * 2.1;
+    const travel = 0.16 + (Math.sin(phase) * 0.5 + 0.5) * 0.28;
+    const lateral = Math.sin(phase * 1.17) * 0.22;
+    const start = {
+      x: point.x + backward.x * cell * travel + normal.x * cell * lateral,
+      y: point.y + backward.y * cell * travel + normal.y * cell * lateral,
+    };
+    const length = 0.12 + (Math.cos(phase * 0.83) * 0.5 + 0.5) * 0.18;
+    const end = {
+      x: start.x + backward.x * cell * length + normal.x * cell * lateral * 0.35,
+      y: start.y + backward.y * cell * length + normal.y * cell * lateral * 0.35,
+    };
+    return {
+      start,
+      end,
+      color: colors[index],
+      opacity: 0.38 + (Math.sin(phase * 1.4) * 0.5 + 0.5) * 0.42,
+      width: cell * (0.018 + index * 0.006),
+    };
+  });
+};
+
 const drawCuttingSpriteCanvas = (
   context: CanvasRenderingContext2D,
   image: CanvasImageSource,
@@ -1615,7 +1664,7 @@ const drawCuttingSpriteCanvas = (
   if (direction.x === 0 && direction.y === 0) return;
   const point = cuttingPoint(player, direction, cell);
   const angle = Math.atan2(direction.y, direction.x);
-  const width = cell * 1.62;
+  const width = cell * 1.62 * NON_PLAYER_RENDER_SCALE;
   const height = width * CUTTING_SPRITE_FRAME_HEIGHT / CUTTING_SPRITE_FRAME_WIDTH;
 
   context.save();
@@ -1835,7 +1884,7 @@ const sevenProjectileSize = (cell: number) => cell * SEVEN_PROJECTILE_SIZE_CELLS
 const PLAYER_MISSILE_SPEED = 270;
 const PLAYER_MISSILE_MAX_LIFE = 3.5;
 const PLAYER_MISSILE_RADIUS_CELLS = 0.2;
-const PLAYER_MISSILE_SIZE_CELLS = 1.12;
+const PLAYER_MISSILE_SIZE_CELLS = 1.12 * NON_PLAYER_RENDER_SCALE;
 const playerMissileRadius = (cell: number) => cell * PLAYER_MISSILE_RADIUS_CELLS;
 const playerMissileSize = (cell: number) => cell * PLAYER_MISSILE_SIZE_CELLS;
 
@@ -2603,7 +2652,7 @@ const SpiderThreadSprite = React.memo(
       [thread.remaining, thread.anchored],
     );
     const webSize = useMemo(
-      () => cell * thread.webSizeCells,
+      () => cell * thread.webSizeCells * NON_PLAYER_RENDER_SCALE,
       [cell, thread.webSizeCells],
     );
     return (
@@ -2804,10 +2853,13 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
   );
   const activeCut = snapshot.trail.length > 0
     && (snapshot.direction.x !== 0 || snapshot.direction.y !== 0);
+  const cutSparks = activeCut
+    ? cutSparkSegments(snapshot.player, snapshot.direction, snapshot.cell, snapshot.frame)
+    : [];
   const cutPoint = cuttingPoint(snapshot.player, snapshot.direction, snapshot.cell);
   const cutPulse = 0.72 + Math.sin(Date.now() * 0.012) * 0.2;
   const cutFrame = Math.floor(Date.now() / 55) % CUTTING_SPRITE_FRAME_COUNT;
-  const cutSpriteWidth = snapshot.cell * 1.62;
+  const cutSpriteWidth = snapshot.cell * 1.62 * NON_PLAYER_RENDER_SCALE;
   const cutSpriteHeight = cutSpriteWidth * CUTTING_SPRITE_FRAME_HEIGHT / CUTTING_SPRITE_FRAME_WIDTH;
   const diamondFrame = Math.floor(snapshot.frame / DIAMOND_SPRITE_FRAME_DURATION)
     % DIAMOND_SPRITE_FRAME_COUNT;
@@ -2853,7 +2905,9 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
             .map((enemy, index) => {
               const smokePosition = shipSmokePosition(enemy, snapshot.cell);
               const motion = enemyAnimationTransform(enemy, snapshot.cell);
-              const smokeSize = snapshot.cell * (enemy.isMini ? 0.9 : 1.8);
+              const smokeSize = snapshot.cell
+                * (enemy.isMini ? 0.9 : 1.8)
+                * NON_PLAYER_RENDER_SCALE;
               const frame = Math.floor(Date.now() / 55) % SHIP_SMOKE_SPRITE_FRAME_COUNT;
               const smokeClipId = `ship-smoke-single-blob-${index}`;
               return (
@@ -2951,6 +3005,19 @@ const NativeArenaDynamic = ({ snapshot }: { snapshot: Snapshot }) => {
           />
         </G>
       )}
+      {cutSparks.map((spark, index) => (
+        <Line
+          key={`cut-spark-${index}`}
+          x1={spark.start.x}
+          y1={spark.start.y}
+          x2={spark.end.x}
+          y2={spark.end.y}
+          stroke={spark.color}
+          strokeWidth={spark.width}
+          strokeLinecap="round"
+          opacity={spark.opacity}
+        />
+      ))}
       {snapshot.particles.map((particle, index) => (
         particle.streak ? (
           <Line
@@ -4608,26 +4675,6 @@ export default function GameScreen() {
     let lastTime = Date.now();
     let cancelled = false;
 
-    const addParticle = (g: Game, direction: Direction) => {
-      if (g.particles.length >= (CUTTING_SPRITE_ENABLED ? 36 : 64)) return;
-      const backwards = Math.atan2(-direction.y, -direction.x);
-      // Spread around the backward axis so sparks visibly fan above and below
-      // the cut instead of forming a single narrow exhaust line.
-      const angle = backwards + (Math.random() - 0.5) * (Math.PI * 0.92);
-      const speed = 95 + Math.random() * 225;
-      const colorsForSpark = ['#ffffff', '#fff35c', '#ff8a00', '#ff5500'];
-      g.particles.push({
-        x: g.player.x - direction.x * g.cell * 0.76,
-        y: g.player.y - direction.y * g.cell * 0.76,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.3 + Math.random() * 0.24,
-        size: 1 + Math.random() * 1.8,
-        color: colorsForSpark[Math.floor(Math.random() * colorsForSpark.length)],
-        streak: true,
-      });
-    };
-
     const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
 
     const activateCaptureProtection = (g: Game, now: number) => {
@@ -4644,7 +4691,7 @@ export default function GameScreen() {
     const explode = (g: Game, now: number) => {
       if (g.status !== 'PLAYING') return;
       if (playerIsProtected(g, now)) return;
-      for (let i = 0; i < 90; i += 1) {
+      for (let i = 0; i < 72; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 300;
         g.particles.push({
@@ -4670,7 +4717,7 @@ export default function GameScreen() {
       pathDistance: number,
       initialSpread = 1,
     ) => {
-      if (g.fusionSparks.length >= 100) return;
+      if (g.fusionSparks.length >= 80) return;
       const sample = pointOnPolyline(
         sequence.path,
         sequence.cumulativeLengths,
@@ -4738,7 +4785,7 @@ export default function GameScreen() {
       g.hasMoveCommand = false;
       g.facingDir = g.cutDir;
       g.status = 'FUSING';
-      for (let index = 0; index < 32; index += 1) {
+      for (let index = 0; index < 26; index += 1) {
         addFusionSpark(
           g,
           sequence,
@@ -4788,7 +4835,7 @@ export default function GameScreen() {
       }
       g.fusionSparks.length = activeSparkCount;
 
-      const sparksToEmit = sequence.elapsed < sequence.travelDuration ? 4 : 1;
+      const sparksToEmit = sequence.elapsed < sequence.travelDuration ? 3 : 1;
       for (let index = 0; index < sparksToEmit; index += 1) {
         addFusionSpark(
           g,
@@ -4811,7 +4858,7 @@ export default function GameScreen() {
       bomb.destroyed = true;
       g.score += BOMB_SCORE;
       enqueueBanner({ kind: 'BOMB', points: BOMB_SCORE });
-      for (let index = 0; index < 60; index += 1) {
+      for (let index = 0; index < 48; index += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 35 + Math.random() * 190;
         g.particles.push({
@@ -5115,7 +5162,7 @@ export default function GameScreen() {
         || suppressTutorialDestructionBanner
       );
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
-      for (let i = 0; i < 110; i += 1) {
+      for (let i = 0; i < 88; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 45 + Math.random() * 260;
         const life = 0.55 + Math.random() * 0.85;
@@ -6057,7 +6104,7 @@ export default function GameScreen() {
               diamondCaptured = true;
               playDiamondCapture();
               enqueueBanner({ kind: 'DIAMOND', points: DIAMOND_SCORE });
-              for (let particleIndex = 0; particleIndex < 45; particleIndex += 1) {
+              for (let particleIndex = 0; particleIndex < 36; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 35 + Math.random() * 180;
                 g.particles.push({
@@ -6365,10 +6412,8 @@ export default function GameScreen() {
               g.trail.push(trailStart);
             }
             g.trail.push({ ...g.player });
-            // The atlas already contains its sparks. Avoid allocating or
-            // rendering dynamic cut particles in the optimized mode.
-            const sparkCount = CUTTING_SPRITE_ENABLED ? 1 : 4;
-            for (let spark = 0; spark < sparkCount; spark += 1) addParticle(g, g.cutDir);
+            // Cut sparks are rendered as a tiny deterministic fan at draw
+            // time. This avoids allocating short-lived particles per step.
           } else if (g.trail.length > 2) {
             g.trail.push({ ...g.player });
             capture(g);
@@ -6497,6 +6542,20 @@ export default function GameScreen() {
           // the original procedural point and full SVG spark treatment.
           drawCuttingEffectCanvas(context, g.player, g.cutDir, g.cell, g.frame);
         }
+        const cutSparks = cutSparkSegments(g.player, g.cutDir, g.cell, g.frame);
+        context.save();
+        context.globalCompositeOperation = 'lighter';
+        context.lineCap = 'round';
+        cutSparks.forEach((spark) => {
+          context.globalAlpha = spark.opacity;
+          context.strokeStyle = spark.color;
+          context.lineWidth = spark.width;
+          context.beginPath();
+          context.moveTo(spark.start.x, spark.start.y);
+          context.lineTo(spark.end.x, spark.end.y);
+          context.stroke();
+        });
+        context.restore();
       }
 
       context.globalCompositeOperation = 'lighter';
@@ -6589,7 +6648,9 @@ export default function GameScreen() {
              if (enemy.kind !== 'SHIP' || enemy.respawnAt > now) return;
              const smokePosition = shipSmokePosition(enemy, g.cell);
              const motion = enemyAnimationTransform(enemy, g.cell);
-              const smokeSize = g.cell * (enemy.isMini ? 0.9 : 1.8);
+               const smokeSize = g.cell
+                 * (enemy.isMini ? 0.9 : 1.8)
+                 * NON_PLAYER_RENDER_SCALE;
              context.save();
              context.globalAlpha = 0.58;
              context.translate(smokePosition.x, smokePosition.y + motion.offsetY);
@@ -6615,7 +6676,7 @@ export default function GameScreen() {
           g.spiderThreads.forEach((thread) => {
             const active = spiderThreadIsActive(thread);
             if (thread.anchored && spiderWebImage) {
-              const webSize = g.cell * thread.webSizeCells;
+               const webSize = g.cell * thread.webSizeCells * NON_PLAYER_RENDER_SCALE;
               context.save();
               context.globalAlpha = clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88);
               context.shadowColor = '#00f3ff';
