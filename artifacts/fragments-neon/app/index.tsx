@@ -27,10 +27,10 @@ import Svg, {
 import {
   Canvas as SkiaCanvas,
   Image as SkiaImage,
-  select as selectSkiaValue,
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
 import {
+  useDerivedValue,
   useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -2841,12 +2841,12 @@ const SkiaDynamicArena = React.memo(({
 
   const playerSize = playerSpriteSize(cell);
   const shipSize = enemyRenderSize('SHIP', cell);
-  const playerOpacity = selectSkiaValue(playerMotion, 'visible');
-  const playerX = selectSkiaValue(playerMotion, 'x');
-  const playerY = selectSkiaValue(playerMotion, 'y');
-  const shipOpacity = selectSkiaValue(shipMotion, 'visible');
-  const shipX = selectSkiaValue(shipMotion, 'x');
-  const shipY = selectSkiaValue(shipMotion, 'y');
+  const playerOpacity = useDerivedValue(() => playerMotion.value.visible);
+  const playerX = useDerivedValue(() => playerMotion.value.x);
+  const playerY = useDerivedValue(() => playerMotion.value.y);
+  const shipOpacity = useDerivedValue(() => shipMotion.value.visible);
+  const shipX = useDerivedValue(() => shipMotion.value.x);
+  const shipY = useDerivedValue(() => shipMotion.value.y);
 
   if (!playerImage || !shipImage) return null;
 
