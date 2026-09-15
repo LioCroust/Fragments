@@ -4172,6 +4172,14 @@ export default function GameScreen() {
   }, [diamondCapturePlayer]);
 
   const enqueueBanner = useCallback((nextBanner: Banner) => {
+    if (Platform.OS !== 'web') {
+      // Native gameplay must not depend on the JS animation queue. A tight
+      // 60 FPS scheduler can delay Animated callbacks on Android and leave
+      // the sector-start card permanently over the game.
+      setBanner(null);
+      nextBanner.onComplete?.();
+      return;
+    }
     bannerQueueRef.current.push(nextBanner);
     if (bannerAnimatingRef.current) return;
 
@@ -5339,6 +5347,7 @@ export default function GameScreen() {
     let lastNativeFrameAt = lastTime - NATIVE_GAME_LOOP_INTERVAL_MS;
     let fpsWindowStart = lastTime;
     let fpsWindowFrames = 0;
+    let nativeSchedulerTicks = 0;
     let cancelled = false;
 
     const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
@@ -7858,7 +7867,14 @@ export default function GameScreen() {
         // callbacks can resolve before switching to the tighter scheduler.
         loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
       } else if (typeof setImmediate === 'function') {
-        loopHandle = setImmediate(loop);
+        // setImmediate is the only Android scheduler that can sustain the
+        // target cadence here, but an uninterrupted chain can starve timers,
+        // touch dispatch, and Animated callbacks. Yield to the timer queue
+        // regularly without returning to a 16 ms timer on every frame.
+        nativeSchedulerTicks += 1;
+        loopHandle = nativeSchedulerTicks % 4 === 0
+          ? setTimeout(loop, 0)
+          : setImmediate(loop);
       } else {
         loopHandle = setTimeout(loop, 1);
       }

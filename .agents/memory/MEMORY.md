@@ -30,3 +30,4 @@
 - [Skia animated transforms](skia-animated-transforms.md) — Expo Go is reliable with numeric snapshot props in the hybrid Skia layer; shared-value sprite motion remains unverified.
 - [Transparent generated sprites](transparent-generated-sprites.md) — Validate alpha because generated PNGs can contain a baked checkerboard despite requesting transparency.
 - [Skia publisher readiness](skia-publisher-readiness.md) — Native game logic must publish a Skia frame before all sprite images finish decoding; otherwise FPS can look healthy while Android is inert.
+- [Cooperative native scheduler](cooperative-native-scheduler.md) — A continuous setImmediate loop can report 60 FPS while starving Android timers, animations, and touch dispatch.
