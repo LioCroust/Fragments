@@ -374,3 +374,17 @@ mtime_ms = 1789475249227
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/ca921d91-613b-44ae-8831-56ac4de59f44/a27f520b-ba74-4272-9310-1c41acdafdb1"
 storage_version_token = "1789475253302980"
 content_type = "image/png"
+
+[[outputs]]
+id = "Dg_pubstwGCmG_Ywyrk63"
+uri = "file://attached_assets/generated_images/fragments-neon-home-3d-danger-concept.png"
+type = "image"
+title = "Concept accueil 3D — danger des monstres"
+description = "Concept art portrait 3D dynamique avec le drone Prism Arrow en esquive, laser de découpe, arène rectangulaire en perspective et quatre menaces visibles : vaisseau, dragon, formation de sept orbes et araignée avec toile."
+logical_id = "93f80e0c-df08-48cb-bc91-bdb1c6ea0f08"
+content_hash = "sha256:254c490aeca77bd86735dfb5b33b283894982b23947480d31d0a70e397c573d5"
+size = 2067094
+mtime_ms = 1789475407779
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/93f80e0c-df08-48cb-bc91-bdb1c6ea0f08/852aa265-f4c8-4710-9b30-b5ffaff98c46"
+storage_version_token = "1789475428097862"
+content_type = "image/png"
