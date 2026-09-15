@@ -346,3 +346,17 @@ mtime_ms = 1789038923733
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/b97914d9-f753-45b0-99d9-4b2dc5d87c18/f1bc2391-0ac4-4827-af05-3a052ec502a1"
 storage_version_token = "1789038929252113"
 content_type = "image/png"
+
+[[outputs]]
+id = "hYRPT3JjUiKeMF0h5mErJ"
+uri = "file://attached_assets/generated_images/fragments-neon-home-portrait-concept.png"
+type = "image"
+title = "Concept accueil portrait — Fragments Neon"
+description = "Illustration portrait avec drone Prism Arrow, laser de découpe, grille lumineuse, fond spatial violet et ennemis en arrière-plan. Le PNG est conservé comme concept séparé, sans modifier l’image d’accueil actuelle."
+logical_id = "6cac0f98-cfe7-4dc7-b3bb-f9b57335bd68"
+content_hash = "sha256:1b116b5aca4bfd2ad13da0639f354f1e092f3425cfec45581c1100b62badd705"
+size = 1620599
+mtime_ms = 1789475130491
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/6cac0f98-cfe7-4dc7-b3bb-f9b57335bd68/5d790741-4f7b-420d-92a2-d9f1af1aea59"
+storage_version_token = "1789475136377168"
+content_type = "image/png"
