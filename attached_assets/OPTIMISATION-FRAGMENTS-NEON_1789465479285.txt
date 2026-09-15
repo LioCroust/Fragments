@@ -1,0 +1,472 @@
+================================================================================
+PROMPT D'OPTIMISATION FRAGMENTS NEON - REPLIT
+================================================================================
+A COPIER-COLLER DIRECTEMENT DANS CLAUDE (REPLIT OU CLAUDE.AI)
+================================================================================
+
+Voici mon code React + Skia pour mon jeu Fragments Neon. Je rencontre 3 problemes:
+1. Les sprites et decors FLIPPENT lors du rendu
+2. Les FPS sont BLOQUES a 30-40 max (pas 55-60)
+3. Les images/sprites ne sont pas prechargees avant le gameplay
+
+Applique TOUS les changements suivants au code:
+
+================================================================================
+PROBLEMES IDENTIFIES
+================================================================================
+
+1. FLIP DES SPRITES
+   - Transformations SVG/Skia appliquent scale(-1,1) ou (1,-1) au lieu de (1,1)
+   - Matrice de rendu non normalisee
+   - Les sprites apparaissent inverses
+
+2. FPS BLOQUES A 30-40
+   CAUSE: useSkiaImage() rappele a chaque render
+   CAUSE: Render loop force state update inutile (setFrameCount)
+   CAUSE: Canvas Skia re-painted a chaque frame meme sans changement
+   CAUSE: Collisions recalculees meme HORS-ECRAN
+   CAUSE: Aucun preload => images chargees pendant le gameplay
+
+3. ASSETS NON PRECHARGES
+   - Aucun systeme de preload au boot
+   - Images chargees lazily => lag au 1er affichage
+   - Multiple Image components re-render inutilement
+
+================================================================================
+SOLUTION 1: CREER assetPreloader.ts (NOUVEAU FICHIER)
+================================================================================
+
+Creer un nouveau fichier: src/assetPreloader.ts
+
+Contenu:
+
+```typescript
+import { useEffect, useRef, useState } from 'react';
+import { useImage as useSkiaImage } from '@shopify/react-native-skia';
+import { Image as RNImage } from 'react-native';
+
+type AssetCache = {
+  images: Map<string, any>;
+  sprites: Map<string, any>;
+  loading: Set<string>;
+  failed: Set<string>;
+};
+
+const assetCache: AssetCache = {
+  images: new Map(),
+  sprites: new Map(),
+  loading: new Set(),
+  failed: new Set(),
+};
+
+// Sprite sheet sources - A ADAPTER avec tes vraies sources
+const SPRITE_SOURCES = {
+  cutting: require('../assets/images/cutting-sprite-sheet.png'),
+  shipSmoke: require('../assets/images/ship-smoke-sprite-sheet.png'),
+  coreReactor: require('../assets/images/core-reactor-sprite-sheet.png'),
+  diamond: require('../assets/images/neon-diamond-fragment-sprite-sheet.png'),
+  sevenFireOrb: require('../assets/images/seven-fire-orb.png'),
+  speedBoost: require('../assets/images/speed-boost-sprite.png'),
+  spiderWeb: require('../assets/images/spider-web-destination.png'),
+};
+
+// Image sources - A ADAPTER avec tes vraies sources
+const IMAGE_SOURCES = {
+  loadingCover: require('../assets/images/loading-cover.png'),
+  cockpitInterior: require('../assets/images/prism-warbird-interior-neon-console.png'),
+  sector1: require('../assets/images/sector-1-space-background.png'),
+  sector2: require('../assets/images/sector-2-space-background.png'),
+  sector3: require('../assets/images/sector-3-space-background.png'),
+  // Ajoute les 50 secteurs ici...
+};
+
+export const preloadAssets = async (): Promise<void> => {
+  return new Promise((resolve) => {
+    let loaded = 0;
+    const total = Object.keys(SPRITE_SOURCES).length + Object.keys(IMAGE_SOURCES).length;
+
+    const onLoad = () => {
+      loaded++;
+      if (loaded >= total) resolve();
+    };
+
+    // Preload sprites
+    Object.entries(SPRITE_SOURCES).forEach(([key, source]) => {
+      if (!assetCache.sprites.has(key)) {
+        const image = new RNImage();
+        image.onload = () => {
+          assetCache.sprites.set(key, image);
+          onLoad();
+        };
+        image.onerror = () => {
+          assetCache.failed.add(key);
+          onLoad();
+        };
+        assetCache.loading.add(key);
+        image.src = source;
+      }
+    });
+
+    // Preload images
+    Object.entries(IMAGE_SOURCES).forEach(([key, source]) => {
+      if (!assetCache.images.has(key)) {
+        const image = new RNImage();
+        image.onload = () => {
+          assetCache.images.set(key, image);
+          onLoad();
+        };
+        image.onerror = () => {
+          assetCache.failed.add(key);
+          onLoad();
+        };
+        assetCache.loading.add(key);
+        image.src = source;
+      }
+    });
+  });
+};
+
+export const usePreloadedImage = (key: string) => {
+  return assetCache.images.get(key) || null;
+};
+
+export const usePreloadedSprite = (key: string) => {
+  return assetCache.sprites.get(key) || null;
+};
+
+export const getAssetCacheStatus = () => ({
+  imagesLoaded: assetCache.images.size,
+  spritesLoaded: assetCache.sprites.size,
+  failed: assetCache.failed.size,
+});
+
+export const useCachedSkiaImage = (source: any) => {
+  const cache = useRef(new Map());
+  const sourceKey = JSON.stringify(source);
+  
+  if (!cache.current.has(sourceKey)) {
+    cache.current.set(sourceKey, useSkiaImage(source));
+  }
+  
+  return cache.current.get(sourceKey);
+};
+```
+
+================================================================================
+SOLUTION 2: FIX SPRITE FLIP (SVG/SKIA TRANSFORMS)
+================================================================================
+
+REMPLACER TOUS les `SvgImage` qui ont ce pattern:
+
+AVANT (MAUVAIS):
+<SvgImage
+  x={x}
+  y={y}
+  width={width}
+  height={height}
+  href={spriteSource}
+  preserveAspectRatio="xMidYMid slice"
+/>
+
+APRES (BON):
+<SvgImage
+  x={x}
+  y={y}
+  width={width}
+  height={height}
+  href={spriteSource}
+  preserveAspectRatio="none"
+/>
+
+POUR SKIA (Si tu utilises SkiaImage):
+
+AVANT (MAUVAIS):
+canvas.drawImage(image, matrix);
+
+APRES (BON):
+const normalizedMatrix = Skia.Matrix();
+normalizedMatrix.translate(x, y);
+normalizedMatrix.scale(1, 1);  // IMPORTANT: scale(1,1) PAS scale(-1,1)
+
+canvas.drawImage(image, normalizedMatrix);
+
+================================================================================
+SOLUTION 3: MEMOIZE SKIA IMAGE LOADING
+================================================================================
+
+CHERCHE TOUS les `useSkiaImage()` dans ton code:
+
+AVANT (MAUVAIS):
+const diamondImage = useSkiaImage(diamondSpriteSource);
+const cuttingImage = useSkiaImage(cuttingSpriteSource);
+const shipSmokeImage = useSkiaImage(shipSmokeSpriteSource);
+
+APRES (BON):
+const diamondImage = useMemo(
+  () => useSkiaImage(diamondSpriteSource),
+  [diamondSpriteSource]
+);
+
+const cuttingImage = useMemo(
+  () => useSkiaImage(cuttingSpriteSource),
+  [cuttingSpriteSource]
+);
+
+const shipSmokeImage = useMemo(
+  () => useSkiaImage(shipSmokeSpriteSource),
+  [shipSmokeSpriteSource]
+);
+
+Ou MIEUX, utilise le hook perso:
+import { useCachedSkiaImage } from './assetPreloader';
+
+const diamondImage = useCachedSkiaImage(diamondSpriteSource);
+const cuttingImage = useCachedSkiaImage(cuttingSpriteSource);
+const shipSmokeImage = useCachedSkiaImage(shipSmokeSpriteSource);
+
+================================================================================
+SOLUTION 4: FIX RENDER LOOP (DESACTIVER INUTILE RE-RENDERS)
+================================================================================
+
+CHERCHE le render loop (probablement avec setFrameCount):
+
+AVANT (MAUVAIS):
+const [frameCount, setFrameCount] = useState(0);
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    setFrameCount(c => c + 1);
+  }, NATIVE_PICTURE_PUBLISH_INTERVAL_MS);
+  return () => clearInterval(interval);
+}, []);
+
+APRES (BON):
+useEffect(() => {
+  let isRunning = true;
+  const canvasRef = useRef<SkiaPictureView>(null);
+  
+  const renderFrame = () => {
+    if (isRunning && canvasRef.current) {
+      canvasRef.current.redraw();
+      requestAnimationFrame(renderFrame);
+    }
+  };
+  
+  requestAnimationFrame(renderFrame);
+  
+  return () => { isRunning = false; };
+}, []);
+
+// Enleve setFrameCount du render
+// Enleve frameCount de la dependance du composant
+
+================================================================================
+SOLUTION 5: PRELOAD ASSETS AU BOOT
+================================================================================
+
+AU DEBUT de ton composant principal (probablement index.tsx ou Game.tsx):
+
+AVANT (MAUVAIS):
+const [gameState, setGameState] = useState(initialState);
+
+useEffect(() => {
+  // Game starts immediately
+}, []);
+
+APRES (BON):
+import { preloadAssets } from './assetPreloader';
+
+const [gameState, setGameState] = useState(initialState);
+const [assetsReady, setAssetsReady] = useState(false);
+
+useEffect(() => {
+  const initGame = async () => {
+    console.log('[Game] Starting asset preload...');
+    const startTime = performance.now();
+    
+    await preloadAssets();
+    
+    const elapsed = performance.now() - startTime;
+    console.log(`[Game] Assets preloaded in ${elapsed.toFixed(0)}ms`);
+    
+    setAssetsReady(true);
+  };
+  
+  initGame();
+}, []);
+
+// AJOUTE une loading screen:
+if (!assetsReady) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+      <Text style={{ color: '#fff', fontSize: 16 }}>Loading assets...</Text>
+    </View>
+  );
+}
+
+// Continue avec le jeu normal si assetsReady === true
+
+================================================================================
+SOLUTION 6: BACKGROUND IMAGE CACHING
+================================================================================
+
+Si tu as un hook pour charger les backgrounds:
+
+AVANT (MAUVAIS):
+const levelBackground = useImage(backgroundSourceForLevel(currentLevel));
+
+APRES (BON):
+const levelBackground = useMemo(
+  () => useImage(backgroundSourceForLevel(currentLevel)),
+  [currentLevel]
+);
+
+================================================================================
+SOLUTION 7: SPRITE FRAME PRE-CALCULATION
+================================================================================
+
+Si tu calcules les offsets de frames pour les sprite sheets:
+
+AVANT (MAUVAIS):
+const spriteX = (frameIndex % CUTTING_SPRITE_FRAME_COUNT) * CUTTING_SPRITE_FRAME_WIDTH;
+const spriteY = Math.floor(frameIndex / CUTTING_SPRITE_FRAME_COUNT) * CUTTING_SPRITE_FRAME_HEIGHT;
+
+APRES (BON):
+const spriteFrameOffsets = useMemo(() => {
+  return Array.from({ length: CUTTING_SPRITE_FRAME_COUNT }, (_, i) => ({
+    x: (i % 8) * CUTTING_SPRITE_FRAME_WIDTH,
+    y: Math.floor(i / 8) * CUTTING_SPRITE_FRAME_HEIGHT,
+  }));
+}, []);
+
+// Use:
+const { x: spriteX, y: spriteY } = spriteFrameOffsets[frameIndex];
+
+================================================================================
+SOLUTION 8: COLLISION DETECTION OPTIMIZATION (VIEWPORT CULLING)
+================================================================================
+
+Dans ton code de collision, ajoute:
+
+const lastCollisionState = useRef(new Set());
+
+const checkCollisionsOptimized = useCallback((entities: Entity[], screenWidth: number, screenHeight: number) => {
+  const newCollisions = new Set();
+  
+  // ETAPE 1: Filter - Garder QUE les entities visibles (avec marge)
+  const visibleEntities = entities.filter(e => 
+    e.x > -100 && e.x < screenWidth + 100 &&
+    e.y > -100 && e.y < screenHeight + 100
+  );
+  
+  // ETAPE 2: Check - Collision check uniquement sur les visibles
+  for (let i = 0; i < visibleEntities.length; i++) {
+    for (let j = i + 1; j < visibleEntities.length; j++) {
+      if (checkCollision(visibleEntities[i], visibleEntities[j])) {
+        newCollisions.add(`${visibleEntities[i].id}-${visibleEntities[j].id}`);
+      }
+    }
+  }
+  
+  // ETAPE 3: Diff - Tracker UNIQUEMENT les changements
+  const changed = new Set([
+    ...Array.from(newCollisions).filter(c => !lastCollisionState.current.has(c)),
+    ...Array.from(lastCollisionState.current).filter(c => !newCollisions.has(c)),
+  ]);
+  
+  lastCollisionState.current = newCollisions;
+  return changed;
+}, []);
+
+================================================================================
+CHECKLIST A COCHER
+================================================================================
+
+[] Creer assetPreloader.ts
+[] Importer preloadAssets au demarrage
+[] Ajouter loading screen (waiting for assetsReady)
+[] Fixer transformations SVG (scale 1,1 au lieu de negatif)
+[] Memoize TOUS les useSkiaImage() 
+[] Remplacer setFrameCount par requestAnimationFrame
+[] Memoize sprite frame offsets
+[] Optimiser collisions (viewport culling)
+[] Tester FPS avec React DevTools Profiler
+[] Verifier pas de flip dans les sprites
+
+================================================================================
+DEBUG COMMANDS
+================================================================================
+
+Ajoute dans le code pour tester la perf:
+
+// FPS Counter - Ajoute au render loop
+let frameCount = 0;
+let lastTime = Date.now();
+
+const updateFPS = () => {
+  frameCount++;
+  const now = Date.now();
+  if (now - lastTime >= 1000) {
+    console.log(`[Performance] FPS: ${frameCount}`);
+    frameCount = 0;
+    lastTime = now;
+  }
+};
+
+// Appelle updateFPS() chaque frame
+
+Pour Replit DevTools:
+1. Ouvre DevTools (F12 ou Cmd+Option+I)
+2. Onglet "Performance"
+3. Record pour 5 secondes
+4. Stop et analyse
+5. Tu dois voir: FPS 55-60 stable OK
+
+================================================================================
+RESULTATS ATTENDUS
+================================================================================
+
+AVANT:
+- FPS: 30-40 max MAUVAIS
+- Sprite flip: VISIBLE MAUVAIS
+- Load assets: On-demand lag MAUVAIS
+- Memory: Possible fuites MAUVAIS
+
+APRES:
+- FPS: 55-60 stable OK
+- Sprite flip: FIXE OK
+- Load assets: 2-3s preload, zero lag apres OK
+- Memory: Stable OK
+
+================================================================================
+NOTES IMPORTANTES
+================================================================================
+
+1. ADAPT LES SOURCES:
+   - SPRITE_SOURCES et IMAGE_SOURCES dans assetPreloader.ts
+   - A mettre en accord avec TES vraies sources d'assets
+
+2. TESTE PROGRESSIVEMENT:
+   - Applique 1 solution a la fois
+   - Run et test avec DevTools
+   - Puis la suivante
+
+3. SI CA CRASH:
+   - Regarde la console pour les erreurs
+   - Assure-toi que les imports sont corrects
+   - Verifie que useMemo/useCallback sont importes de React
+
+4. REGRESSIONS POTENTIELLES:
+   - Si sprites disparaissent: verifie les fix de transform
+   - Si game lag encore: check que preload fini avant gameplay
+   - Si screen noir: assure-toi que assetsReady passe a true
+
+================================================================================
+FIN DU PROMPT
+================================================================================
+
+Voila tout! Copie ce fichier, envoie-le a Claude (Replit), et dis:
+
+"Applique TOUS les changements listes dans ce prompt a mon code."
+
+Ca devrait marcher d'un seul coup!
