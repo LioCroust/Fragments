@@ -8476,7 +8476,10 @@ export default function GameScreen() {
       </View>
 
       <View
-        style={styles.arena}
+        style={[
+          styles.arena,
+          Platform.OS !== 'web' ? styles.nativeArena : null,
+        ]}
         onLayout={handleArenaLayout}
         testID="game-arena"
         {...panResponder.panHandlers}
@@ -8487,6 +8490,7 @@ export default function GameScreen() {
               style: { position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' },
             })
           : renderNativeArena()}
+        {renderNativeDynamicArena()}
         {hud.level === TUTORIAL_SECTOR
           && tutorialStep === 1
           && !tutorialCompletionBannerShownRef.current && (
@@ -8638,8 +8642,6 @@ export default function GameScreen() {
           </View>
         )}
       </View>
-
-      {renderNativeDynamicArena()}
 
       <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
@@ -8934,6 +8936,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     overflow: 'hidden',
   },
+  nativeArena: {
+    overflow: 'visible',
+  },
   debugSectorSelector: {
     position: 'absolute',
     left: 12,
@@ -9168,10 +9173,10 @@ const styles = StyleSheet.create({
   },
   nativeArenaDynamicLayer: {
     position: 'absolute',
-    top: 160,
+    top: 0,
     left: 0,
     right: 0,
-    bottom: 28,
+    bottom: 0,
     zIndex: 2,
     overflow: 'visible',
   },

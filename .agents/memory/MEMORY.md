@@ -32,3 +32,4 @@
 - [Skia publisher readiness](skia-publisher-readiness.md) — Native game logic must publish a Skia frame before all sprite images finish decoding; otherwise FPS can look healthy while Android is inert.
 - [Cooperative native scheduler](cooperative-native-scheduler.md) — A continuous setImmediate loop can report 60 FPS while starving Android timers, animations, and touch dispatch.
 - [Immediate native snapshot](immediate-native-snapshot.md) — Android must render from the initialized game state immediately instead of waiting for a React snapshot publication.
+- [Native overlay stacking](native-overlay-stacking.md) — React overlays must be above the Skia parent hierarchy, not only above siblings inside the arena.
