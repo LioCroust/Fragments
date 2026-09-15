@@ -4106,9 +4106,17 @@ export default function GameScreen() {
     if (initialLoadingRevealStartedRef.current) return;
     initialLoadingRevealStartedRef.current = true;
     setLoadingProgress(1);
+    if (Platform.OS !== 'web') {
+      initialLoadingBannerRef.current = null;
+      setIsLoadingScreenVisible(false);
+      setIsInitialLoadingReady(false);
+      diagnosticLog('native-loading-autostart', { level: nextBanner.level });
+      enqueueBanner(nextBanner);
+      return;
+    }
     initialLoadingBannerRef.current = nextBanner;
     setIsInitialLoadingReady(true);
-  }, []);
+  }, [enqueueBanner]);
 
   const handleInitialLoadingTap = useCallback(() => {
     if (
