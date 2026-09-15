@@ -3,8 +3,8 @@ name: Skia animated transforms
 description: Non-obvious React Native Skia and Reanimated constraints for the game’s native render path.
 ---
 
-For this Expo Go runtime, do not pass a Skia picture through a Reanimated shared value. On native Android/iOS, `SkiaPictureView` receives the picture through its `picture` prop; `setPicture()` is a web handle method and must not be called on the native ref. Native redraw is handled by the component update.
+For this Expo Go runtime, do not pass a Skia picture through a Reanimated shared value. On native Android/iOS, publish steady-state pictures with the internal `SkiaViewApi.setJsiProperty(nativeId, "picture", picture)` followed by `requestRedraw(nativeId)`; keep the React `picture` prop only as a mount/race fallback. `setPicture()` is a web handle method and must not be called on the native ref.
 
-**Why:** Shared matrix selectors crashed the Reanimated recorder, direct selectors produced invalid float errors, and the shared picture path produced an invalid `SkTextBlob` plus a React re-entrancy error in Expo Go. Calling the web-only `setPicture()` method on the native ref then crashed or silently dropped every frame.
+**Why:** Shared matrix selectors crashed the Reanimated recorder, direct selectors produced invalid float errors, and the shared picture path produced an invalid `SkTextBlob` plus a React re-entrancy error in Expo Go. Updating the native picture through React state on every frame could pin the game loop near 30 FPS; the native JSI property path avoids that render churn.
 
-**How to apply:** Keep the game-loop and allocation optimizations independent from renderer changes. Build pictures in the game loop, publish them through local React state to the native `picture` prop at a bounded cadence, and let `SkiaPictureView` perform its native JSI update/redraw.
+**How to apply:** Keep the game-loop and allocation optimizations independent from renderer changes. Build pictures in the game loop, publish them through the native view API at a bounded cadence, and explicitly request a redraw. If the native view is not mounted yet, use one React `picture` prop update and switch to JSI publication afterward.

@@ -2838,6 +2838,17 @@ type NativeSkiaImageSet = {
 
 type NativePicturePublisher = (game: Game, now: number) => void;
 
+type NativeSkiaViewApi = {
+  setJsiProperty: (nativeId: number, property: string, value: unknown) => void;
+  requestRedraw: (nativeId: number) => void;
+};
+
+const getNativeSkiaViewApi = () => (
+  (globalThis as typeof globalThis & {
+    SkiaViewApi?: NativeSkiaViewApi;
+  }).SkiaViewApi
+);
+
 const drawSkiaSpriteFrame = (
   canvas: any,
   image: any,
@@ -2851,6 +2862,28 @@ const drawSkiaSpriteFrame = (
   canvas.drawImageRect(
     image,
     Skia.XYWHRect(frame * sourceWidth, 0, sourceWidth, sourceHeight),
+    Skia.XYWHRect(
+      destination.x,
+      destination.y,
+      destination.width,
+      destination.height,
+    ),
+    paint,
+  );
+};
+
+const drawSkiaImage = (
+  canvas: any,
+  image: any,
+  sourceWidth: number,
+  sourceHeight: number,
+  destination: { x: number; y: number; width: number; height: number },
+  paint: any,
+) => {
+  if (!image) return;
+  canvas.drawImageRect(
+    image,
+    Skia.XYWHRect(0, 0, sourceWidth, sourceHeight),
     Skia.XYWHRect(
       destination.x,
       destination.y,
@@ -2949,10 +2982,17 @@ const buildNativeDynamicPicture = (
   const speedSize = pickupSize * 0.92;
   for (const speedBoost of game.speedBoosts) {
     if (speedBoost.collected || !images.speedBoost) continue;
-    canvas.drawImage(
+    drawSkiaImage(
+      canvas,
       images.speedBoost,
-      speedBoost.x - speedSize / 2,
-      speedBoost.y + pickupFloatOffset(game.frame, speedBoost.phase, game.cell) - speedSize / 2,
+      498,
+      465,
+      {
+        x: speedBoost.x - speedSize / 2,
+        y: speedBoost.y + pickupFloatOffset(game.frame, speedBoost.phase, game.cell) - speedSize / 2,
+        width: speedSize,
+        height: speedSize,
+      },
       imagePaint,
     );
   }
@@ -2989,10 +3029,17 @@ const buildNativeDynamicPicture = (
     if (thread.anchored && images.spiderWeb) {
       const size = game.cell * thread.webSizeCells * NON_PLAYER_RENDER_SCALE;
       imagePaint.setAlphaf(clamp(0.6 + thread.remaining * 0.08, 0.6, 0.88));
-      canvas.drawImage(
+      drawSkiaImage(
+        canvas,
         images.spiderWeb,
-        thread.target.x - size / 2,
-        thread.target.y - size / 2,
+        1024,
+        1024,
+        {
+          x: thread.target.x - size / 2,
+          y: thread.target.y - size / 2,
+          width: size,
+          height: size,
+        },
         imagePaint,
       );
     } else {
@@ -3057,10 +3104,17 @@ const buildNativeDynamicPicture = (
   if (images.projectile) {
     const projectileSize = sevenProjectileSize(game.cell);
     for (const projectile of game.projectiles) {
-      canvas.drawImage(
+      drawSkiaImage(
+        canvas,
         images.projectile,
-        projectile.x - projectileSize / 2,
-        projectile.y - projectileSize / 2,
+        1024,
+        1024,
+        {
+          x: projectile.x - projectileSize / 2,
+          y: projectile.y - projectileSize / 2,
+          width: projectileSize,
+          height: projectileSize,
+        },
         imagePaint,
       );
     }
@@ -3073,10 +3127,17 @@ const buildNativeDynamicPicture = (
       canvas.save();
       canvas.translate(missile.x, missile.y);
       canvas.rotate(missile.angle * 180 / Math.PI, 0, 0);
-      canvas.drawImage(
+      drawSkiaImage(
+        canvas,
         images.missile,
-        -missileSize / 2,
-        -missileSize / 2,
+        1024,
+        1024,
+        {
+          x: -missileSize / 2,
+          y: -missileSize / 2,
+          width: missileSize,
+          height: missileSize,
+        },
         imagePaint,
       );
       canvas.restore();
@@ -3127,7 +3188,19 @@ const buildNativeDynamicPicture = (
     canvas.rotate(motion.rotation * 180 / Math.PI, 0, 0);
     canvas.scale(motion.scale, motion.scale);
     imagePaint.setAlphaf(0.98);
-    canvas.drawImage(image, -size.width / 2, -size.height / 2, imagePaint);
+    drawSkiaImage(
+      canvas,
+      image,
+      512,
+      512,
+      {
+        x: -size.width / 2,
+        y: -size.height / 2,
+        width: size.width,
+        height: size.height,
+      },
+      imagePaint,
+    );
     canvas.restore();
   }
 
@@ -3192,10 +3265,17 @@ const buildNativeDynamicPicture = (
       0,
     );
     imagePaint.setAlphaf(0.98);
-    canvas.drawImage(
+    drawSkiaImage(
+      canvas,
       images.player,
-      -playerSize.width / 2,
-      -playerSize.height / 2,
+      1024,
+      1024,
+      {
+        x: -playerSize.width / 2,
+        y: -playerSize.height / 2,
+        width: playerSize.width,
+        height: playerSize.height,
+      },
       imagePaint,
     );
     canvas.restore();
@@ -3267,7 +3347,22 @@ const SkiaDynamicArena = React.memo(({
         return;
       }
       lastPicturePublishAtRef.current = now;
-      setPicture(buildNativeDynamicPicture(game, now, renderMargin, imageSet));
+      const nextPicture = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
+      const nativeId = pictureViewRef.current?.nativeId;
+      const nativeApi = getNativeSkiaViewApi();
+      if (
+        typeof nativeId === 'number'
+        && nativeApi?.setJsiProperty
+        && nativeApi.requestRedraw
+      ) {
+        nativeApi.setJsiProperty(nativeId, 'picture', nextPicture);
+        nativeApi.requestRedraw(nativeId);
+      } else {
+        // The first game frame can race the native view mount. Keep a single
+        // React-prop path only for that startup case; steady-state animation
+        // must not schedule a React render for every picture.
+        setPicture(nextPicture);
+      }
     };
     publisherRef.current = publisher;
     onReady();
