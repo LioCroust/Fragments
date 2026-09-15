@@ -1571,6 +1571,10 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
   };
 };
 
+const normalizedSpriteScale = (scale: number) => (
+  Number.isFinite(scale) ? Math.max(0.001, Math.abs(scale)) : 1
+);
+
 const shipSmokePosition = (enemy: Enemy, cell: number): Point => {
   const velocityLength = Math.hypot(enemy.vx, enemy.vy) || 1;
   const shipScale = enemy.isMini ? 0.5 : 1;
@@ -1740,8 +1744,9 @@ const enemyVisualRadius = (enemy: Enemy, cell: number) => {
 const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
-  const halfWidth = sprite.width * motion.scale * 0.5;
-  const halfHeight = sprite.height * motion.scale * 0.5;
+  const scale = normalizedSpriteScale(motion.scale);
+  const halfWidth = sprite.width * scale * 0.5;
+  const halfHeight = sprite.height * scale * 0.5;
   const step = Math.max(3, cell * 0.22);
   const cos = Math.cos(motion.rotation);
   const sin = Math.sin(motion.rotation);
@@ -1761,8 +1766,9 @@ const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) 
 const enemySpriteCorners = (enemy: Enemy, cell: number, x: number, y: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
-  const halfWidth = sprite.width * motion.scale * 0.5;
-  const halfHeight = sprite.height * motion.scale * 0.5;
+  const scale = normalizedSpriteScale(motion.scale);
+  const halfWidth = sprite.width * scale * 0.5;
+  const halfHeight = sprite.height * scale * 0.5;
   const cos = Math.cos(motion.rotation);
   const sin = Math.sin(motion.rotation);
   return [
@@ -1860,11 +1866,12 @@ const enemyCollisionCircles = (
 ): CollisionCircle[] => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
-  const halfWidth = sprite.width * motion.scale * 0.5;
-  const halfHeight = sprite.height * motion.scale * 0.5;
+  const scale = normalizedSpriteScale(motion.scale);
+  const halfWidth = sprite.width * scale * 0.5;
+  const halfHeight = sprite.height * scale * 0.5;
   const cos = Math.cos(motion.rotation);
   const sin = Math.sin(motion.rotation);
-  const radiusScale = Math.min(sprite.width, sprite.height) * motion.scale * 0.5;
+  const radiusScale = Math.min(sprite.width, sprite.height) * scale * 0.5;
 
   return enemyCollisionProfiles[enemy.kind].map(([localX, localY, radius]) => ({
     center: {
@@ -2471,7 +2478,7 @@ const EnemySprite = React.memo(
     const rotationDegrees = motion.rotation * (180 / Math.PI);
     return (
       <G
-        transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${motion.scale}) translate(${-enemy.x} ${-enemy.y})`}
+        transform={`translate(${enemy.x} ${centerY}) rotate(${rotationDegrees}) scale(${normalizedSpriteScale(motion.scale)}) translate(${-enemy.x} ${-enemy.y})`}
       >
         <SvgImage
           href={spriteFrames[enemy.kind][frame]}
@@ -3316,7 +3323,8 @@ const buildNativeDynamicPicture = (
     canvas.save();
     canvas.translate(enemy.x, enemy.y + motion.offsetY);
     canvas.rotate(motion.rotation * 180 / Math.PI, 0, 0);
-    canvas.scale(motion.scale, motion.scale);
+    const scale = normalizedSpriteScale(motion.scale);
+    canvas.scale(scale, scale);
     imagePaint.setAlphaf(0.98);
     drawSkiaImage(
       canvas,
@@ -3602,6 +3610,41 @@ const SkiaDynamicArena = React.memo(({
   && previous.publisherRef === next.publisherRef
   && previous.onReady === next.onReady
 ));
+
+const NativeSkiaAssetPreloader = ({ onReady }: { onReady: () => void }) => {
+  const playerImage = useSkiaImage(playerSource);
+  const diamondImage = useSkiaImage(diamondSpriteSource);
+  const speedBoostImage = useSkiaImage(speedBoostSource);
+  const coreReactorImage = useSkiaImage(coreReactorSpriteSource);
+  const projectileImage = useSkiaImage(sevenFireOrbSource);
+  const missileImage = useSkiaImage(playerMissileSource);
+  const spiderWebImage = useSkiaImage(spiderWebSource);
+  const shipSmokeImage = useSkiaImage(shipSmokeSpriteSource);
+  const shipImages = spriteFrames.SHIP.map((source) => useSkiaImage(source));
+  const dragonImages = spriteFrames.DRAGON.map((source) => useSkiaImage(source));
+  const sevenImages = spriteFrames.SEVEN.map((source) => useSkiaImage(source));
+  const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
+  const ready = [
+    playerImage,
+    diamondImage,
+    speedBoostImage,
+    coreReactorImage,
+    projectileImage,
+    missileImage,
+    spiderWebImage,
+    shipSmokeImage,
+    ...shipImages,
+    ...dragonImages,
+    ...sevenImages,
+    ...spiderImages,
+  ].every(Boolean);
+
+  useEffect(() => {
+    if (ready) onReady();
+  }, [onReady, ready]);
+
+  return null;
+};
 
 const NativeArenaDynamic = React.memo(({
   snapshot,
@@ -4073,7 +4116,13 @@ export default function GameScreen() {
   });
   const [fps, setFps] = useState(0);
   const [skiaReady, setSkiaReady] = useState(false);
-  const handleSkiaReady = useCallback(() => setSkiaReady(true), []);
+  const skiaReadyRef = useRef(false);
+  const pendingNativeRevealRef = useRef<Banner | null>(null);
+  const handleSkiaReady = useCallback(() => {
+    if (skiaReadyRef.current) return;
+    skiaReadyRef.current = true;
+    setSkiaReady(true);
+  }, []);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
@@ -4315,6 +4364,12 @@ export default function GameScreen() {
 
   const revealGameAfterInitialLoad = useCallback((nextBanner: Banner) => {
     if (initialLoadingRevealStartedRef.current) return;
+    if (Platform.OS !== 'web' && !skiaReadyRef.current) {
+      pendingNativeRevealRef.current = nextBanner;
+      setLoadingProgress(0.98);
+      diagnosticLog('native-loading-waiting-for-skia');
+      return;
+    }
     initialLoadingRevealStartedRef.current = true;
     setLoadingProgress(1);
     if (Platform.OS !== 'web') {
@@ -4328,6 +4383,13 @@ export default function GameScreen() {
     initialLoadingBannerRef.current = nextBanner;
     setIsInitialLoadingReady(true);
   }, [enqueueBanner]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !skiaReady || !pendingNativeRevealRef.current) return;
+    const nextBanner = pendingNativeRevealRef.current;
+    pendingNativeRevealRef.current = null;
+    revealGameAfterInitialLoad(nextBanner);
+  }, [revealGameAfterInitialLoad, skiaReady]);
 
   const handleInitialLoadingTap = useCallback(() => {
     if (
@@ -4561,6 +4623,7 @@ export default function GameScreen() {
     if (!allGameAssetsPromiseRef.current) {
       const imageModules = [
         ...Object.values(spriteFrames).flat(),
+        cuttingSpriteSource,
         diamondSource,
         playerSource,
         playerMissileSource,
@@ -4597,12 +4660,10 @@ export default function GameScreen() {
 
     const source = backgroundSourceForLevel(normalizedLevel);
     if (Platform.OS !== 'web') {
-      // Android renders the bundled source directly through SvgImage/Skia.
-      // Do not put the game into SECTOR_TRANSITION while waiting for an
-      // optional Image.getSize/prefetch callback: Expo Go can leave that
-      // callback pending for a local asset. The native renderer loads the
-      // background independently after the sector becomes active.
-      const promise = Promise.resolve();
+      // Warm the native bitmap cache before the sector becomes playable.
+      // Image.prefetch/getSize are used here because the active Android
+      // backdrop is a native Image, not a lazily decoded SVG/Skia image.
+      const promise = loadNativeImageAsset(source);
       sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
       return promise;
     }
@@ -4642,10 +4703,14 @@ export default function GameScreen() {
     onProgress?.(0.08);
     await preloadAllGameAssets();
     onProgress?.(0.76);
-    await loadWebBackground(normalizedLevel);
+    await preloadBackgroundWindow(normalizedLevel, INITIAL_BACKGROUND_PRELOAD_COUNT);
     onProgress?.(0.94);
     diagnosticLog('sector-assets-ready', { level: normalizedLevel });
-  }, [loadWebBackground, preloadAllGameAssets]);
+  }, [
+    loadWebBackground,
+    preloadAllGameAssets,
+    preloadBackgroundWindow,
+  ]);
 
   const releaseSectorBackground = useCallback((level: number, nextLevel: number) => {
     const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
@@ -7662,7 +7727,8 @@ export default function GameScreen() {
         context.save();
         context.translate(enemy.x, enemy.y + motion.offsetY);
         context.rotate(motion.rotation);
-        context.scale(motion.scale, motion.scale);
+        const scale = normalizedSpriteScale(motion.scale);
+        context.scale(scale, scale);
         drawEnemySpriteWithGlow(context, image, size, enemyGlowColor(enemy.kind));
         context.restore();
       });
@@ -8170,6 +8236,9 @@ export default function GameScreen() {
 
   return (
     <View style={styles.container}>
+      {Platform.OS !== 'web' && (
+        <NativeSkiaAssetPreloader onReady={handleSkiaReady} />
+      )}
       <View style={styles.cockpitHeader} pointerEvents="none">
         <RNImage
           source={cockpitInteriorSource}
@@ -8476,6 +8545,10 @@ export default function GameScreen() {
         bottomInset={Math.max(insets.bottom, 6) + 18}
       />
 
+      {Platform.OS !== 'web' && isLoadingScreenVisible && !skiaReady && (
+        <View style={styles.nativeLoadingCover} pointerEvents="none" />
+      )}
+
       {Platform.OS === 'web' && isLoadingScreenVisible && (
         <View
           style={styles.loadingScreen}
@@ -8529,6 +8602,11 @@ const styles = StyleSheet.create({
     zIndex: 100,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#000000',
+  },
+  nativeLoadingCover: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 100,
     backgroundColor: '#000000',
   },
   loadingArtworkFrame: {
