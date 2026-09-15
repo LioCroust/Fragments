@@ -2883,6 +2883,113 @@ const drawSkiaPolyline = (
   canvas.drawPath(pathBuilder.detach(), paint);
 };
 
+const drawSkiaFallbackDrone = (
+  canvas: any,
+  x: number,
+  y: number,
+  size: { width: number; height: number },
+  direction: Point,
+  fillPaint: any,
+  strokePaint: any,
+) => {
+  const angle = Math.atan2(direction.y, direction.x) + Math.PI / 2;
+  const halfWidth = size.width * 0.5;
+  const halfHeight = size.height * 0.5;
+  const pathBuilder = Skia.PathBuilder.Make();
+  pathBuilder.moveTo(0, -halfHeight);
+  pathBuilder.lineTo(halfWidth, halfHeight * 0.72);
+  pathBuilder.lineTo(0, halfHeight * 0.38);
+  pathBuilder.lineTo(-halfWidth, halfHeight * 0.72);
+  pathBuilder.close();
+  fillPaint.setColor(Skia.Color('#00f3ff'));
+  fillPaint.setAlphaf(0.22);
+  fillPaint.setStyle(SkiaPaintStyle.Fill);
+  strokePaint.setColor(Skia.Color('#fff3d6'));
+  strokePaint.setAlphaf(0.98);
+  strokePaint.setStyle(SkiaPaintStyle.Stroke);
+  strokePaint.setStrokeWidth(Math.max(2, size.width * 0.075));
+  canvas.save();
+  canvas.translate(x, y);
+  canvas.rotate(angle * 180 / Math.PI, 0, 0);
+  canvas.drawPath(pathBuilder.detach(), fillPaint);
+  const outlineBuilder = Skia.PathBuilder.Make();
+  outlineBuilder.moveTo(0, -halfHeight);
+  outlineBuilder.lineTo(halfWidth, halfHeight * 0.72);
+  outlineBuilder.lineTo(0, halfHeight * 0.38);
+  outlineBuilder.lineTo(-halfWidth, halfHeight * 0.72);
+  outlineBuilder.close();
+  canvas.drawPath(outlineBuilder.detach(), strokePaint);
+  canvas.drawLine(0, -halfHeight * 0.35, 0, halfHeight * 0.72, strokePaint);
+  canvas.restore();
+};
+
+const drawSkiaFallbackEnemy = (
+  canvas: any,
+  enemy: Enemy,
+  cell: number,
+  now: number,
+  fillPaint: any,
+  strokePaint: any,
+) => {
+  const size = enemyRenderSize(enemy.kind, cell, enemy.isMini);
+  const motion = enemyAnimationTransform(enemy, cell);
+  const color = enemy.kind === 'SHIP'
+    ? '#ffb02e'
+    : enemy.kind === 'DRAGON'
+      ? '#ff4d7d'
+      : enemy.kind === 'SEVEN'
+        ? '#b8ff4a'
+        : '#d56bff';
+  const radius = Math.max(5, Math.min(size.width, size.height) * 0.34);
+  fillPaint.setColor(Skia.Color(color));
+  fillPaint.setAlphaf(0.22);
+  fillPaint.setStyle(SkiaPaintStyle.Fill);
+  strokePaint.setColor(Skia.Color(color));
+  strokePaint.setAlphaf(0.95);
+  strokePaint.setStyle(SkiaPaintStyle.Stroke);
+  strokePaint.setStrokeWidth(Math.max(2, cell * 0.07));
+  canvas.save();
+  canvas.translate(enemy.x, enemy.y + motion.offsetY);
+  canvas.rotate(motion.rotation * 180 / Math.PI, 0, 0);
+  if (enemy.kind === 'SPIDER') {
+    canvas.drawCircle(0, 0, radius, fillPaint);
+    canvas.drawCircle(0, 0, radius, strokePaint);
+    for (let leg = 0; leg < 4; leg += 1) {
+      const legAngle = (leg * Math.PI) / 4;
+      canvas.drawLine(
+        Math.cos(legAngle) * radius * 0.35,
+        Math.sin(legAngle) * radius * 0.35,
+        Math.cos(legAngle) * radius * 1.7,
+        Math.sin(legAngle) * radius * 1.7,
+        strokePaint,
+      );
+      canvas.drawLine(
+        -Math.cos(legAngle) * radius * 0.35,
+        -Math.sin(legAngle) * radius * 0.35,
+        -Math.cos(legAngle) * radius * 1.7,
+        -Math.sin(legAngle) * radius * 1.7,
+        strokePaint,
+      );
+    }
+  } else {
+    const pathBuilder = Skia.PathBuilder.Make();
+    pathBuilder.moveTo(0, -radius * 1.3);
+    pathBuilder.lineTo(radius * 1.15, radius * 0.95);
+    pathBuilder.lineTo(0, radius * 0.52);
+    pathBuilder.lineTo(-radius * 1.15, radius * 0.95);
+    pathBuilder.close();
+    canvas.drawPath(pathBuilder.detach(), fillPaint);
+    const outlineBuilder = Skia.PathBuilder.Make();
+    outlineBuilder.moveTo(0, -radius * 1.3);
+    outlineBuilder.lineTo(radius * 1.15, radius * 0.95);
+    outlineBuilder.lineTo(0, radius * 0.52);
+    outlineBuilder.lineTo(-radius * 1.15, radius * 0.95);
+    outlineBuilder.close();
+    canvas.drawPath(outlineBuilder.detach(), strokePaint);
+  }
+  canvas.restore();
+};
+
 const buildNativeDynamicPicture = (
   game: Game,
   now: number,
@@ -3167,7 +3274,10 @@ const buildNativeDynamicPicture = (
     if (enemy.respawnAt > now) continue;
     const frame = enemyFrameIndex(enemy);
     const image = images.enemies[enemy.kind]?.[frame];
-    if (!image) continue;
+    if (!image) {
+      drawSkiaFallbackEnemy(canvas, enemy, game.cell, now, fillPaint, strokePaint);
+      continue;
+    }
     const size = enemyRenderSize(enemy.kind, game.cell, enemy.isMini);
     const motion = enemyAnimationTransform(enemy, game.cell);
     canvas.save();
@@ -3266,6 +3376,16 @@ const buildNativeDynamicPicture = (
       imagePaint,
     );
     canvas.restore();
+  } else {
+    drawSkiaFallbackDrone(
+      canvas,
+      game.player.x,
+      game.player.y,
+      playerSize,
+      currentDirection,
+      fillPaint,
+      strokePaint,
+    );
   }
 
   canvas.restore();
@@ -3325,7 +3445,6 @@ const SkiaDynamicArena = React.memo(({
       ...sevenImages,
       ...spiderImages,
     ].every(Boolean);
-    if (!allImagesReady) return undefined;
     const publisher: NativePicturePublisher = (game, now) => {
       if (
         lastPicturePublishAtRef.current !== 0
@@ -3352,7 +3471,7 @@ const SkiaDynamicArena = React.memo(({
       }
     };
     publisherRef.current = publisher;
-    onReady();
+    if (allImagesReady) onReady();
     return () => {
       if (publisherRef.current === publisher) publisherRef.current = null;
     };
@@ -4386,12 +4505,12 @@ export default function GameScreen() {
 
     const source = backgroundSourceForLevel(normalizedLevel);
     if (Platform.OS !== 'web') {
-      const promise = loadNativeImageAsset(source).catch((error: unknown) => {
-        diagnosticLog('sector-background-preload-failed', {
-          level: normalizedLevel,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+      // Android renders the bundled source directly through SvgImage/Skia.
+      // Do not put the game into SECTOR_TRANSITION while waiting for an
+      // optional Image.getSize/prefetch callback: Expo Go can leave that
+      // callback pending for a local asset. The native renderer loads the
+      // background independently after the sector becomes active.
+      const promise = Promise.resolve();
       sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
       return promise;
     }
@@ -7785,6 +7904,7 @@ export default function GameScreen() {
         viewBox={`0 0 ${snapshot.width} ${snapshot.height}`}
         preserveAspectRatio="none"
         style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}
+        pointerEvents="none"
       >
         <NativeArenaStatic
           width={snapshot.width}
