@@ -654,6 +654,39 @@ type Snapshot = {
   invincibleUntil: number;
 };
 
+const snapshotFromGame = (game: Game): Snapshot => ({
+  width: game.width,
+  height: game.height,
+  cell: game.cell,
+  rows: game.rows,
+  level: game.level,
+  frame: game.frame,
+  trail: game.trail,
+  protectedTrails: game.protectedTrails,
+  player: { ...game.player },
+  direction: game.trail.length > 0 ? game.cutDir : game.facingDir,
+  enemies: game.enemies.map((enemy) => ({ ...enemy })),
+  diamonds: game.diamonds.map((diamond) => ({ ...diamond })),
+  speedBoosts: game.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
+  bombs: game.bombs.map((bomb) => ({ ...bomb })),
+  projectiles: game.projectiles.map((projectile) => ({ ...projectile })),
+  missiles: game.missiles.map((missile) => ({ ...missile })),
+  spiderThreads: game.spiderThreads.map((thread) => ({
+    ...thread,
+    start: { ...thread.start },
+    end: { ...thread.end },
+    target: { ...thread.target },
+  })),
+  particles: game.particles.slice(-120),
+  fusionSparks: game.fusionSparks.map((spark) => ({ ...spark })),
+  fusionHead: null,
+  smokePuffs: game.smokePuffs.map((puff) => ({ ...puff })),
+  claimedPolygons: game.claimedPolygons,
+  pendingCapturePolygons: game.pendingCapturePolygons,
+  scanY: game.scanY,
+  invincibleUntil: game.invincibleUntil,
+});
+
 type TutorialDirection = 'up' | 'down' | 'left' | 'right';
 type TutorialSwipeCounts = Record<TutorialDirection, number>;
 
@@ -7908,8 +7941,10 @@ export default function GameScreen() {
   ]);
 
   const renderNativeArena = () => {
-    if (Platform.OS === 'web' || !nativeSnapshot) return null;
-    const snapshot = nativeSnapshot;
+    if (Platform.OS === 'web') return null;
+    const snapshot = nativeSnapshot
+      ?? (gameRef.current.initialized ? snapshotFromGame(gameRef.current) : null);
+    if (!snapshot) return null;
     return (
       <Svg
         width={snapshot.width}
@@ -7931,8 +7966,10 @@ export default function GameScreen() {
   };
 
   const renderNativeDynamicArena = () => {
-    if (Platform.OS === 'web' || !nativeSnapshot) return null;
-    const snapshot = nativeSnapshot;
+    if (Platform.OS === 'web') return null;
+    const snapshot = nativeSnapshot
+      ?? (gameRef.current.initialized ? snapshotFromGame(gameRef.current) : null);
+    if (!snapshot) return null;
     const renderMargin = Math.max(snapshot.cell * 2.2, 28);
     const expandedWidth = snapshot.width + renderMargin * 2;
     const expandedHeight = snapshot.height + renderMargin * 2;
