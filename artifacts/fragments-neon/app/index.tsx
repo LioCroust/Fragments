@@ -9330,6 +9330,7 @@ const styles = StyleSheet.create({
     gap: 5,
     marginBottom: 7,
     paddingHorizontal: 6,
+    transform: [{ translateY: 10 }],
   },
   signalDot: {
     width: 5,
@@ -9432,6 +9433,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginTop: 3,
   },
+  scoreMeta: {
+    marginTop: -4,
+    transform: [{ translateY: -6 }],
+  },
   bossSectorValue: {
     fontFamily: 'Inter_700Bold',
     fontSize: 12,
@@ -9495,7 +9500,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
-    transform: [{ translateX: -7 }, { translateY: -45 }],
+    transform: [{ translateX: -7 }, { translateY: -63 }],
   },
   zoneCard: {
     width: '56%',
