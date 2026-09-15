@@ -922,6 +922,44 @@ const distanceBetweenSegments = (
   );
 };
 
+const pointTouchesPolylineWithin = (
+  point: Point,
+  trail: Point[],
+  maxDistance: number,
+) => {
+  for (let index = 1; index < trail.length; index += 1) {
+    if (
+      pointSegmentMayBeWithin(point, trail[index - 1], trail[index], maxDistance)
+      && distanceToSegment(point, trail[index - 1], trail[index]) <= maxDistance
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const movingSegmentTouchesPolylineWithin = (
+  from: Point,
+  to: Point,
+  trail: Point[],
+  maxDistance: number,
+) => {
+  for (let index = 1; index < trail.length; index += 1) {
+    if (
+      distanceBetweenSegments(
+        from,
+        to,
+        trail[index - 1],
+        trail[index],
+        maxDistance,
+      ) <= maxDistance
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const spiderThreadIsActive = (thread: SpiderThread) => (
   thread.anchored && thread.remaining > 0
 );
@@ -1928,9 +1966,11 @@ const bombTouchesSegment = (
 };
 
 const bombTouchesTrail = (bomb: Bomb, cell: number, trail: Point[]) => (
-  trail.slice(1).some((trailPoint, index) => (
-    bombTouchesSegment(bomb, cell, trail[index], trailPoint)
-  ))
+  pointTouchesPolylineWithin(
+    bomb,
+    trail,
+    bombRadius(cell) + PERIMETER_STROKE_WIDTH * 0.5,
+  )
 );
 
 const sevenProjectileRadius = (cell: number) => cell * SEVEN_PROJECTILE_RADIUS_CELLS;
@@ -1988,15 +2028,7 @@ const sevenProjectileTouchesBlueBoundary = (
     return true;
   }
   return protectedTrails.some((trail) => (
-    trail.slice(1).some((trailPoint, index) => (
-      distanceBetweenSegments(
-        from,
-        to,
-        trail[index],
-        trailPoint,
-        collisionDistance,
-      ) <= collisionDistance
-    ))
+    movingSegmentTouchesPolylineWithin(from, to, trail, collisionDistance)
   ));
 };
 
@@ -6418,19 +6450,16 @@ export default function GameScreen() {
         );
         const trailTouchesEnemyBody = (trail: Point[], x: number, y: number) => {
           if (trail.length < 2) return false;
-          const collisionCircles = enemyCollisionCircles(enemy, g.cell, x, y);
           const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
+          const broadRadius = enemyVisualRadius(enemy, g.cell) + trailStrokeRadius;
+          if (!pointTouchesPolylineWithin({ x, y }, trail, broadRadius)) return false;
+          const collisionCircles = enemyCollisionCircles(enemy, g.cell, x, y);
           return collisionCircles.some(({ center, radius }) => (
-            trail.slice(1).some((trailPoint, index) => (
-              pointSegmentMayBeWithin(
-                center,
-                trail[index],
-                trailPoint,
-                radius + trailStrokeRadius,
-              )
-              && distanceToSegment(center, trail[index], trailPoint)
-                <= radius + trailStrokeRadius
-            ))
+            pointTouchesPolylineWithin(
+              center,
+              trail,
+              radius + trailStrokeRadius,
+            )
           ));
         };
         const enemyTouchesProtectedBoundary = (x: number, y: number) => (
@@ -6469,21 +6498,35 @@ export default function GameScreen() {
           toY: number,
         ) => {
           if (trail.length < 2) return false;
+          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
+          const broadRadius = enemyVisualRadius(enemy, g.cell) + trailStrokeRadius;
+          if (
+            !movingSegmentTouchesPolylineWithin(
+              { x: fromX, y: fromY },
+              { x: toX, y: toY },
+              trail,
+              broadRadius,
+            )
+          ) {
+            return false;
+          }
           const fromCircles = enemyCollisionCircles(enemy, g.cell, fromX, fromY);
           const toCircles = enemyCollisionCircles(enemy, g.cell, toX, toY);
-          const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
-          return fromCircles.some((fromCircle, index) => {
+          for (let circleIndex = 0; circleIndex < fromCircles.length; circleIndex += 1) {
+            const fromCircle = fromCircles[circleIndex];
             const toCircle = toCircles[index];
-            return trail.slice(1).some((trailPoint, trailIndex) => (
-              distanceBetweenSegments(
+            if (
+              movingSegmentTouchesPolylineWithin(
                 fromCircle.center,
                 toCircle.center,
-                trail[trailIndex],
-                trailPoint,
+                trail,
                 fromCircle.radius + trailStrokeRadius,
-              ) <= fromCircle.radius + trailStrokeRadius
-            ));
-          });
+              )
+            ) {
+              return true;
+            }
+          }
+          return false;
         };
         const enemySweepTouchesProtectedTrail = (
           fromX: number,
