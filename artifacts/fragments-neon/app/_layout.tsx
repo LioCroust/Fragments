@@ -78,7 +78,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    void SystemUI.setBackgroundColorAsync('#000000').catch((error: unknown) => {
+    void SystemUI.setBackgroundColorAsync('transparent').catch((error: unknown) => {
       console.error('[Fragments][startup] system-ui-background-failed', error);
     });
     try {
@@ -95,9 +95,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <NativeStatusBar
         barStyle="light-content"
-        backgroundColor="#000000"
-        translucent={false}
-        hidden={Platform.OS === 'android'}
+        backgroundColor="transparent"
+        translucent
+        hidden={false}
       />
       <NavigationBar style="dark" hidden />
       <ErrorBoundary
