@@ -8,11 +8,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  StatusBar as NativeStatusBar,
   Text,
   View,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, {
   Circle,
@@ -4180,6 +4180,7 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const canvasRef = useRef<any>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const gameRef = useRef<Game>({
@@ -8468,8 +8469,11 @@ export default function GameScreen() {
       <View style={styles.cockpitHeader} pointerEvents="none">
         <RNImage
           source={cockpitInteriorSource}
-          style={styles.cockpitInterior}
-          resizeMode="cover"
+          style={[
+            styles.cockpitInterior,
+            { top: -Math.round(viewportWidth * 0.16) },
+          ]}
+          resizeMode="stretch"
           accessibilityLabel="Intérieur du cockpit Prism Warbird vu depuis le siège du pilote"
         />
         <View style={styles.cockpitShade} />
@@ -9290,9 +9294,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#050509',
   },
   cockpitInterior: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    left: 0,
+    top: 0,
     width: '100%',
-    height: '100%',
+    aspectRatio: 1,
     opacity: 0.9,
   },
   cockpitShade: {
