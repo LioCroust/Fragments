@@ -570,3 +570,129 @@ mtime_ms = 1789476222770
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/a7c290f8-da8b-4f30-af0a-4f2e724d15a2/92c6b4f5-43ba-4770-beec-d5e2788cc471"
 storage_version_token = "1789476404110840"
 content_type = "image/png"
+
+[[outputs]]
+id = "C_ZdbgdyivmmD8eBJAo41"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variants-contact-sheet.png"
+type = "image"
+title = "Planche — 8 variantes sans arène"
+description = "Planche de comparaison des huit concepts portrait."
+logical_id = "6a000344-57f0-45f9-9688-c8f555b90650"
+content_hash = "sha256:0699dfb73e0ed5cf08b57930bcf3c06a5883e05929969e5332b297dbfea98998"
+size = 1536409
+mtime_ms = 1789476705603
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/6a000344-57f0-45f9-9688-c8f555b90650/a54937cb-e8a4-4fcf-8cce-e39eef48fe95"
+storage_version_token = "1789476762074264"
+content_type = "image/png"
+
+[[outputs]]
+id = "DJeA7IBAVGNXq1hrTRkL5"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-01-1080x1920.png"
+type = "image"
+title = "Variante 01 — axe vertical frontal"
+description = "Concept sans arène, format 1080×1920, variante 01."
+logical_id = "37d2464f-4fea-4284-ad9c-dc81cda16be5"
+content_hash = "sha256:33ec5d4d114f72bbcae86913d96664618c3147e2fb44de4f14ad93e4174619a8"
+size = 3234335
+mtime_ms = 1789476679023
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/37d2464f-4fea-4284-ad9c-dc81cda16be5/fbe5e13e-0c08-4dd2-88a4-530363e43573"
+storage_version_token = "1789476762747832"
+content_type = "image/png"
+
+[[outputs]]
+id = "ERx4Ky19H7Me3A4c0-S_n"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-02-1080x1920.png"
+type = "image"
+title = "Variante 02 — virage diagonal"
+description = "Concept sans arène, format 1080×1920, variante 02."
+logical_id = "55fd96a5-18de-4dd7-9c00-e534aa0388f8"
+content_hash = "sha256:aa628a24d08689731d0d7063e046b08ba16b538535630656c6ca108ab679a38b"
+size = 3234465
+mtime_ms = 1789476682443
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/55fd96a5-18de-4dd7-9c00-e534aa0388f8/25ebaa02-3f9c-4107-9e2a-f9026997275f"
+storage_version_token = "1789476763612571"
+content_type = "image/png"
+
+[[outputs]]
+id = "gL_mPLJkFppn3fWbE1qio"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-03-1080x1920.png"
+type = "image"
+title = "Variante 03 — attaque rapprochée"
+description = "Concept sans arène, format 1080×1920, variante 03."
+logical_id = "5958336b-b5dc-46eb-a917-ffd734f2a86b"
+content_hash = "sha256:ec02b7c30e7e080ac0edc7bf07f6f5cc27e5db822f6c9e5a71193e47b75b2086"
+size = 3257966
+mtime_ms = 1789476686091
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/5958336b-b5dc-46eb-a917-ffd734f2a86b/c0f279b4-192b-4905-9917-ca451840de97"
+storage_version_token = "1789476764255853"
+content_type = "image/png"
+
+[[outputs]]
+id = "hpUPZUm7XU1uzDnU_MxLi"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-04-1080x1920.png"
+type = "image"
+title = "Variante 04 — course latérale"
+description = "Concept sans arène, format 1080×1920, variante 04."
+logical_id = "28dd18f6-6bab-4b72-8568-7764a41c9b3b"
+content_hash = "sha256:e1b4f2501cf147484c643713849e8def93e4a5c005d946c5cab080ffe82700f2"
+size = 3214703
+mtime_ms = 1789476689847
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/28dd18f6-6bab-4b72-8568-7764a41c9b3b/3cb0716f-bce4-4f49-b84e-95472ccb1d28"
+storage_version_token = "1789476764894954"
+content_type = "image/png"
+
+[[outputs]]
+id = "5EeM5OfpqLZegQqjpOR5j"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-05-1080x1920.png"
+type = "image"
+title = "Variante 05 — poursuite ouverte"
+description = "Concept sans arène, format 1080×1920, variante 05."
+logical_id = "a5d77d75-ee14-4109-85d4-d7d4734f8105"
+content_hash = "sha256:d0246af5dd36b64aa7ce474e96abb2457d399659e37535921927a63a4f4ae65a"
+size = 3234533
+mtime_ms = 1789476693383
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/a5d77d75-ee14-4109-85d4-d7d4734f8105/c4e2be1a-c100-4bba-a3d9-c4a15ae0faf5"
+storage_version_token = "1789476765505559"
+content_type = "image/png"
+
+[[outputs]]
+id = "pTd4xbpUkY3a7qxMpddZW"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-06-1080x1920.png"
+type = "image"
+title = "Variante 06 — vitesse diagonale"
+description = "Concept sans arène, format 1080×1920, variante 06."
+logical_id = "f67687e6-ae50-4177-a861-81becd9369f4"
+content_hash = "sha256:97089baf4b89f4d2e4d2fe74c70d0743aea019356d3045770d43f24383d9f735"
+size = 2959787
+mtime_ms = 1789476697063
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/f67687e6-ae50-4177-a861-81becd9369f4/6892174c-dcee-4201-aece-4f6970b1b213"
+storage_version_token = "1789476766132566"
+content_type = "image/png"
+
+[[outputs]]
+id = "77KAU8TFUzCF0M0F6M8OA"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-07-1080x1920.png"
+type = "image"
+title = "Variante 07 — danger frontal"
+description = "Concept sans arène, format 1080×1920, variante 07."
+logical_id = "9e36a70f-367a-4bc6-89c9-f4b3c9325103"
+content_hash = "sha256:347a76298a5f0e8f64345c1ae0e418b7f1f3971a5c8af6d6e5aa3cd796fb394a"
+size = 3232442
+mtime_ms = 1789476700379
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/9e36a70f-367a-4bc6-89c9-f4b3c9325103/0d33d2a2-8a84-4b62-95a8-25714b325a6f"
+storage_version_token = "1789476766728297"
+content_type = "image/png"
+
+[[outputs]]
+id = "z1cXPyVEOThwJbsWEXOdr"
+uri = "file://attached_assets/generated_images/fragments-neon-home-open-space-variant-08-1080x1920.png"
+type = "image"
+title = "Variante 08 — gros plan d’esquive"
+description = "Concept sans arène, format 1080×1920, variante 08."
+logical_id = "d3e4e8a1-b99e-43e3-8255-8d886833c62d"
+content_hash = "sha256:fbfe90cb1382154ed60147847f56a1c6ef26a16f75d2d1a70a6401abd7f242ae"
+size = 3038978
+mtime_ms = 1789476704087
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/d3e4e8a1-b99e-43e3-8255-8d886833c62d/8d8de330-5f0c-4a42-a1a5-b7faa3a18c70"
+storage_version_token = "1789476767329982"
+content_type = "image/png"
