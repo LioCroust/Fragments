@@ -8459,7 +8459,20 @@ export default function GameScreen() {
   const shieldSegments = Array.from({ length: 3 });
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        Platform.OS !== 'web'
+          ? {
+              position: 'absolute',
+              top: -insets.top,
+              right: 0,
+              bottom: -insets.bottom,
+              left: 0,
+            }
+          : null,
+      ]}
+    >
       {Platform.OS !== 'web' && (
         <NativeSkiaAssetPreloader onReady={handleSkiaReady} />
       )}
@@ -8645,7 +8658,15 @@ export default function GameScreen() {
         />
       )}
 
-      <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
+      <View
+        style={[
+          styles.hud,
+          {
+            paddingTop: Platform.OS === 'web' ? Math.max(insets.top, 12) : 12,
+          },
+        ]}
+        pointerEvents="none"
+      >
         <View style={styles.hudSignalRail}>
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.lime }]} />
@@ -8772,7 +8793,7 @@ export default function GameScreen() {
         onSkipTutorial={() => teleportToSector(
           lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : 1,
         )}
-        bottomInset={Math.max(insets.bottom, 6) + 18}
+        bottomInset={Platform.OS === 'web' ? Math.max(insets.bottom, 6) + 18 : 18}
       />
 
       {Platform.OS !== 'web' && isLoadingScreenVisible && !skiaReady && (
