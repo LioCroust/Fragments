@@ -360,3 +360,17 @@ mtime_ms = 1789475130491
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/6cac0f98-cfe7-4dc7-b3bb-f9b57335bd68/5d790741-4f7b-420d-92a2-d9f1af1aea59"
 storage_version_token = "1789475136377168"
 content_type = "image/png"
+
+[[outputs]]
+id = "C_rlF1aRXDqXaVpHOPYnl"
+uri = "file://attached_assets/generated_images/fragments-neon-home-portrait-concept-02.png"
+type = "image"
+title = "Concept accueil portrait 02 — arène fidèle"
+description = "Seconde proposition plus lumineuse et plus proche du jeu : arène rectangulaire cyan, drone Prism Arrow vertical, trait de découpe orange-rouge continu et ennemis lisibles. L’image actuelle n’est pas remplacée."
+logical_id = "ca921d91-613b-44ae-8831-56ac4de59f44"
+content_hash = "sha256:baab6e150009eea0bcc21e3e584cb563fa23b434df1569409bca09710db475e4"
+size = 1600104
+mtime_ms = 1789475249227
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/ca921d91-613b-44ae-8831-56ac4de59f44/a27f520b-ba74-4272-9310-1c41acdafdb1"
+storage_version_token = "1789475253302980"
+content_type = "image/png"
