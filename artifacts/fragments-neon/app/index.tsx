@@ -317,6 +317,7 @@ type Enemy = Point & {
   edgeTurnTimer: number;
   edgeDirectionX: number;
   edgeDirectionY: number;
+  bounceCooldown?: number;
   visualRotation?: number;
   sevenFireTimer?: number;
   spiderThreadTimer?: number;
@@ -4946,6 +4947,7 @@ export default function GameScreen() {
         edgeTurnTimer: 0,
         edgeDirectionX: 0,
         edgeDirectionY: 0,
+        bounceCooldown: 0,
         isBoss: false,
         isMini: true,
         splitLevel: undefined,
@@ -5622,6 +5624,7 @@ export default function GameScreen() {
         edgeTurnTimer: 0,
         edgeDirectionX: 0,
         edgeDirectionY: 0,
+        bounceCooldown: 0,
       };
       const childRadius = enemyVisualRadius(childTemplate, g.cell);
 
@@ -5685,7 +5688,12 @@ export default function GameScreen() {
         || suppressTutorialDestructionBanner
       );
       const colors = ['#ffffff', '#00f3ff', '#ff5500', '#ff2bb5', '#b8ff4a'];
-      for (let i = 0; i < 88; i += 1) {
+      // Keep missile bursts below the Android Skia frame-pressure threshold.
+      // A split can be followed by another burst when a mini ship is
+      // destroyed, so both paths need to remain cheap enough to recover to
+      // the device's full refresh rate after the particles expire.
+      const particleCount = splitOnMissile ? 32 : 44;
+      for (let i = 0; i < particleCount; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 45 + Math.random() * 260;
         const life = 0.55 + Math.random() * 0.85;
@@ -5962,6 +5970,7 @@ export default function GameScreen() {
           ) - dt;
         }
         enemy.edgeTurnTimer = Math.max(0, enemy.edgeTurnTimer - dt);
+        enemy.bounceCooldown = Math.max(0, (enemy.bounceCooldown ?? 0) - dt);
 
         // Do not add a safety rectangle around the sprite here. The exact
         // transformed footprint below is the collision boundary.
@@ -6126,6 +6135,7 @@ export default function GameScreen() {
           enemy.vy = Math.sin(angle) * enemy.speed * 0.82;
           enemy.edgeTurnTimer = 0;
           enemy.routePhase += Math.PI * (0.55 + Math.random() * 0.7);
+          enemy.bounceCooldown = 0.36;
         };
         if (!fullyEnclosedAt(enemy.x, enemy.y) && !enemyFitsAt(enemy.x, enemy.y)) {
           // Protected red trails remain solid barriers, but never become a
@@ -6286,7 +6296,11 @@ export default function GameScreen() {
           enemy.vx = enemy.edgeDirectionX * enemy.speed * 0.78;
           enemy.vy = enemy.edgeDirectionY * enemy.speed * 0.78;
         };
-        if (enemy.kind === 'SHIP' && !canMoveFull) {
+        if (
+          enemy.kind === 'SHIP'
+          && !canMoveFull
+          && (enemy.bounceCooldown ?? 0) <= 0
+        ) {
           bounceShipRandomly();
         } else if (canMoveFull) {
           enemy.x = nextX;
