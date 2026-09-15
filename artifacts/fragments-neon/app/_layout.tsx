@@ -38,6 +38,9 @@ function RootLayoutNav() {
     });
     if (Platform.OS !== 'android') return undefined;
 
+    NativeStatusBar.setHidden(true, 'none');
+    NativeStatusBar.setTranslucent(true);
+
     // The game owns horizontal swipes. Consume Android's system back action
     // while this single-screen game is mounted so an edge swipe cannot leave
     // the game or navigate to the previous screen.

@@ -4180,10 +4180,6 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
-  const androidFullscreenOffset =
-    Platform.OS === 'android'
-      ? Math.max(NativeStatusBar.currentHeight ?? 0, insets.top, 54)
-      : 0;
   const canvasRef = useRef<any>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const gameRef = useRef<Game>({
@@ -8465,20 +8461,7 @@ export default function GameScreen() {
   const shieldSegments = Array.from({ length: 3 });
 
   return (
-    <View
-      style={[
-        styles.container,
-        Platform.OS === 'android'
-          ? {
-              position: 'absolute',
-              top: -androidFullscreenOffset,
-              right: 0,
-              bottom: -insets.bottom,
-              left: 0,
-            }
-          : null,
-      ]}
-    >
+    <View style={styles.container}>
       {Platform.OS !== 'web' && (
         <NativeSkiaAssetPreloader onReady={handleSkiaReady} />
       )}
@@ -8664,15 +8647,7 @@ export default function GameScreen() {
         />
       )}
 
-      <View
-        style={[
-          styles.hud,
-          {
-            paddingTop: Platform.OS === 'android' ? 12 : Math.max(insets.top, 12),
-          },
-        ]}
-        pointerEvents="none"
-      >
+      <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.lime }]} />
