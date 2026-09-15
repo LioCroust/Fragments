@@ -388,3 +388,31 @@ mtime_ms = 1789475407779
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/93f80e0c-df08-48cb-bc91-bdb1c6ea0f08/852aa265-f4c8-4710-9b30-b5ffaff98c46"
 storage_version_token = "1789475428097862"
 content_type = "image/png"
+
+[[outputs]]
+id = "qBVpQem-19scEogALp0gq"
+uri = "file://attached_assets/generated_images/fragments-neon-home-3d-secured-zones-concept.png"
+type = "image"
+title = "Concept accueil 3D — vitesse et zones sécurisées"
+description = "Proposition portrait lumineuse avec arène rectangulaire en perspective, zones sécurisées cyan translucides, trait de découpe orange, drone Prism Arrow en accélération et monstres agressifs."
+logical_id = "81d15fe9-350b-4701-950c-b9a3bd601f4d"
+content_hash = "sha256:6269c58a7d97f1b59456fb2105115c8a7d352f2ac58f3600c1304ba0bbb03416"
+size = 1845048
+mtime_ms = 1789475562379
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/81d15fe9-350b-4701-950c-b9a3bd601f4d/015d77a1-1c74-4bd1-b62e-16e6abc2769d"
+storage_version_token = "1789475607655901"
+content_type = "image/png"
+
+[[outputs]]
+id = "9N0Q763sRXBSAKd_6B0Q_"
+uri = "file://attached_assets/generated_images/fragments-neon-home-3d-secured-zones-portrait.png"
+type = "image"
+title = "Concept portrait final — vitesse, danger et zones sécurisées"
+description = "Version réellement verticale du concept : drone Prism Arrow en accélération, trait de découpe orange, arène rectangulaire cyan, zones sécurisées lumineuses et monstres agressifs."
+logical_id = "2b1defbc-69fa-437c-b9c9-a8b4dd874850"
+content_hash = "sha256:e29f7aa946995ff81b34f059538859760b891dbf226caf28b1e6a86469fab65d"
+size = 1771288
+mtime_ms = 1789475644199
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/2b1defbc-69fa-437c-b9c9-a8b4dd874850/4e23ce44-d3ff-4bfe-8987-3290c121b835"
+storage_version_token = "1789475653769793"
+content_type = "image/png"
