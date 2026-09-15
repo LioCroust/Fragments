@@ -579,7 +579,7 @@ type Game = {
   frame: number;
   trailScoreAccumulator: number;
   initialized: boolean;
-  status: 'PLAYING' | 'FUSING' | 'RESPAWN' | 'SECTOR_TRANSITION';
+  status: 'PLAYING' | 'FUSING' | 'RESPAWN' | 'GAME_OVER' | 'SECTOR_TRANSITION';
   respawnAt: number;
   invincibleUntil: number;
   speedBoostUntil: number;
@@ -4248,6 +4248,7 @@ export default function GameScreen() {
     setSkiaReady(true);
   }, []);
   const [banner, setBanner] = useState<Banner | null>(null);
+  const [gameOverSector, setGameOverSector] = useState<number | null>(null);
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
 
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
@@ -4295,6 +4296,8 @@ export default function GameScreen() {
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const nativeBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameOverSectorRef = useRef<number | null>(null);
+  const resumeFromGameOverRef = useRef<() => void>(() => undefined);
   const initialLoadingRevealStartedRef = useRef(false);
   const initialLoadingTapHandledRef = useRef(false);
   const initialLoadingBannerRef = useRef<Banner | null>(null);
@@ -5182,6 +5185,37 @@ export default function GameScreen() {
     }
   }, [enqueueBanner, rememberLastPlayedSector]);
 
+  const resumeFromGameOver = useCallback(() => {
+    const game = gameRef.current;
+    const resumeLevel = gameOverSectorRef.current;
+    if (
+      resumeLevel === null
+      || !game.initialized
+      || game.status !== 'GAME_OVER'
+    ) {
+      return;
+    }
+
+    gameOverSectorRef.current = null;
+    setGameOverSector(null);
+    bannerSequenceRef.current += 1;
+    bannerQueueRef.current = [];
+    if (nativeBannerTimerRef.current) {
+      clearTimeout(nativeBannerTimerRef.current);
+      nativeBannerTimerRef.current = null;
+    }
+    bannerAnimatingRef.current = false;
+    bannerTranslateX.stopAnimation();
+    setBanner(null);
+    resetGame(false, false, resumeLevel);
+    enqueueBanner({
+      kind: 'SECTOR_START',
+      level: resumeLevel,
+    });
+  }, [bannerTranslateX, enqueueBanner, resetGame]);
+
+  resumeFromGameOverRef.current = resumeFromGameOver;
+
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     const fallback = setTimeout(() => {
@@ -5630,6 +5664,10 @@ export default function GameScreen() {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
         audioUnlockedRef.current = true;
+        if (gameOverSectorRef.current !== null) {
+          resumeFromGameOverRef.current();
+          return;
+        }
         tutorialSwipeGestureDirectionRef.current = null;
       },
       onPanResponderMove: (_, gesture) => {
@@ -7134,18 +7172,17 @@ export default function GameScreen() {
             ? tutorialStepRef.current
             : null;
           if (g.shields <= 0) {
-            enqueueBanner({ kind: 'GAME_OVER', score: g.score });
+            const resumeLevel = Math.round(clamp(
+              lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : g.level,
+              1,
+              MAX_LEVEL,
+            ));
+            gameOverSectorRef.current = resumeLevel;
+            setGameOverSector(resumeLevel);
+            g.status = 'GAME_OVER';
+            g.inputDir = ZERO;
+            g.hasMoveCommand = false;
             clearSavedGameProgress();
-            if (tutorialStepToRestart) {
-              restartTutorialStep(tutorialStepToRestart);
-            } else {
-              const resumeLevel = Math.round(clamp(
-                lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : g.level,
-                1,
-                MAX_LEVEL,
-              ));
-              resetGame(false, false, resumeLevel);
-            }
           } else if (tutorialStepToRestart) {
             restartTutorialStep(tutorialStepToRestart);
           } else {
@@ -7154,6 +7191,8 @@ export default function GameScreen() {
         }
         return;
       }
+
+      if (g.status === 'GAME_OVER') return;
 
       if (g.status === 'SECTOR_TRANSITION') return;
 
@@ -8784,6 +8823,26 @@ export default function GameScreen() {
         bottomInset={Math.max(insets.bottom, 6) + 18}
       />
 
+      {gameOverSector !== null && (
+        <Pressable
+          style={styles.gameOverOverlay}
+          onPress={resumeFromGameOver}
+          accessibilityRole="button"
+          accessibilityLabel={`Reprendre au secteur ${gameOverSector}`}
+          testID="game-over-resume"
+        >
+          <View style={styles.gameOverPanel}>
+            <View style={styles.gameOverRule} />
+            <Text style={styles.gameOverTitle}>GAME OVER</Text>
+            <Text style={styles.gameOverSubtitle}>BOUCLIERS ÉPUISÉS</Text>
+            <Text style={styles.gameOverSector}>
+              SECTEUR {gameOverSector.toString().padStart(2, '0')} CONSERVÉ
+            </Text>
+            <Text style={styles.gameOverPrompt}>TOUCHER POUR REPRENDRE</Text>
+          </View>
+        </Pressable>
+      )}
+
       {Platform.OS !== 'web' && isLoadingScreenVisible && !skiaReady && (
         <View style={styles.nativeLoadingCover} pointerEvents="none" />
       )}
@@ -9653,6 +9712,79 @@ const styles = StyleSheet.create({
   gameOverBanner: {
     borderColor: '#ff5500',
     backgroundColor: 'rgba(42, 8, 3, 0.52)',
+  },
+  gameOverOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+  },
+  gameOverPanel: {
+    width: '88%',
+    minHeight: 230,
+    paddingHorizontal: 18,
+    paddingVertical: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ff5500',
+    borderRadius: 4,
+    backgroundColor: 'rgba(18, 5, 3, 0.94)',
+    shadowColor: '#ff5500',
+    shadowOpacity: 0.9,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 18,
+  },
+  gameOverRule: {
+    width: 110,
+    height: 3,
+    marginBottom: 16,
+    backgroundColor: '#ff8a00',
+    shadowColor: '#ff5500',
+    shadowOpacity: 1,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  gameOverTitle: {
+    color: '#fff5cf',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: 3,
+    textAlign: 'center',
+    textShadowColor: '#ff5500',
+    textShadowRadius: 16,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  gameOverSubtitle: {
+    marginTop: 12,
+    color: '#ff8a00',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 1.8,
+    textAlign: 'center',
+  },
+  gameOverSector: {
+    marginTop: 10,
+    color: '#00f3ff',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 1.3,
+    textAlign: 'center',
+  },
+  gameOverPrompt: {
+    marginTop: 24,
+    color: '#fff5cf',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 1.3,
+    textAlign: 'center',
   },
   enemyBanner: {
     borderColor: HUD_COLORS.lime,
