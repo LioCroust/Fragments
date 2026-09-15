@@ -3258,8 +3258,12 @@ const SkiaDynamicArena = React.memo(({
     if (!allImagesReady) return undefined;
     const publisher: NativePicturePublisher = (game, now) => {
       const picture = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
-      pictureViewRef.current?.setPicture(picture);
-      pictureViewRef.current?.redraw();
+      const view = pictureViewRef.current as any;
+      if (!view || typeof view.setPicture !== 'function') return;
+      view.setPicture(picture);
+      if (typeof view.redraw === 'function') {
+        view.redraw();
+      }
     };
     publisherRef.current = publisher;
     onReady();
