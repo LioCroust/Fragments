@@ -430,3 +430,17 @@ mtime_ms = 1789475806799
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/37016273-56c3-4bc0-a290-1db1547b8ee8/6f6a7505-e68e-486f-a9b9-b2b1cc8c9e33"
 storage_version_token = "1789475814766265"
 content_type = "image/png"
+
+[[outputs]]
+id = "EWSudVu7nx-1R0INnBoqD"
+uri = "file://attached_assets/generated_images/fragments-neon-home-reference-portrait-1080x1920.png"
+type = "image"
+title = "Concept accueil final — références du jeu"
+description = "Version téléphone 1080×1920 basée sur les références fournies : drone Prism Arrow fidèle, Seven mécanique à sept branches, araignée maître, vitesse, laser rouge continu, arène rectangulaire et zones sécurisées cyan."
+logical_id = "e493b99f-473e-47c9-9a69-61059d64d3ac"
+content_hash = "sha256:8c568556ef3dfb7302682d08dc51cc6f5bf29b55fb4f34e188c864f80b043829"
+size = 2991858
+mtime_ms = 1789476068619
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/e493b99f-473e-47c9-9a69-61059d64d3ac/cddf0056-cb04-401f-8a49-121a5af8b2c4"
+storage_version_token = "1789476078760330"
+content_type = "image/png"
