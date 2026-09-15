@@ -8812,7 +8812,7 @@ export default function GameScreen() {
               <View style={styles.loadingArtworkShade} />
               <View style={styles.loadingOverlay}>
                 {isInitialLoadingReady && (
-                  <Text style={styles.loadingBannerSubtitle}>TOUCHER POUR DÉMARRER</Text>
+                  <Text style={styles.loadingBannerSubtitle}>TOUCHER POUR COMMENCER À JOUER</Text>
                 )}
               </View>
             </Animated.View>
