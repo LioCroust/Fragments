@@ -441,6 +441,7 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
 const DIAMOND_SCORE = 750;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_PARTICLES = 60;
+const TORCH_PARTICLE_COLORS = ['#ffffff', '#ffe59a', '#9eeeff'] as const;
 const MAX_FUSION_SPARKS = 40;
 const MAX_SMOKE_PUFFS = 30;
 const DRAGON_NOMINAL_SPEED = 28;
@@ -5695,6 +5696,44 @@ export default function GameScreen() {
       if (g.particles.length > MAX_PARTICLES) g.particles.shift();
     };
 
+    const appendTorchParticles = (g: Game) => {
+      if (
+        g.trail.length === 0
+        || (g.cutDir.x === 0 && g.cutDir.y === 0)
+      ) {
+        return;
+      }
+
+      const backwardX = -g.cutDir.x;
+      const backwardY = -g.cutDir.y;
+      const sideX = -g.cutDir.y;
+      const sideY = g.cutDir.x;
+      const nozzle = cuttingPoint(g.player, g.cutDir, g.cell);
+
+      // Keep the torch readable without turning it into a long exhaust trail:
+      // a pair of short-lived sparks is enough while the red cut is active.
+      for (let index = 0; index < 2; index += 1) {
+        const lateralOffset = (Math.random() - 0.5) * g.cell * 0.28;
+        const backwardOffset = g.cell * (0.08 + Math.random() * 0.2);
+        const speed = g.cell * (1.65 + Math.random() * 1.55);
+        const lateralSpeed = g.cell * (Math.random() - 0.5) * 1.8;
+        const streak = index === 0;
+
+        appendParticle(g, {
+          x: nozzle.x + backwardX * backwardOffset + sideX * lateralOffset,
+          y: nozzle.y + backwardY * backwardOffset + sideY * lateralOffset,
+          vx: backwardX * speed + sideX * lateralSpeed,
+          vy: backwardY * speed + sideY * lateralSpeed,
+          life: 0.18 + Math.random() * 0.1,
+          size: g.cell * (0.035 + Math.random() * 0.035),
+          color: TORCH_PARTICLE_COLORS[
+            (g.frame + index) % TORCH_PARTICLE_COLORS.length
+          ],
+          streak,
+        });
+      }
+    };
+
     const appendSmokePuffs = (g: Game, puffs: SmokePuff[]) => {
       for (const puff of puffs) {
         g.smokePuffs.push(puff);
@@ -7462,6 +7501,10 @@ export default function GameScreen() {
             g.inputDir = direction;
           }
         }
+      }
+
+      if (g.trail.length > 0) {
+        appendTorchParticles(g);
       }
 
       movePlayerMissiles(g, dt, now);
