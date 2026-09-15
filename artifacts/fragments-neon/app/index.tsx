@@ -2831,7 +2831,6 @@ type SkiaDynamicArenaProps = {
 };
 
 type NativeSkiaImageSet = {
-  background: any;
   player: any;
   diamond: any;
   speedBoost: any;
@@ -3064,36 +3063,6 @@ const buildNativeDynamicPicture = (
 
   const bounds = perimeterBounds(game.width, game.height, game.cell);
   const pickupSize = pickupVisualSize(game.cell);
-
-  if (images.background) {
-    drawSkiaImage(
-      canvas,
-      images.background,
-      1024,
-      1024,
-      {
-        x: 0,
-        y: 0,
-        width: game.width,
-        height: game.height,
-      },
-      imagePaint,
-    );
-  } else {
-    setPaint(fillPaint, '#02070d', 1);
-    canvas.drawRect(Skia.XYWHRect(0, 0, game.width, game.height), fillPaint);
-  }
-
-  setPaint(strokePaint, ZONE_COLOR, 0.95, SkiaPaintStyle.Stroke, PERIMETER_STROKE_WIDTH);
-  canvas.drawRect(
-    Skia.XYWHRect(
-      bounds.left,
-      bounds.top,
-      bounds.right - bounds.left,
-      bounds.bottom - bounds.top,
-    ),
-    strokePaint,
-  );
 
   if (game.claimedPolygons.length > 0) {
     setPaint(fillPaint, ZONE_COLOR, CAPTURED_ZONE_LAYER_OPACITY);
@@ -3462,7 +3431,6 @@ const SkiaDynamicArena = React.memo(({
   publisherRef,
   onReady,
 }: SkiaDynamicArenaProps) => {
-  const backgroundImage = useSkiaImage(backgroundSourceForLevel(snapshot.level));
   const playerImage = useSkiaImage(playerSource);
   const diamondImage = useSkiaImage(diamondSpriteSource);
   const speedBoostImage = useSkiaImage(speedBoostSource);
@@ -3485,7 +3453,6 @@ const SkiaDynamicArena = React.memo(({
 
   useEffect(() => {
     const imageSet: NativeSkiaImageSet = {
-      background: backgroundImage,
       player: playerImage,
       diamond: diamondImage,
       speedBoost: speedBoostImage,
@@ -3502,7 +3469,6 @@ const SkiaDynamicArena = React.memo(({
       },
     };
     const allImagesReady = [
-      backgroundImage,
       playerImage,
       diamondImage,
       speedBoostImage,
@@ -3539,7 +3505,6 @@ const SkiaDynamicArena = React.memo(({
           nativeId: typeof nativeId === 'number' ? nativeId : null,
           hasNativeApi: Boolean(nativeApi),
           usesNativeJsi,
-          hasBackground: Boolean(imageSet.background),
           hasPlayer: Boolean(imageSet.player),
         });
       }
@@ -3578,7 +3543,6 @@ const SkiaDynamicArena = React.memo(({
     renderMargin,
     publisherRef,
     onReady,
-    backgroundImage,
     playerImage,
     diamondImage,
     speedBoostImage,
@@ -8072,6 +8036,12 @@ export default function GameScreen() {
     const frameHeight = snapshot.height - frameTop * 2;
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <RNImage
+          source={backgroundSourceForLevel(snapshot.level)}
+          style={StyleSheet.absoluteFill}
+          resizeMode="stretch"
+          accessibilityLabel={`Décor du secteur ${snapshot.level}`}
+        />
         <View
           style={[
             StyleSheet.absoluteFill,
@@ -8085,22 +8055,6 @@ export default function GameScreen() {
             },
           ]}
         />
-        <Svg
-          width={snapshot.width}
-          height={snapshot.height}
-          viewBox={`0 0 ${snapshot.width} ${snapshot.height}`}
-          preserveAspectRatio="none"
-          style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}
-          pointerEvents="none"
-        >
-          <NativeArenaStatic
-            width={snapshot.width}
-            height={snapshot.height}
-            cell={snapshot.cell}
-            rows={snapshot.rows}
-            level={snapshot.level}
-          />
-        </Svg>
       </View>
     );
   };
