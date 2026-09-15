@@ -8706,7 +8706,7 @@ export default function GameScreen() {
             <Text style={[styles.scoreValue, { color: HUD_COLORS.warmWhite }]}>
               {hud.score.toString().padStart(6, '0')}
             </Text>
-            <Text style={[styles.cardMeta, { color: HUD_COLORS.amber }]}>
+            <Text style={[styles.cardMeta, styles.scoreMeta, { color: HUD_COLORS.amber }]}>
               MEILLEUR SCORE : {hud.bestScore.toString().padStart(6, '0')}
             </Text>
           </View>
