@@ -12,6 +12,7 @@ import {
   View,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, {
   Circle,
@@ -4179,6 +4180,7 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const canvasRef = useRef<any>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const gameRef = useRef<Game>({
@@ -8459,27 +8461,17 @@ export default function GameScreen() {
   const shieldSegments = Array.from({ length: 3 });
 
   return (
-    <View
-      style={[
-        styles.container,
-        Platform.OS !== 'web'
-          ? {
-              position: 'absolute',
-              top: -insets.top,
-              right: 0,
-              bottom: -insets.bottom,
-              left: 0,
-            }
-          : null,
-      ]}
-    >
+    <View style={styles.container}>
       {Platform.OS !== 'web' && (
         <NativeSkiaAssetPreloader onReady={handleSkiaReady} />
       )}
       <View style={styles.cockpitHeader} pointerEvents="none">
         <RNImage
           source={cockpitInteriorSource}
-          style={styles.cockpitInterior}
+          style={[
+            styles.cockpitInterior,
+            { transform: [{ translateY: -Math.round(viewportWidth * 0.16) }] },
+          ]}
           resizeMode="cover"
           accessibilityLabel="Intérieur du cockpit Prism Warbird vu depuis le siège du pilote"
         />
@@ -8658,15 +8650,7 @@ export default function GameScreen() {
         />
       )}
 
-      <View
-        style={[
-          styles.hud,
-          {
-            paddingTop: Platform.OS === 'web' ? Math.max(insets.top, 12) : 12,
-          },
-        ]}
-        pointerEvents="none"
-      >
+      <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.lime }]} />
@@ -8793,7 +8777,7 @@ export default function GameScreen() {
         onSkipTutorial={() => teleportToSector(
           lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : 1,
         )}
-        bottomInset={Platform.OS === 'web' ? Math.max(insets.bottom, 6) + 18 : 18}
+        bottomInset={Math.max(insets.bottom, 6) + 18}
       />
 
       {Platform.OS !== 'web' && isLoadingScreenVisible && !skiaReady && (
