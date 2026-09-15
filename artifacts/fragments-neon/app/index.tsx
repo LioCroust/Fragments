@@ -8460,6 +8460,9 @@ export default function GameScreen() {
     return () => glowLoop.stop();
   }, [zoneGlow]);
   const shieldSegments = Array.from({ length: 3 });
+  const hudTopPadding = Platform.OS === 'android'
+    ? Math.max(12, insets.top - 36)
+    : Math.max(insets.top, 12);
 
   return (
     <View style={styles.container}>
@@ -8651,7 +8654,7 @@ export default function GameScreen() {
         />
       )}
 
-      <View style={[styles.hud, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="none">
+      <View style={[styles.hud, { paddingTop: hudTopPadding }]} pointerEvents="none">
         <View style={styles.hudSignalRail}>
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
           <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.lime }]} />
