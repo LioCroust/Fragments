@@ -5323,7 +5323,34 @@ export default function GameScreen() {
       initialized: gameRef.current.initialized,
     });
     if (changed && gameRef.current.initialized) resetGame(true);
-  }, [resetGame]);
+    if (
+      Platform.OS !== 'web'
+      && !gameRef.current.initialized
+      && !initialSectorPreparationStartedRef.current
+    ) {
+      initialSectorPreparationStartedRef.current = true;
+      const savedGame = savedGameRef.current;
+      const initialLevel = savedGame?.level
+        ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
+      resetGame(false, false, initialLevel);
+      savedGameRef.current = null;
+      if (gameRef.current.initialized) {
+        diagnosticLog('native-layout-autostart', {
+          level: initialLevel,
+          width: Math.round(width),
+          height: Math.round(height),
+        });
+        revealGameAfterInitialLoad({
+          kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
+          tutorialStep: initialLevel === TUTORIAL_SECTOR ? 1 : undefined,
+          level: gameRef.current.level,
+        });
+        void preloadBackgroundWindow(
+          initialLevel === TUTORIAL_SECTOR ? 1 : initialLevel,
+        );
+      }
+    }
+  }, [preloadBackgroundWindow, resetGame, revealGameAfterInitialLoad]);
 
   const panResponder = useRef(
     PanResponder.create({
