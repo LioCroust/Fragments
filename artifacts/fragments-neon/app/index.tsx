@@ -3478,6 +3478,8 @@ const SkiaDynamicArena = React.memo(({
   const pictureViewRef = useRef<any>(null);
   const [picture, setPicture] = useState<any>(null);
   const layoutReportedRef = useRef(false);
+  const mountReportedRef = useRef(false);
+  const publishReportedRef = useRef(false);
   const lastPicturePublishAtRef = useRef(0);
 
   useEffect(() => {
@@ -3524,10 +3526,24 @@ const SkiaDynamicArena = React.memo(({
       const nextPicture = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
       const nativeId = pictureViewRef.current?.nativeId;
       const nativeApi = getNativeSkiaViewApi();
-      if (
+      const usesNativeJsi = (
         typeof nativeId === 'number'
-        && nativeApi?.setJsiProperty
-        && nativeApi.requestRedraw
+        && Boolean(nativeApi?.setJsiProperty)
+        && Boolean(nativeApi?.requestRedraw)
+      );
+      if (!publishReportedRef.current) {
+        publishReportedRef.current = true;
+        diagnosticLog('skia-picture-publish', {
+          hasPicture: Boolean(nextPicture),
+          nativeId: typeof nativeId === 'number' ? nativeId : null,
+          hasNativeApi: Boolean(nativeApi),
+          usesNativeJsi,
+          hasBackground: Boolean(imageSet.background),
+          hasPlayer: Boolean(imageSet.player),
+        });
+      }
+      if (
+        usesNativeJsi
       ) {
         nativeApi.setJsiProperty(nativeId, 'picture', nextPicture);
         nativeApi.requestRedraw(nativeId);
@@ -3539,6 +3555,15 @@ const SkiaDynamicArena = React.memo(({
       }
     };
     publisherRef.current = publisher;
+    if (!mountReportedRef.current) {
+      mountReportedRef.current = true;
+      diagnosticLog('skia-view-mounted', {
+        nativeId: typeof pictureViewRef.current?.nativeId === 'number'
+          ? pictureViewRef.current.nativeId
+          : null,
+        hasPicture: Boolean(picture),
+      });
+    }
     if (allImagesReady) onReady();
     return () => {
       if (publisherRef.current === publisher) publisherRef.current = null;
