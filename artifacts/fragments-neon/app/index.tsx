@@ -8823,6 +8823,140 @@ export default function GameScreen() {
   );
 }
 
+const nativeBannerCopy = (banner: Banner) => {
+  if (banner.kind === 'RECORD') {
+    return {
+      title: 'NOUVEAU RECORD !',
+      subtitle: `SCORE DÉPASSÉ  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`,
+    };
+  }
+  if (banner.kind === 'DIAMOND') {
+    return { title: 'BONUS DIAMANT CAPTURÉ', subtitle: `+${banner.points ?? DIAMOND_SCORE} POINTS` };
+  }
+  if (banner.kind === 'BOMB') {
+    return { title: 'BOMBE NEUTRALISÉE', subtitle: `+${banner.points ?? BOMB_SCORE} POINTS` };
+  }
+  if (banner.kind === 'SPEED_BOOST') {
+    return { title: 'BOOST DE VITESSE', subtitle: 'VITESSE +100%  •  5 SECONDES' };
+  }
+  if (banner.kind === 'SHIELD') {
+    return { title: 'BOUCLIER ACTIVÉ', subtitle: 'INVINCIBILITÉ  •  10 SECONDES' };
+  }
+  if (banner.kind === 'SECTOR') {
+    return { title: 'SECTEUR SÉCURISÉ À 80%', subtitle: 'PASSAGE SECTEUR SUIVANT' };
+  }
+  if (banner.kind === 'SECTOR_START') {
+    return { title: `SECTEUR ${(banner.level ?? 1).toString().padStart(2, '0')}` };
+  }
+  if (banner.kind === 'BOSS') {
+    return {
+      title: 'ALERTE BOSS',
+      subtitle: `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`,
+    };
+  }
+  if (banner.kind === 'BOSS_SPLIT') {
+    return {
+      title: 'BOSS FRACTURÉ',
+      subtitle: `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  ${ENEMY_DEPLOYED_BANNER_LABELS[banner.enemyKind ?? 'SHIP']}`,
+    };
+  }
+  if (banner.kind === 'SPLIT') {
+    return {
+      title: ENEMY_SPLIT_BANNER_LABELS[banner.enemyKind ?? 'SHIP'],
+      subtitle: `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  2 MINI-${ENEMY_KIND_PLURAL_LABELS[banner.enemyKind ?? 'SHIP']}`,
+    };
+  }
+  if (banner.kind === 'CLEAN') return { title: 'SECTEUR NETTOYÉ !', subtitle: 'SÉCURISEZ 80%' };
+  if (banner.kind === 'GAME_OVER') {
+    return {
+      title: 'GAME OVER',
+      subtitle: `SCORE FINAL  •  ${(banner.score ?? 0).toString().padStart(6, '0')}`,
+    };
+  }
+  if (banner.kind === 'TUTORIAL') {
+    const step = banner.tutorialStep ?? 1;
+    return {
+      title: banner.tutorialCompleted
+        ? 'OBJECTIF ATTEINT !'
+        : step > 1 && banner.tutorialPrompt === 'SECURE_AREA'
+          ? 'ZONE À SÉCURISER'
+          : `TUTORIEL ${step}/4`,
+      subtitle: step === 4
+        ? banner.tutorialCompleted ? '✓ ENNEMI DÉTRUIT' : 'FERME UNE ZONE VIDE POUR TIRER'
+        : step === 3
+          ? banner.tutorialCompleted ? '✓ ENNEMI CAPTURÉ' : 'CAPTURE LE VAISSEAU ENNEMI'
+          : step === 2
+            ? banner.tutorialCompleted ? '✓ ZONE SÉCURISÉE À 80%' : 'SÉCURISE 80% DE LA ZONE'
+            : banner.tutorialCompleted ? '✓ OBJECTIF VALIDÉ' : 'DIRIGE LE DRONE AVEC DES SWIPES',
+    };
+  }
+  return { title: 'ENNEMI DÉTRUIT', subtitle: `+${banner.points ?? 0} POINTS` };
+};
+
+const NativeBannerOverlay = ({
+  banner,
+  translateX,
+}: {
+  banner: Banner;
+  translateX: Animated.Value;
+}) => {
+  const copy = nativeBannerCopy(banner);
+  const variant = banner.kind === 'TUTORIAL'
+    ? styles.tutorialBanner
+    : banner.kind === 'RECORD'
+      ? styles.recordBanner
+      : banner.kind === 'DIAMOND'
+        ? styles.diamondBanner
+        : banner.kind === 'BOMB'
+          ? styles.bombBanner
+          : banner.kind === 'SPEED_BOOST'
+            ? styles.speedBoostBanner
+            : banner.kind === 'SHIELD'
+              ? styles.shieldBanner
+              : banner.kind === 'SECTOR'
+                ? styles.sectorBanner
+                : banner.kind === 'BOSS'
+                  ? styles.bossBanner
+                  : banner.kind === 'CLEAN'
+                    ? styles.cleanBanner
+                    : banner.kind === 'GAME_OVER'
+                      ? styles.gameOverBanner
+                      : styles.enemyBanner;
+
+  return (
+    <View style={styles.frontBannerLayer} pointerEvents="none">
+      <View style={styles.arcadeBannerLayer} pointerEvents="none">
+        <Animated.View style={[
+          styles.arcadeBanner,
+          variant,
+          { transform: [{ translateX }] },
+        ]}>
+          <View style={styles.bannerGloss} />
+          <View style={styles.bannerAccent} />
+          <Text
+            style={banner.kind === 'TUTORIAL' ? styles.tutorialBannerTitle : styles.bannerTitle}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.62}
+          >
+            {copy.title}
+          </Text>
+          {copy.subtitle && (
+            <Text
+              style={banner.kind === 'TUTORIAL' ? styles.tutorialBannerScore : styles.bannerScore}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.72}
+            >
+              {copy.subtitle}
+            </Text>
+          )}
+        </Animated.View>
+      </View>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -8939,9 +9073,6 @@ const styles = StyleSheet.create({
     bottom: 28,
     backgroundColor: '#000000',
     overflow: 'hidden',
-  },
-  nativeArena: {
-    overflow: 'visible',
   },
   debugSectorSelector: {
     position: 'absolute',
@@ -9177,10 +9308,10 @@ const styles = StyleSheet.create({
   },
   nativeArenaDynamicLayer: {
     position: 'absolute',
-    top: 0,
+    top: 160,
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: 28,
     zIndex: 2,
     overflow: 'visible',
   },
@@ -9420,6 +9551,15 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 20,
     alignItems: 'center',
+  },
+  frontBannerLayer: {
+    position: 'absolute',
+    top: 160,
+    left: 0,
+    right: 0,
+    bottom: 28,
+    zIndex: 100,
+    elevation: 100,
   },
   arcadeBanner: {
     width: '80%',
