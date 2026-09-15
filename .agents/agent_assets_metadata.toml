@@ -416,3 +416,17 @@ mtime_ms = 1789475644199
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/2b1defbc-69fa-437c-b9c9-a8b4dd874850/4e23ce44-d3ff-4bfe-8987-3290c121b835"
 storage_version_token = "1789475653769793"
 content_type = "image/png"
+
+[[outputs]]
+id = "tY3lOjIdwcCkUtmyjwO_n"
+uri = "file://attached_assets/generated_images/fragments-neon-home-3d-phone-1080x1920.png"
+type = "image"
+title = "Concept accueil téléphone 1080×1920 — drone 3D"
+description = "Version portrait exacte 1080×1920 avec drone Prism Arrow agrandi en rendu 3D, vitesse, laser orange, zones sécurisées cyan et monstres menaçants."
+logical_id = "37016273-56c3-4bc0-a290-1db1547b8ee8"
+content_hash = "sha256:e01cb5954906353d1de3dad3c2ddd2b9147ff4e9dd4650870125726cba42c5cc"
+size = 3053354
+mtime_ms = 1789475806799
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/37016273-56c3-4bc0-a290-1db1547b8ee8/6f6a7505-e68e-486f-a9b9-b2b1cc8c9e33"
+storage_version_token = "1789475814766265"
+content_type = "image/png"
