@@ -696,3 +696,129 @@ mtime_ms = 1789476704087
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/d3e4e8a1-b99e-43e3-8255-8d886833c62d/8d8de330-5f0c-4a42-a1a5-b7faa3a18c70"
 storage_version_token = "1789476767329982"
 content_type = "image/png"
+
+[[outputs]]
+id = "SRdjD-P19OFf-cV-qt8kh"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variants-contact-sheet.png"
+type = "image"
+title = "Planche — Space Opera"
+description = "Comparaison des 8 nouvelles propositions space opera."
+logical_id = "72db8c82-2369-4855-a9eb-31e6741c8a04"
+content_hash = "sha256:93b67352735cb15e571223d1798fc81cd57dbdb6b33dce03cf3b5e3ec2167fc9"
+size = 1833326
+mtime_ms = 1789486303529
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/72db8c82-2369-4855-a9eb-31e6741c8a04/1d063c9d-fa1c-4dfe-93ab-a96c91843994"
+storage_version_token = "1789486317812510"
+content_type = "image/png"
+
+[[outputs]]
+id = "uoJ37Yb6FwFMdSNr82I9M"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-01-1080x1920.png"
+type = "image"
+title = "Variante 01 — Fleet Pursuit"
+description = "Format 1080×1920. Prism Arrow et trait arrière parfaitement conservés."
+logical_id = "64df37cb-c47b-4bf6-9656-63dabc453182"
+content_hash = "sha256:93c43020ca90a4b71d20dc802da03b552ca7cb9e578e6ac9c38f52b653e2f73e"
+size = 2157950
+mtime_ms = 1789486245856
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/64df37cb-c47b-4bf6-9656-63dabc453182/4b6bd752-24ea-4f32-8993-587a0ac73cff"
+storage_version_token = "1789486318462239"
+content_type = "image/png"
+
+[[outputs]]
+id = "YjsO1Hh9hn0X7vFXjMgoH"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-02-1080x1920.png"
+type = "image"
+title = "Variante 02 — Orbital Vista"
+description = "Format 1080×1920. Ennemis distants et décor orbital."
+logical_id = "7dc7e454-74ac-4e0c-8a62-3b1f1576f2ae"
+content_hash = "sha256:e9987390f60c9f63c7f6c3203c9451bd4a5a4446a2741c56660de9b48d6e4a41"
+size = 2150356
+mtime_ms = 1789486252476
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/7dc7e454-74ac-4e0c-8a62-3b1f1576f2ae/8331c6c3-0027-4b74-8388-454d259985be"
+storage_version_token = "1789486319123450"
+content_type = "image/png"
+
+[[outputs]]
+id = "0a03MRxD0xDw2_GCki7bc"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-03-1080x1920.png"
+type = "image"
+title = "Variante 03 — Crossfire"
+description = "Format 1080×1920. Menaces réparties en profondeur."
+logical_id = "21bea318-768d-4d12-bca3-722b452d2633"
+content_hash = "sha256:5e049b708e45945c876b5082cf2e9eb2a3f0d1c2ed8187c65bc394fae21495a4"
+size = 2147864
+mtime_ms = 1789486260120
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/21bea318-768d-4d12-bca3-722b452d2633/ed27ab9f-41ae-4be4-9426-326b6a5d827a"
+storage_version_token = "1789486319778781"
+content_type = "image/png"
+
+[[outputs]]
+id = "tQgWegt3Ssj5Fi_ScBjMx"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-04-1080x1920.png"
+type = "image"
+title = "Variante 04 — Deep Field"
+description = "Format 1080×1920. Composition espace profond."
+logical_id = "454981c4-1eb9-4580-8940-13bfc19b4022"
+content_hash = "sha256:02855d6b66c3f18b64e637eed7af67719d96261179da05419bca64be2a3c7602"
+size = 2151438
+mtime_ms = 1789486266504
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/454981c4-1eb9-4580-8940-13bfc19b4022/e8dce699-f67f-495b-a06c-c082effa011f"
+storage_version_token = "1789486320377136"
+content_type = "image/png"
+
+[[outputs]]
+id = "kqvAgo2fZdVHDrBegbImf"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-05-1080x1920.png"
+type = "image"
+title = "Variante 05 — Close Threat"
+description = "Format 1080×1920. Araignée légèrement plus proche, toujours secondaire."
+logical_id = "5fe71269-bebc-4ece-98c3-3cc5fe039715"
+content_hash = "sha256:b86b0bdef8cc7a2f51bc137cc5d6916044cd006ce9842a0e9e267eb9a3ef5476"
+size = 2149035
+mtime_ms = 1789486272900
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/5fe71269-bebc-4ece-98c3-3cc5fe039715/d0da63ed-7cba-4453-9dac-ec8cdee44d93"
+storage_version_token = "1789486321029224"
+content_type = "image/png"
+
+[[outputs]]
+id = "Ggm3nM6XR4MMklIJV8hml"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-06-1080x1920.png"
+type = "image"
+title = "Variante 06 — Nebula Corridor"
+description = "Format 1080×1920. Couloir spatial avec trois menaces lointaines."
+logical_id = "f4f2f686-a3ab-4970-a640-359f626e02d3"
+content_hash = "sha256:366754aafd2f13e0223c61c975ff6dd2dd5356dc034cf47300fd4ec76ce1c49e"
+size = 2146301
+mtime_ms = 1789486280548
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/f4f2f686-a3ab-4970-a640-359f626e02d3/0718ddc5-a8e4-4fd3-8bf5-24c7b364e01b"
+storage_version_token = "1789486321666564"
+content_type = "image/png"
+
+[[outputs]]
+id = "FDWiMXPT04o3PwQV8flmk"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-07-1080x1920.png"
+type = "image"
+title = "Variante 07 — Low Angle"
+description = "Format 1080×1920. Lecture plus basse et plus cinématographique."
+logical_id = "d21d4b48-221d-4236-8a78-dc2122aefd73"
+content_hash = "sha256:243c09516365e5d7d9f15b2f04aa0db2375637693ec460f2ce1a217ea1fbe874"
+size = 2144348
+mtime_ms = 1789486287308
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/d21d4b48-221d-4236-8a78-dc2122aefd73/9dec4689-9db0-4c10-8eb7-45cf533327f5"
+storage_version_token = "1789486322319383"
+content_type = "image/png"
+
+[[outputs]]
+id = "T1xhUrFJjG2AahhZAnTRX"
+uri = "file://attached_assets/generated_images/fragments-neon-home-space-opera-variant-08-1080x1920.png"
+type = "image"
+title = "Variante 08 — Final Encounter"
+description = "Format 1080×1920. Menaces symétriques en arrière-plan."
+logical_id = "7b1102e1-8776-4318-a93c-09f3ecfe71cd"
+content_hash = "sha256:2e7e259195f67cb05f560b119d07ab7fd3f659edcdff9fb9c9a8a69d571cb111"
+size = 2149179
+mtime_ms = 1789486293980
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/7b1102e1-8776-4318-a93c-09f3ecfe71cd/aeacc4a1-21cc-4c4f-a409-e8c38de0fa77"
+storage_version_token = "1789486323111865"
+content_type = "image/png"

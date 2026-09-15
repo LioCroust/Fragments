@@ -34,3 +34,4 @@
 - [Immediate native snapshot](immediate-native-snapshot.md) — Android must render from the initialized game state immediately instead of waiting for a React snapshot publication.
 - [Native overlay stacking](native-overlay-stacking.md) — React overlays must be above the Skia parent hierarchy, not only above siblings inside the arena.
 - [Android immersive status bar](android-transparent-status-bar.md) — Hide Android system icons so the cockpit and HUD can use the full display.
+- [Space-opera cover composition](space-opera-cover-composition.md) — Lock the reference drone and beam; compose space and distant enemies deterministically.
