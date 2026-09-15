@@ -1961,6 +1961,50 @@ const sevenProjectileTouchesBlueBoundary = (
   ));
 };
 
+type PolygonBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+const polygonBoundsCache = new WeakMap<Point[], PolygonBounds>();
+
+const polygonBoundsFor = (polygon: Point[]): PolygonBounds => {
+  const cached = polygonBoundsCache.get(polygon);
+  if (cached) return cached;
+  const bounds = polygon.reduce<PolygonBounds>(
+    (result, point) => ({
+      minX: Math.min(result.minX, point.x),
+      maxX: Math.max(result.maxX, point.x),
+      minY: Math.min(result.minY, point.y),
+      maxY: Math.max(result.maxY, point.y),
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+    },
+  );
+  polygonBoundsCache.set(polygon, bounds);
+  return bounds;
+};
+
+const boundsContainPoint = (bounds: PolygonBounds, point: Point, tolerance = 0) => (
+  point.x >= bounds.minX - tolerance
+  && point.x <= bounds.maxX + tolerance
+  && point.y >= bounds.minY - tolerance
+  && point.y <= bounds.maxY + tolerance
+);
+
+const boundsOverlap = (first: PolygonBounds, second: PolygonBounds, tolerance = 0) => (
+  first.maxX >= second.minX - tolerance
+  && first.minX <= second.maxX + tolerance
+  && first.maxY >= second.minY - tolerance
+  && first.minY <= second.maxY + tolerance
+);
+
 const pointInPolygon = (point: Point, polygon: Point[]) => {
   let inside = false;
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
@@ -1978,9 +2022,10 @@ const pointInPolygon = (point: Point, polygon: Point[]) => {
 
 const pointInsideClaimedSurface = (point: Point, claimedPolygons: Point[][], tolerance = 0) => (
   claimedPolygons.some((polygon) => (
-    pointInPolygon(point, polygon) || (
+    boundsContainPoint(polygonBoundsFor(polygon), point, tolerance)
+    && (pointInPolygon(point, polygon) || (
       tolerance > 0 && polygonBoundaryDistance(point, polygon) <= tolerance
-    )
+    ))
   ))
 );
 
@@ -2064,6 +2109,9 @@ const segmentsIntersect = (firstStart: Point, firstEnd: Point, secondStart: Poin
 };
 
 const polygonsIntersect = (first: Point[], second: Point[]) => {
+  const firstBounds = polygonBoundsFor(first);
+  const secondBounds = polygonBoundsFor(second);
+  if (!boundsOverlap(firstBounds, secondBounds)) return false;
   if (first.some((point) => pointInPolygon(point, second))
     || second.some((point) => pointInPolygon(point, first))) {
     return true;
