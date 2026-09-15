@@ -5347,7 +5347,6 @@ export default function GameScreen() {
     let lastNativeFrameAt = lastTime - NATIVE_GAME_LOOP_INTERVAL_MS;
     let fpsWindowStart = lastTime;
     let fpsWindowFrames = 0;
-    let nativeSchedulerTicks = 0;
     let cancelled = false;
 
     const playerIsProtected = (g: Game, now: number) => g.invincibleUntil > now;
@@ -7867,14 +7866,12 @@ export default function GameScreen() {
         // callbacks can resolve before switching to the tighter scheduler.
         loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
       } else if (typeof setImmediate === 'function') {
-        // setImmediate is the only Android scheduler that can sustain the
-        // target cadence here, but an uninterrupted chain can starve timers,
-        // touch dispatch, and Animated callbacks. Yield to the timer queue
-        // regularly without returning to a 16 ms timer on every frame.
-        nativeSchedulerTicks += 1;
-        loopHandle = nativeSchedulerTicks % 4 === 0
-          ? setTimeout(loop, 0)
-          : setImmediate(loop);
+        // Android timers quantize even a zero-delay timeout to roughly one
+        // display interval. Using one periodically turns the measured cadence
+        // into ~30 FPS. Native banners no longer depend on JS timers, so keep
+        // the immediate scheduler for the gameplay loop and use the timestamp
+        // guard above to cap actual frames at 60 FPS.
+        loopHandle = setImmediate(loop);
       } else {
         loopHandle = setTimeout(loop, 1);
       }
