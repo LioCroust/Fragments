@@ -12,7 +12,6 @@ import {
   View,
   Animated,
   Easing,
-  useWindowDimensions,
 } from 'react-native';
 import Svg, {
   Circle,
@@ -4180,7 +4179,6 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
-  const { width: viewportWidth } = useWindowDimensions();
   const canvasRef = useRef<any>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const gameRef = useRef<Game>({
@@ -8468,10 +8466,7 @@ export default function GameScreen() {
       <View style={styles.cockpitHeader} pointerEvents="none">
         <RNImage
           source={cockpitInteriorSource}
-          style={[
-            styles.cockpitInterior,
-            { transform: [{ translateY: -Math.round(viewportWidth * 0.16) }] },
-          ]}
+          style={styles.cockpitInterior}
           resizeMode="cover"
           accessibilityLabel="Intérieur du cockpit Prism Warbird vu depuis le siège du pilote"
         />

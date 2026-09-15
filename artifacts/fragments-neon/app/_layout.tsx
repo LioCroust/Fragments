@@ -49,7 +49,15 @@ function RootLayoutNav() {
   }, []);
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        statusBarHidden: Platform.OS === 'android',
+        statusBarTranslucent: Platform.OS === 'android',
+        navigationBarHidden: true,
+        navigationBarTranslucent: true,
+      }}
+    >
       <Stack.Screen name="index" options={{ gestureEnabled: false }} />
     </Stack>
   );
