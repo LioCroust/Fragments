@@ -3542,9 +3542,7 @@ const SkiaDynamicArena = React.memo(({
           hasPlayer: Boolean(imageSet.player),
         });
       }
-      if (
-        usesNativeJsi
-      ) {
+      if (usesNativeJsi && nativeApi) {
         nativeApi.setJsiProperty(nativeId, 'picture', nextPicture);
         nativeApi.requestRedraw(nativeId);
       } else {
