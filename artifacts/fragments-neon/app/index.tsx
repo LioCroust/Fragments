@@ -66,6 +66,8 @@ const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
 const NATIVE_GAME_LOOP_INTERVAL_MS = 1000 / 60;
+const NATIVE_IMMEDIATE_YIELD_EVERY = 4;
+const NATIVE_IMMEDIATE_YIELD_DELAY_MS = 1;
 const NATIVE_ASSET_PRELOAD_TIMEOUT_MS = 5000;
 const NATIVE_INITIAL_START_FALLBACK_DELAY_MS = 2500;
 const CONTACT_FREEZE_DURATION = 1000;
@@ -5527,6 +5529,8 @@ export default function GameScreen() {
     let loopHandle: ReturnType<typeof setTimeout> | ReturnType<typeof setImmediate> | number = 0;
     let lastTime = Date.now();
     let lastNativeFrameAt = lastTime - NATIVE_GAME_LOOP_INTERVAL_MS;
+    let nativeImmediateTurns = 0;
+    let nativeHandleUsesImmediate = false;
     let fpsWindowStart = lastTime;
     let fpsWindowFrames = 0;
     let cancelled = false;
@@ -8045,9 +8049,24 @@ export default function GameScreen() {
       if (Platform.OS === 'web' && typeof requestAnimationFrame === 'function') {
         // Web RAF follows the browser display cadence. On Expo Go Android,
         // RAF can be delivered at 30 Hz even on a 60 Hz device, so native
-        // gameplay uses a cooperative 16.67 ms timer instead.
+        // gameplay uses an interval-limited immediate scheduler instead.
         loopHandle = requestAnimationFrame(loop);
+      } else if (Platform.OS !== 'web' && typeof setImmediate === 'function') {
+        // Android Expo Go can quantize setTimeout(16.67) to roughly 30 Hz.
+        // setImmediate lets the JS loop reach the next 16.67 ms deadline,
+        // while the periodic 1 ms timer yield keeps React and touch dispatch
+        // from being starved by an unbounded immediate chain.
+        nativeImmediateTurns += 1;
+        if (nativeImmediateTurns >= NATIVE_IMMEDIATE_YIELD_EVERY) {
+          nativeImmediateTurns = 0;
+          nativeHandleUsesImmediate = false;
+          loopHandle = setTimeout(loop, NATIVE_IMMEDIATE_YIELD_DELAY_MS);
+        } else {
+          nativeHandleUsesImmediate = true;
+          loopHandle = setImmediate(loop);
+        }
       } else {
+        nativeHandleUsesImmediate = false;
         loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
       }
     };
@@ -8057,7 +8076,11 @@ export default function GameScreen() {
       if (Platform.OS === 'web') {
         cancelAnimationFrame(loopHandle as number);
       } else {
-        clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
+        if (nativeHandleUsesImmediate && typeof clearImmediate === 'function') {
+          clearImmediate(loopHandle as ReturnType<typeof setImmediate>);
+        } else {
+          clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
+        }
       }
     };
   }, [
