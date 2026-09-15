@@ -5167,8 +5167,9 @@ export default function GameScreen() {
   ).current;
 
   useEffect(() => {
-    let loopHandle: ReturnType<typeof setTimeout> | number = 0;
+    let loopHandle: ReturnType<typeof setTimeout> | ReturnType<typeof setImmediate> | number = 0;
     let lastTime = Date.now();
+    let lastNativeFrameAt = lastTime - NATIVE_GAME_LOOP_INTERVAL_MS;
     let fpsWindowStart = lastTime;
     let fpsWindowFrames = 0;
     let cancelled = false;
@@ -7480,6 +7481,16 @@ export default function GameScreen() {
     const loop = () => {
       if (cancelled) return;
       const now = Date.now();
+      if (
+        Platform.OS !== 'web'
+        && now - lastNativeFrameAt < NATIVE_GAME_LOOP_INTERVAL_MS
+      ) {
+        scheduleNextLoop();
+        return;
+      }
+      if (Platform.OS !== 'web') {
+        lastNativeFrameAt = now;
+      }
       fpsWindowFrames += 1;
       if (now - fpsWindowStart >= 500) {
         setFps(Math.round(fpsWindowFrames * 1000 / (now - fpsWindowStart)));
@@ -7675,8 +7686,10 @@ export default function GameScreen() {
       if (cancelled) return;
       if (Platform.OS === 'web') {
         loopHandle = requestAnimationFrame(loop);
+      } else if (typeof setImmediate === 'function') {
+        loopHandle = setImmediate(loop);
       } else {
-        loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
+        loopHandle = setTimeout(loop, 1);
       }
     };
     scheduleNextLoop();
@@ -7684,6 +7697,8 @@ export default function GameScreen() {
       cancelled = true;
       if (Platform.OS === 'web') {
         cancelAnimationFrame(loopHandle as number);
+      } else if (typeof clearImmediate === 'function') {
+        clearImmediate(loopHandle as ReturnType<typeof setImmediate>);
       } else {
         clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
       }
