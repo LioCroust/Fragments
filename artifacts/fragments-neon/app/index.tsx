@@ -4323,7 +4323,11 @@ export default function GameScreen() {
         () => reject(new Error(`Unable to preload native image asset: ${uri}`)),
       );
     });
-    const load = Promise.all([prefetch, dimensions]).then(() => undefined);
+    // Prefetch warms the native cache but is not a readiness signal: on some
+    // Expo Go Android sessions it never settles for a bundled local asset.
+    // The size callback is the readiness check used by the launch gate.
+    void prefetch;
+    const load = dimensions;
     // A native asset callback can remain pending indefinitely in Expo Go when
     // Android has a stale local image request. Do not hold the launch gate
     // forever; Skia's own image loader continues independently.
