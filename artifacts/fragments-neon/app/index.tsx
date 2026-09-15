@@ -4598,18 +4598,21 @@ export default function GameScreen() {
     const prefetch = typeof (RNImage as any).prefetch === 'function'
       ? (RNImage as any).prefetch(uri).catch(() => false)
       : Promise.resolve(false);
-    const dimensions = new Promise<void>((resolve, reject) => {
+    const dimensions = new Promise<void>((resolve) => {
       RNImage.getSize(
         uri,
         () => resolve(),
-        () => reject(new Error(`Unable to preload native image asset: ${uri}`)),
+        // Expo Go Android can reject getSize for a bundled dev-server asset
+        // even though RNImage can still decode it when rendered. This is a
+        // cache warmup hint, not a reason to surface an unhandled error.
+        () => resolve(),
       );
     });
     // Prefetch warms the native cache but is not a readiness signal: on some
     // Expo Go Android sessions it never settles for a bundled local asset.
     // The size callback is the readiness check used by the launch gate.
     void prefetch;
-    const load = dimensions;
+    const load = Promise.all([prefetch, dimensions]).then(() => undefined);
     // A native asset callback can remain pending indefinitely in Expo Go when
     // Android has a stale local image request. Do not hold the launch gate
     // forever; Skia's own image loader continues independently.
@@ -8039,11 +8042,10 @@ export default function GameScreen() {
 
     scheduleNextLoop = () => {
       if (cancelled) return;
-      if (typeof requestAnimationFrame === 'function') {
-        // Native RAF keeps the loop on the display cadence while yielding
-        // between frames so React can commit HUD/surface updates and Android
-        // can dispatch timers and touch events. A tight setImmediate chain
-        // can report 60 FPS while starving those commits.
+      if (Platform.OS === 'web' && typeof requestAnimationFrame === 'function') {
+        // Web RAF follows the browser display cadence. On Expo Go Android,
+        // RAF can be delivered at 30 Hz even on a 60 Hz device, so native
+        // gameplay uses a cooperative 16.67 ms timer instead.
         loopHandle = requestAnimationFrame(loop);
       } else {
         loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
@@ -8055,11 +8057,7 @@ export default function GameScreen() {
       if (Platform.OS === 'web') {
         cancelAnimationFrame(loopHandle as number);
       } else {
-        if (typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(loopHandle as number);
-        } else {
-          clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
-        }
+        clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
       }
     };
   }, [
