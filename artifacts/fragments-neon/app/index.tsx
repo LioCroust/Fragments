@@ -3533,15 +3533,13 @@ const SkiaDynamicArena = React.memo(({
     <SkiaPictureView
       ref={pictureViewRef}
       picture={picture}
-      style={[
-        StyleSheet.absoluteFill,
-        {
-          left: -renderMargin,
-          top: -renderMargin,
-          width: snapshot.width + renderMargin * 2,
-          height: snapshot.height + renderMargin * 2,
-        },
-      ]}
+      style={{
+        position: 'absolute',
+        left: -renderMargin,
+        top: -renderMargin,
+        width: snapshot.width + renderMargin * 2,
+        height: snapshot.height + renderMargin * 2,
+      }}
       pointerEvents="none"
     />
   );
@@ -5335,6 +5333,9 @@ export default function GameScreen() {
       resetGame(false, false, initialLevel);
       savedGameRef.current = null;
       if (gameRef.current.initialized) {
+        const initialSnapshot = snapshotFromGame(gameRef.current);
+        nativeSnapshotRef.current = initialSnapshot;
+        setNativeSnapshot(initialSnapshot);
         diagnosticLog('native-layout-autostart', {
           level: initialLevel,
           width: Math.round(width),
@@ -7972,23 +7973,42 @@ export default function GameScreen() {
     const snapshot = nativeSnapshot
       ?? (gameRef.current.initialized ? snapshotFromGame(gameRef.current) : null);
     if (!snapshot) return null;
+    const frameLeft = snapshot.cell * PERIMETER_HORIZONTAL_INSET_CELLS;
+    const frameTop = snapshot.cell * PERIMETER_VERTICAL_INSET_CELLS;
+    const frameWidth = snapshot.width - frameLeft * 2;
+    const frameHeight = snapshot.height - frameTop * 2;
     return (
-      <Svg
-        width={snapshot.width}
-        height={snapshot.height}
-        viewBox={`0 0 ${snapshot.width} ${snapshot.height}`}
-        preserveAspectRatio="none"
-        style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}
-        pointerEvents="none"
-      >
-        <NativeArenaStatic
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              left: frameLeft,
+              top: frameTop,
+              width: frameWidth,
+              height: frameHeight,
+              borderWidth: PERIMETER_STROKE_WIDTH,
+              borderColor: '#00f3ff',
+            },
+          ]}
+        />
+        <Svg
           width={snapshot.width}
           height={snapshot.height}
-          cell={snapshot.cell}
-          rows={snapshot.rows}
-          level={snapshot.level}
-        />
-      </Svg>
+          viewBox={`0 0 ${snapshot.width} ${snapshot.height}`}
+          preserveAspectRatio="none"
+          style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}
+          pointerEvents="none"
+        >
+          <NativeArenaStatic
+            width={snapshot.width}
+            height={snapshot.height}
+            cell={snapshot.cell}
+            rows={snapshot.rows}
+            level={snapshot.level}
+          />
+        </Svg>
+      </View>
     );
   };
 
