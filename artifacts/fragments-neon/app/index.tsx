@@ -4291,6 +4291,7 @@ export default function GameScreen() {
   const bannerAnimatingRef = useRef(false);
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
+  const nativeBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadingRevealStartedRef = useRef(false);
   const initialLoadingTapHandledRef = useRef(false);
   const initialLoadingBannerRef = useRef<Banner | null>(null);
@@ -4428,11 +4429,37 @@ export default function GameScreen() {
 
   const enqueueBanner = useCallback((nextBanner: Banner) => {
     if (Platform.OS !== 'web') {
-      // Native gameplay must not depend on the JS animation queue. A tight
-      // 60 FPS scheduler can delay Animated callbacks on Android and leave
-      // the sector-start card permanently over the game.
-      setBanner(null);
-      nextBanner.onComplete?.();
+      // Keep native banners independent from Animated callbacks. The banner
+      // is rendered immediately, then a timer advances the queue; this avoids
+      // losing banners when the game loop is busy for a few frames.
+      bannerQueueRef.current.push(nextBanner);
+      if (bannerAnimatingRef.current) return;
+
+      const playNextNativeBanner = () => {
+        const next = bannerQueueRef.current.shift();
+        if (!next) {
+          bannerAnimatingRef.current = false;
+          setBanner(null);
+          return;
+        }
+
+        bannerAnimatingRef.current = true;
+        const sequence = bannerSequenceRef.current + 1;
+        bannerSequenceRef.current = sequence;
+        setBanner(next);
+        bannerTranslateX.stopAnimation();
+        bannerTranslateX.setValue(0);
+
+        nativeBannerTimerRef.current = setTimeout(() => {
+          nativeBannerTimerRef.current = null;
+          if (bannerSequenceRef.current !== sequence) return;
+          setBanner(null);
+          next.onComplete?.();
+          playNextNativeBanner();
+        }, next.kind === 'TUTORIAL' ? 2400 : 820);
+      };
+
+      playNextNativeBanner();
       return;
     }
     bannerQueueRef.current.push(nextBanner);
