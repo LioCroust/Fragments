@@ -3480,6 +3480,7 @@ const SkiaDynamicArena = React.memo(({
   const layoutReportedRef = useRef(false);
   const mountReportedRef = useRef(false);
   const publishReportedRef = useRef(false);
+  const firstPicturePublishedRef = useRef(false);
   const lastPicturePublishAtRef = useRef(0);
 
   useEffect(() => {
@@ -3541,6 +3542,13 @@ const SkiaDynamicArena = React.memo(({
           hasBackground: Boolean(imageSet.background),
           hasPlayer: Boolean(imageSet.player),
         });
+      }
+      const isFirstPicture = !firstPicturePublishedRef.current;
+      firstPicturePublishedRef.current = true;
+      if (isFirstPicture) {
+        // Always deliver the first frame through React so the native view
+        // receives a picture even if the JSI view registry is not ready yet.
+        setPicture(nextPicture);
       }
       if (usesNativeJsi && nativeApi) {
         nativeApi.setJsiProperty(nativeId, 'picture', nextPicture);
@@ -3617,7 +3625,6 @@ const SkiaDynamicArena = React.memo(({
         picture={picture}
         collapsable={false}
         opaque={false}
-        androidWarmup
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
