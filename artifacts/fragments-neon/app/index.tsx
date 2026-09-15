@@ -8009,21 +8009,14 @@ export default function GameScreen() {
 
     scheduleNextLoop = () => {
       if (cancelled) return;
-      if (Platform.OS === 'web') {
+      if (typeof requestAnimationFrame === 'function') {
+        // Native RAF keeps the loop on the display cadence while yielding
+        // between frames so React can commit HUD/surface updates and Android
+        // can dispatch timers and touch events. A tight setImmediate chain
+        // can report 60 FPS while starving those commits.
         loopHandle = requestAnimationFrame(loop);
-      } else if (!gameRef.current.initialized) {
-        // Keep the launch path cooperative so AsyncStorage and native image
-        // callbacks can resolve before switching to the tighter scheduler.
-        loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
-      } else if (typeof setImmediate === 'function') {
-        // Android timers quantize even a zero-delay timeout to roughly one
-        // display interval. Using one periodically turns the measured cadence
-        // into ~30 FPS. Native banners no longer depend on JS timers, so keep
-        // the immediate scheduler for the gameplay loop and use the timestamp
-        // guard above to cap actual frames at 60 FPS.
-        loopHandle = setImmediate(loop);
       } else {
-        loopHandle = setTimeout(loop, 1);
+        loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
       }
     };
     scheduleNextLoop();
@@ -8031,10 +8024,12 @@ export default function GameScreen() {
       cancelled = true;
       if (Platform.OS === 'web') {
         cancelAnimationFrame(loopHandle as number);
-      } else if (typeof clearImmediate === 'function') {
-        clearImmediate(loopHandle as ReturnType<typeof setImmediate>);
       } else {
-        clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
+        if (typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(loopHandle as number);
+        } else {
+          clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
+        }
       }
     };
   }, [

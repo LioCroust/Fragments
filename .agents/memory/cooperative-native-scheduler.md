@@ -3,8 +3,8 @@ name: Cooperative native scheduler
 description: Android event-loop fairness constraints for the Fragments game loop
 ---
 
-The native game loop should use a fast scheduler for frame cadence. On Android, do not insert zero-delay timers into the active frame schedule: they are quantized to a display interval and can halve the measured cadence.
+The native game loop should use the display scheduler on Android so each frame yields to React commits, timers, and touch dispatch. Keep a timestamp guard to cap work at 60 FPS; do not use a continuous `setImmediate` chain for the active native loop.
 
-**Why:** A zero-delay timer inserted every few frames produced stable 28–33 FPS even though collision and rendering stayed below the budget. Native gameplay banners now bypass the JS animation queue, so the active loop can remain on setImmediate.
+**Why:** A continuous `setImmediate` chain can report 58–59 FPS while starving Android's UI/event work. The visible result is an initial HUD stuck at 0 FPS and a black arena even though the game loop logs look healthy. Zero-delay timers also previously produced 28–33 FPS.
 
-**How to apply:** Keep the 60 FPS timestamp guard and use setImmediate while gameplay is initialized. Avoid replacing the loop with a 16 ms timer or periodically mixing in setTimeout(0); both previously produced about 30 FPS.
+**How to apply:** Prefer `requestAnimationFrame` on native and web, with the existing timestamp guard. Use a 16 ms timeout only as a runtime fallback when RAF is unavailable; do not mix `setImmediate` into the active frame schedule.
