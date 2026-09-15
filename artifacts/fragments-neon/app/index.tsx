@@ -884,14 +884,43 @@ const closestPointOnPolyline = (point: Point, points: Point[]) => {
   };
 };
 
-const distanceBetweenSegments = (firstStart: Point, firstEnd: Point, secondStart: Point, secondEnd: Point) => (
-  Math.min(
+const pointSegmentMayBeWithin = (
+  point: Point,
+  start: Point,
+  end: Point,
+  maxDistance: number,
+) => (
+  point.x >= Math.min(start.x, end.x) - maxDistance
+  && point.x <= Math.max(start.x, end.x) + maxDistance
+  && point.y >= Math.min(start.y, end.y) - maxDistance
+  && point.y <= Math.max(start.y, end.y) + maxDistance
+);
+
+const distanceBetweenSegments = (
+  firstStart: Point,
+  firstEnd: Point,
+  secondStart: Point,
+  secondEnd: Point,
+  maxDistance = 0,
+) => {
+  if (
+    maxDistance > 0
+    && (
+      Math.max(firstStart.x, firstEnd.x) < Math.min(secondStart.x, secondEnd.x) - maxDistance
+      || Math.min(firstStart.x, firstEnd.x) > Math.max(secondStart.x, secondEnd.x) + maxDistance
+      || Math.max(firstStart.y, firstEnd.y) < Math.min(secondStart.y, secondEnd.y) - maxDistance
+      || Math.min(firstStart.y, firstEnd.y) > Math.max(secondStart.y, secondEnd.y) + maxDistance
+    )
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.min(
     distanceToSegment(firstStart, secondStart, secondEnd),
     distanceToSegment(firstEnd, secondStart, secondEnd),
     distanceToSegment(secondStart, firstStart, firstEnd),
     distanceToSegment(secondEnd, firstStart, firstEnd),
-  )
-);
+  );
+};
 
 const spiderThreadIsActive = (thread: SpiderThread) => (
   thread.anchored && thread.remaining > 0
@@ -1892,7 +1921,11 @@ const bombTouchesSegment = (
   cell: number,
   start: Point,
   end: Point,
-) => distanceToSegment(bomb, start, end) <= bombRadius(cell) + PERIMETER_STROKE_WIDTH * 0.5;
+) => {
+  const collisionDistance = bombRadius(cell) + PERIMETER_STROKE_WIDTH * 0.5;
+  return pointSegmentMayBeWithin(bomb, start, end, collisionDistance)
+    && distanceToSegment(bomb, start, end) <= collisionDistance;
+};
 
 const bombTouchesTrail = (bomb: Bomb, cell: number, trail: Point[]) => (
   trail.slice(1).some((trailPoint, index) => (
@@ -1956,7 +1989,13 @@ const sevenProjectileTouchesBlueBoundary = (
   }
   return protectedTrails.some((trail) => (
     trail.slice(1).some((trailPoint, index) => (
-      distanceBetweenSegments(from, to, trail[index], trailPoint) <= collisionDistance
+      distanceBetweenSegments(
+        from,
+        to,
+        trail[index],
+        trailPoint,
+        collisionDistance,
+      ) <= collisionDistance
     ))
   ));
 };
@@ -6383,11 +6422,14 @@ export default function GameScreen() {
           const trailStrokeRadius = PERIMETER_STROKE_WIDTH * 0.5;
           return collisionCircles.some(({ center, radius }) => (
             trail.slice(1).some((trailPoint, index) => (
-              distanceToSegment(
+              pointSegmentMayBeWithin(
                 center,
                 trail[index],
                 trailPoint,
-              ) <= radius + trailStrokeRadius
+                radius + trailStrokeRadius,
+              )
+              && distanceToSegment(center, trail[index], trailPoint)
+                <= radius + trailStrokeRadius
             ))
           ));
         };
@@ -6438,6 +6480,7 @@ export default function GameScreen() {
                 toCircle.center,
                 trail[trailIndex],
                 trailPoint,
+                fromCircle.radius + trailStrokeRadius,
               ) <= fromCircle.radius + trailStrokeRadius
             ));
           });
@@ -7258,6 +7301,7 @@ export default function GameScreen() {
                 probe,
                 thread.start,
                 thread.end,
+                movementBodyRadius + g.cell * 0.12,
               ) <= movementBodyRadius + g.cell * 0.12;
             if (!touchesThread) continue;
             caughtInSpiderWeb = true;
