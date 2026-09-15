@@ -444,3 +444,129 @@ mtime_ms = 1789476068619
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/e493b99f-473e-47c9-9a69-61059d64d3ac/cddf0056-cb04-401f-8a49-121a5af8b2c4"
 storage_version_token = "1789476078760330"
 content_type = "image/png"
+
+[[outputs]]
+id = "Yayho4Cav7eLLmGdUc-xc"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variants-contact-sheet.png"
+type = "image"
+title = "Planche de comparaison des 8 variantes"
+description = "Planche de comparaison visuelle des huit propositions."
+logical_id = "69b6546d-d46d-4ad8-9928-c3ad2678f6ec"
+content_hash = "sha256:19adaf478c4c677914aeb18156a7ff9d17d344ea92df586fcfa23067611f9c66"
+size = 1529213
+mtime_ms = 1789476385119
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/69b6546d-d46d-4ad8-9928-c3ad2678f6ec/069e6d25-23c1-4b79-a0f9-f64b5eec9020"
+storage_version_token = "1789476398963251"
+content_type = "image/png"
+
+[[outputs]]
+id = "iDsjWlQ3h9YcLUGeNDPFa"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-01-1080x1920.png"
+type = "image"
+title = "Variante 01 — drone en montée"
+description = "Concept portrait 1080×1920, variante 01. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "512cea85-f636-434d-b995-c39401d70daf"
+content_hash = "sha256:3af72c8855292be74e9cbf0e6fa07c7e4e126798e0fd52054b0fa2ae1fc17076"
+size = 2824232
+mtime_ms = 1789476197634
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/512cea85-f636-434d-b995-c39401d70daf/8addd474-e58a-4ec6-b597-d949d6697ad1"
+storage_version_token = "1789476399782007"
+content_type = "image/png"
+
+[[outputs]]
+id = "ovnFD0rcDGJyciaV1hsHt"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-02-1080x1920.png"
+type = "image"
+title = "Variante 02 — virage latéral agressif"
+description = "Concept portrait 1080×1920, variante 02. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "74829498-f5c9-4399-80d7-a1b59defc7e7"
+content_hash = "sha256:f4b43e1721d580fe5f4acc2152c52c0c2b1fae5a0cf325f8af64df5525f7e58b"
+size = 3149578
+mtime_ms = 1789476201038
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/74829498-f5c9-4399-80d7-a1b59defc7e7/1d85e68c-bf95-41c3-bba7-6f44817fd6db"
+storage_version_token = "1789476400386568"
+content_type = "image/png"
+
+[[outputs]]
+id = "vKVCSsOQJ75dXkoSRjefV"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-03-1080x1920.png"
+type = "image"
+title = "Variante 03 — drone vers le joueur"
+description = "Concept portrait 1080×1920, variante 03. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "94f3b56c-b713-484f-b2c1-27e0a87710fa"
+content_hash = "sha256:03fb0d67724c708aa67c6f30f519a12c9a468aaa4a6cfaad4fb87f2593bbf434"
+size = 2978927
+mtime_ms = 1789476204574
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/94f3b56c-b713-484f-b2c1-27e0a87710fa/ea6a1f33-4310-4a30-a033-698989c12ff9"
+storage_version_token = "1789476400979831"
+content_type = "image/png"
+
+[[outputs]]
+id = "kW-9Cn6ichTBsIbTO55C1"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-04-1080x1920.png"
+type = "image"
+title = "Variante 04 — angle bas dans l’arène"
+description = "Concept portrait 1080×1920, variante 04. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "83ffcc93-8cae-48fe-95c5-d54ef83e3bac"
+content_hash = "sha256:4325cd162b05ea84a490d0c7aeff1909168116745f7c2a8b352c8f8f6929d7d2"
+size = 2999695
+mtime_ms = 1789476208166
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/83ffcc93-8cae-48fe-95c5-d54ef83e3bac/99d17c84-4aa3-4d2d-bd11-bcabd381def2"
+storage_version_token = "1789476401552936"
+content_type = "image/png"
+
+[[outputs]]
+id = "2yXV7T67EkK26hth9gURN"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-05-1080x1920.png"
+type = "image"
+title = "Variante 05 — composition centrée"
+description = "Concept portrait 1080×1920, variante 05. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "f51342bd-0f4d-466f-95e7-ca15c6c0960e"
+content_hash = "sha256:4e6f0dc9b93d92f58181310c42a408f9eb5d3803a45fcaaf914b7d78b7d50d7a"
+size = 3029486
+mtime_ms = 1789476211706
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/f51342bd-0f4d-466f-95e7-ca15c6c0960e/e3c310c4-d49f-4131-98fe-5c0f49887e97"
+storage_version_token = "1789476402270556"
+content_type = "image/png"
+
+[[outputs]]
+id = "3itfMOzBEz8Hp1atKqY5u"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-06-1080x1920.png"
+type = "image"
+title = "Variante 06 — diagonale de vitesse"
+description = "Concept portrait 1080×1920, variante 06. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "eeadeb82-cd7b-469f-ae7a-c4a616ec643d"
+content_hash = "sha256:90aeb095bc15df7961742102510d2b66026e49437bf75bf00e2a455b8151b79e"
+size = 3152800
+mtime_ms = 1789476215214
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/eeadeb82-cd7b-469f-ae7a-c4a616ec643d/ffeddec4-316a-4a89-84f5-4a0ac0164395"
+storage_version_token = "1789476402846052"
+content_type = "image/png"
+
+[[outputs]]
+id = "A3dIFizz2AYazLaGM2Q7x"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-07-1080x1920.png"
+type = "image"
+title = "Variante 07 — poursuite rapprochée"
+description = "Concept portrait 1080×1920, variante 07. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "97ec2485-6368-4ca8-92b8-f36558d0ca5c"
+content_hash = "sha256:aec77e82ded6c9a320533ab80408503448084941164b8e0d0267c702914b010b"
+size = 3162472
+mtime_ms = 1789476218822
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/97ec2485-6368-4ca8-92b8-f36558d0ca5c/055bcd83-e0b2-48b0-afe6-b826d25eb73c"
+storage_version_token = "1789476403533539"
+content_type = "image/png"
+
+[[outputs]]
+id = "SJWl0S5tbSUHT2Fi2jrcz"
+uri = "file://attached_assets/generated_images/fragments-neon-home-variant-08-1080x1920.png"
+type = "image"
+title = "Variante 08 — gros plan cinématique"
+description = "Concept portrait 1080×1920, variante 08. L’image d’accueil actuelle n’est pas modifiée."
+logical_id = "a7c290f8-da8b-4f30-af0a-4f2e724d15a2"
+content_hash = "sha256:d704e3388039d98b426778a746e75434eed007dc8a45a5997c3e9ec7b9a675a5"
+size = 2818034
+mtime_ms = 1789476222770
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:c4f28ae0-8926-40ec-9b94-9fa013c918df/a7c290f8-da8b-4f30-af0a-4f2e724d15a2/92c6b4f5-43ba-4770-beec-d5e2788cc471"
+storage_version_token = "1789476404110840"
+content_type = "image/png"
