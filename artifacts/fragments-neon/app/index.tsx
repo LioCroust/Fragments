@@ -65,6 +65,7 @@ const TUTORIAL_SWIPE_REPETITIONS = 2;
 const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
+const NATIVE_GAME_LOOP_INTERVAL_MS = 1000 / 60;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -5166,7 +5167,7 @@ export default function GameScreen() {
   ).current;
 
   useEffect(() => {
-    let animationFrame = 0;
+    let loopHandle: ReturnType<typeof setTimeout> | number = 0;
     let lastTime = Date.now();
     let fpsWindowStart = lastTime;
     let fpsWindowFrames = 0;
@@ -7475,7 +7476,9 @@ export default function GameScreen() {
       context.globalCompositeOperation = 'source-over';
     };
 
+    let scheduleNextLoop: () => void;
     const loop = () => {
+      if (cancelled) return;
       const now = Date.now();
       fpsWindowFrames += 1;
       if (now - fpsWindowStart >= 500) {
@@ -7665,13 +7668,25 @@ export default function GameScreen() {
           ));
         }
       }
-      animationFrame = requestAnimationFrame(loop);
+      scheduleNextLoop();
     };
 
-    animationFrame = requestAnimationFrame(loop);
+    scheduleNextLoop = () => {
+      if (cancelled) return;
+      if (Platform.OS === 'web') {
+        loopHandle = requestAnimationFrame(loop);
+      } else {
+        loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
+      }
+    };
+    scheduleNextLoop();
     return () => {
       cancelled = true;
-      cancelAnimationFrame(animationFrame);
+      if (Platform.OS === 'web') {
+        cancelAnimationFrame(loopHandle as number);
+      } else {
+        clearTimeout(loopHandle as ReturnType<typeof setTimeout>);
+      }
     };
   }, [
     enqueueBanner,
