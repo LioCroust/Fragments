@@ -8188,30 +8188,38 @@ export default function GameScreen() {
         <View
           style={styles.loadingScreen}
           pointerEvents="auto"
-          onStartShouldSetResponder={() => isInitialLoadingReady}
-          onResponderRelease={handleInitialLoadingTap}
           testID="initial-loading-screen"
         >
-          <Animated.View
-            style={[
-              styles.loadingArtworkFrame,
-              { transform: [{ translateX: loadingBannerTranslateX }] },
-            ]}
-            accessibilityLabel="Chargement"
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={handleInitialLoadingTap}
+            disabled={!isInitialLoadingReady}
+            accessibilityRole="button"
+            accessibilityLabel="Démarrer Fragments"
+            testID="initial-loading-start"
           >
-            <RNImage
-              source={loadingCoverSource}
-              style={styles.loadingArtwork}
-              resizeMode="cover"
-              accessibilityLabel="Illustration Fragments"
-            />
-            <View style={styles.loadingArtworkShade} />
-            <View style={styles.loadingOverlay}>
-              {isInitialLoadingReady && (
-                <Text style={styles.loadingBannerSubtitle}>TOUCHER POUR DÉMARRER</Text>
-              )}
-            </View>
-          </Animated.View>
+            <Animated.View
+              style={[
+                styles.loadingArtworkFrame,
+                { transform: [{ translateX: loadingBannerTranslateX }] },
+              ]}
+              accessibilityLabel="Chargement"
+              pointerEvents="none"
+            >
+              <RNImage
+                source={loadingCoverSource}
+                style={styles.loadingArtwork}
+                resizeMode="cover"
+                accessibilityLabel="Illustration Fragments"
+              />
+              <View style={styles.loadingArtworkShade} />
+              <View style={styles.loadingOverlay}>
+                {isInitialLoadingReady && (
+                  <Text style={styles.loadingBannerSubtitle}>TOUCHER POUR DÉMARRER</Text>
+                )}
+              </View>
+            </Animated.View>
+          </Pressable>
         </View>
       )}
     </View>
