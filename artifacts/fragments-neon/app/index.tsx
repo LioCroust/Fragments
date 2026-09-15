@@ -3445,6 +3445,7 @@ const SkiaDynamicArena = React.memo(({
   const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
   const pictureViewRef = useRef<any>(null);
   const [picture, setPicture] = useState<any>(null);
+  const layoutReportedRef = useRef(false);
   const lastPicturePublishAtRef = useRef(0);
 
   useEffect(() => {
@@ -3539,6 +3540,18 @@ const SkiaDynamicArena = React.memo(({
         top: -renderMargin,
         width: snapshot.width + renderMargin * 2,
         height: snapshot.height + renderMargin * 2,
+      }}
+      onLayout={(event) => {
+        if (layoutReportedRef.current) return;
+        layoutReportedRef.current = true;
+        diagnosticLog('skia-view-layout', {
+          width: Math.round(event.nativeEvent.layout.width),
+          height: Math.round(event.nativeEvent.layout.height),
+          snapshotWidth: Math.round(snapshot.width),
+          snapshotHeight: Math.round(snapshot.height),
+          renderMargin: Math.round(renderMargin),
+          hasPicture: Boolean(picture),
+        });
       }}
       pointerEvents="none"
     />
@@ -4040,6 +4053,8 @@ export default function GameScreen() {
   const lastPerformanceReportAtRef = useRef(0);
   const nativeSnapshotRef = useRef<Snapshot | null>(null);
   const nativePicturePublisherRef = useRef<NativePicturePublisher | null>(null);
+  const nativeArenaRenderReportedRef = useRef(false);
+  const nativeDynamicRenderReportedRef = useRef(false);
   const lastHudPublishAtRef = useRef(0);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
@@ -7973,6 +7988,15 @@ export default function GameScreen() {
     const snapshot = nativeSnapshot
       ?? (gameRef.current.initialized ? snapshotFromGame(gameRef.current) : null);
     if (!snapshot) return null;
+    if (!nativeArenaRenderReportedRef.current) {
+      nativeArenaRenderReportedRef.current = true;
+      diagnosticLog('native-arena-render', {
+        width: Math.round(snapshot.width),
+        height: Math.round(snapshot.height),
+        cell: Number(snapshot.cell.toFixed(2)),
+        level: snapshot.level,
+      });
+    }
     const frameLeft = snapshot.cell * PERIMETER_HORIZONTAL_INSET_CELLS;
     const frameTop = snapshot.cell * PERIMETER_VERTICAL_INSET_CELLS;
     const frameWidth = snapshot.width - frameLeft * 2;
@@ -8026,6 +8050,16 @@ export default function GameScreen() {
       && enemy.respawnAt <= Date.now()
     )).length;
     const skiaShipReady = skiaReady && liveShipCount <= 1;
+    if (!nativeDynamicRenderReportedRef.current) {
+      nativeDynamicRenderReportedRef.current = true;
+      diagnosticLog('native-dynamic-render', {
+        width: Math.round(snapshot.width),
+        height: Math.round(snapshot.height),
+        skiaEnabled: SKIA_DYNAMIC_RENDER_ENABLED,
+        skiaReady,
+        liveShipCount,
+      });
+    }
     return (
       <View style={styles.nativeArenaDynamicLayer} pointerEvents="none">
         {SKIA_DYNAMIC_RENDER_ENABLED && (
