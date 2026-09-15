@@ -65,7 +65,6 @@ const TUTORIAL_SWIPE_REPETITIONS = 2;
 const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
-const NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS = 100;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -2901,13 +2900,13 @@ const drawSkiaPolyline = (
   close = false,
 ) => {
   if (points.length < 2) return;
-  const path = Skia.Path.Make();
-  path.moveTo(points[0].x, points[0].y);
+  const pathBuilder = Skia.PathBuilder.Make();
+  pathBuilder.moveTo(points[0].x, points[0].y);
   for (let index = 1; index < points.length; index += 1) {
-    path.lineTo(points[index].x, points[index].y);
+    pathBuilder.lineTo(points[index].x, points[index].y);
   }
-  if (close) path.close();
-  canvas.drawPath(path, paint);
+  if (close) pathBuilder.close();
+  canvas.drawPath(pathBuilder.detach(), paint);
 };
 
 const buildNativeDynamicPicture = (
@@ -3903,7 +3902,6 @@ export default function GameScreen() {
   const lastPerformanceReportAtRef = useRef(0);
   const nativeSnapshotRef = useRef<Snapshot | null>(null);
   const nativePicturePublisherRef = useRef<NativePicturePublisher | null>(null);
-  const lastNativeStaticPublishAtRef = useRef(0);
   const lastHudPublishAtRef = useRef(0);
   const spriteImagesRef = useRef<Record<string, any>>({});
   const coreReactorImageRef = useRef<any>(null);
@@ -7559,10 +7557,18 @@ export default function GameScreen() {
               performance.now() - nativeBuildStartedAt
             );
           }
-          if (
-            !nativeSnapshotRef.current
-            || now - lastNativeStaticPublishAtRef.current >= NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS
-          ) {
+          const previousStaticSnapshot = nativeSnapshotRef.current;
+          const staticLayerChanged = !previousStaticSnapshot
+            || previousStaticSnapshot.width !== g.width
+            || previousStaticSnapshot.height !== g.height
+            || previousStaticSnapshot.cell !== g.cell
+            || previousStaticSnapshot.rows !== g.rows
+            || previousStaticSnapshot.level !== g.level
+            || previousStaticSnapshot.claimedPolygons !== g.claimedPolygons
+            || previousStaticSnapshot.claimedPolygons.length !== g.claimedPolygons.length
+            || previousStaticSnapshot.protectedTrails !== g.protectedTrails
+            || previousStaticSnapshot.protectedTrails.length !== g.protectedTrails.length;
+          if (staticLayerChanged) {
             const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
             const staticSnapshot: Snapshot = {
               width: g.width,
@@ -7597,7 +7603,6 @@ export default function GameScreen() {
               invincibleUntil: g.invincibleUntil,
             };
             nativeSnapshotRef.current = staticSnapshot;
-            lastNativeStaticPublishAtRef.current = now;
             setNativeSnapshot(staticSnapshot);
           }
         }
