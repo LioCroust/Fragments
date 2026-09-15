@@ -6514,7 +6514,7 @@ export default function GameScreen() {
           const toCircles = enemyCollisionCircles(enemy, g.cell, toX, toY);
           for (let circleIndex = 0; circleIndex < fromCircles.length; circleIndex += 1) {
             const fromCircle = fromCircles[circleIndex];
-            const toCircle = toCircles[index];
+            const toCircle = toCircles[circleIndex];
             if (
               movingSegmentTouchesPolylineWithin(
                 fromCircle.center,
