@@ -2742,10 +2742,6 @@ type NativeArenaStaticProps = {
   cell: number;
   rows: number;
   level: number;
-  claimedPolygons: Point[][];
-  protectedTrails: Point[][];
-  claimedCount: number;
-  protectedTrailCount: number;
 };
 
 const NativeArenaStatic = React.memo(({
@@ -2754,10 +2750,6 @@ const NativeArenaStatic = React.memo(({
   cell,
   rows,
   level,
-  claimedPolygons,
-  protectedTrails,
-  claimedCount,
-  protectedTrailCount,
 }: NativeArenaStaticProps) => {
   const backgroundSource = backgroundSourceForLevel(level);
   const gridLines: React.ReactNode[] = [];
@@ -2780,15 +2772,6 @@ const NativeArenaStatic = React.memo(({
         fill={ZONE_COLOR}
         opacity={INITIAL_MAP_OPACITY}
       />
-      <G opacity={CAPTURED_ZONE_LAYER_OPACITY}>
-        {claimedPolygons.slice(0, claimedCount).map((polygon, index) => (
-          <Polygon
-            key={`claimed-polygon-${index}`}
-            points={pointsToString(polygon)}
-            fill={ZONE_COLOR}
-          />
-        ))}
-      </G>
       {gridLines}
       <Rect
         x={bounds.left}
@@ -2800,19 +2783,6 @@ const NativeArenaStatic = React.memo(({
         strokeWidth={PERIMETER_STROKE_WIDTH}
         opacity={0.95}
       />
-      {protectedTrails.slice(0, protectedTrailCount).map((trail, index) => (
-        trail.length > 1 && (
-          <Polyline
-            key={`protected-trail-${index}`}
-            points={pointsToString(trail)}
-            fill="none"
-            stroke="#ff5500"
-            strokeWidth={5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )
-      ))}
     </>
   );
 });
@@ -2950,6 +2920,20 @@ const buildNativeDynamicPicture = (
 
   const bounds = perimeterBounds(game.width, game.height, game.cell);
   const pickupSize = pickupVisualSize(game.cell);
+
+  if (game.claimedPolygons.length > 0) {
+    setPaint(fillPaint, ZONE_COLOR, CAPTURED_ZONE_LAYER_OPACITY);
+    for (const polygon of game.claimedPolygons) {
+      drawSkiaPolyline(canvas, polygon, fillPaint, true);
+    }
+  }
+
+  if (game.protectedTrails.length > 0) {
+    setPaint(strokePaint, '#ff5500', 1, SkiaPaintStyle.Stroke, 5);
+    for (const protectedTrail of game.protectedTrails) {
+      drawSkiaPolyline(canvas, protectedTrail, strokePaint);
+    }
+  }
 
   if (game.trail.length > 1) {
     setPaint(strokePaint, '#fff3d6', 0.16, SkiaPaintStyle.Stroke, 12);
@@ -7577,11 +7561,7 @@ export default function GameScreen() {
             || previousStaticSnapshot.height !== g.height
             || previousStaticSnapshot.cell !== g.cell
             || previousStaticSnapshot.rows !== g.rows
-            || previousStaticSnapshot.level !== g.level
-            || previousStaticSnapshot.claimedPolygons !== g.claimedPolygons
-            || previousStaticSnapshot.claimedPolygons.length !== g.claimedPolygons.length
-            || previousStaticSnapshot.protectedTrails !== g.protectedTrails
-            || previousStaticSnapshot.protectedTrails.length !== g.protectedTrails.length;
+            || previousStaticSnapshot.level !== g.level;
           if (staticLayerChanged) {
             const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
             const staticSnapshot: Snapshot = {
@@ -7724,10 +7704,6 @@ export default function GameScreen() {
           cell={snapshot.cell}
           rows={snapshot.rows}
           level={snapshot.level}
-          claimedPolygons={snapshot.claimedPolygons}
-          protectedTrails={snapshot.protectedTrails}
-          claimedCount={snapshot.claimedPolygons.length}
-          protectedTrailCount={snapshot.protectedTrails.length}
         />
       </Svg>
     );
