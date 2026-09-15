@@ -5725,7 +5725,7 @@ export default function GameScreen() {
           vx: backwardX * speed + sideX * lateralSpeed,
           vy: backwardY * speed + sideY * lateralSpeed,
           life: 0.18 + Math.random() * 0.1,
-          size: g.cell * (0.035 + Math.random() * 0.035),
+          size: g.cell * (0.05 + Math.random() * 0.045),
           color: TORCH_PARTICLE_COLORS[
             (g.frame + index) % TORCH_PARTICLE_COLORS.length
           ],
