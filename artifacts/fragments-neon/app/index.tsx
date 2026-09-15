@@ -4522,11 +4522,9 @@ export default function GameScreen() {
     initialLoadingRevealStartedRef.current = true;
     setLoadingProgress(1);
     if (Platform.OS !== 'web') {
-      initialLoadingBannerRef.current = null;
-      setIsLoadingScreenVisible(false);
-      setIsInitialLoadingReady(false);
-      diagnosticLog('native-loading-autostart', { level: nextBanner.level });
-      enqueueBanner(nextBanner);
+      initialLoadingBannerRef.current = nextBanner;
+      setIsInitialLoadingReady(true);
+      diagnosticLog('native-loading-ready-for-tap', { level: nextBanner.level });
       return;
     }
     initialLoadingBannerRef.current = nextBanner;
@@ -8781,7 +8779,7 @@ export default function GameScreen() {
         <View style={styles.nativeLoadingCover} pointerEvents="none" />
       )}
 
-      {Platform.OS === 'web' && isLoadingScreenVisible && (
+      {isLoadingScreenVisible && (
         <View
           style={styles.loadingScreen}
           pointerEvents="auto"
