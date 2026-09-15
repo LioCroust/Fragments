@@ -3,8 +3,8 @@ name: Cooperative native scheduler
 description: Android event-loop fairness constraints for the Fragments game loop
 ---
 
-The native game loop may use a fast scheduler for frame cadence, but it must periodically yield to the timer queue. A continuous setImmediate chain is not safe for UI-driven Android gameplay.
+The native game loop should use a fast scheduler for frame cadence. On Android, do not insert zero-delay timers into the active frame schedule: they are quantized to a display interval and can halve the measured cadence.
 
-**Why:** The loop can maintain a healthy FPS metric while preventing Animated callbacks and touch dispatch from completing. This leaves a sector-start banner visible and makes the game appear frozen.
+**Why:** A zero-delay timer inserted every few frames produced stable 28–33 FPS even though collision and rendering stayed below the budget. Native gameplay banners now bypass the JS animation queue, so the active loop can remain on setImmediate.
 
-**How to apply:** Keep the 60 FPS pacing guard, but insert a regular zero-delay timer yield after a small number of immediate frames. Avoid replacing the loop wholesale with a 16 ms timer, which previously produced about 30 FPS.
+**How to apply:** Keep the 60 FPS timestamp guard and use setImmediate while gameplay is initialized. Avoid replacing the loop with a 16 ms timer or periodically mixing in setTimeout(0); both previously produced about 30 FPS.
