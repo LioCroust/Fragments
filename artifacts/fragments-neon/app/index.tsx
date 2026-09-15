@@ -66,6 +66,7 @@ const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
 const NATIVE_GAME_LOOP_INTERVAL_MS = 1000 / 60;
+const NATIVE_ASSET_PRELOAD_TIMEOUT_MS = 5000;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -4322,7 +4323,14 @@ export default function GameScreen() {
         () => reject(new Error(`Unable to preload native image asset: ${uri}`)),
       );
     });
-    return Promise.all([prefetch, dimensions]).then(() => undefined);
+    const load = Promise.all([prefetch, dimensions]).then(() => undefined);
+    // A native asset callback can remain pending indefinitely in Expo Go when
+    // Android has a stale local image request. Do not hold the launch gate
+    // forever; Skia's own image loader continues independently.
+    const timeout = new Promise<void>((resolve) => {
+      setTimeout(resolve, NATIVE_ASSET_PRELOAD_TIMEOUT_MS);
+    });
+    return Promise.race([load, timeout]);
   }, []);
 
   const preloadAllGameAssets = useCallback(() => {
