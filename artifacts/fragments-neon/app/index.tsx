@@ -8192,7 +8192,7 @@ export default function GameScreen() {
         bottomInset={Math.max(insets.bottom, 6) + 18}
       />
 
-      {isLoadingScreenVisible && (
+      {Platform.OS === 'web' && isLoadingScreenVisible && (
         <View
           style={styles.loadingScreen}
           pointerEvents="auto"
