@@ -64,7 +64,8 @@ const TUTORIAL_SWIPE_REPETITIONS = 2;
 // during development. They are part of the game's tutorial/navigation UI.
 const DEBUG_SECTOR_SELECTOR_ENABLED = true;
 const SKIA_DYNAMIC_RENDER_ENABLED = true;
-const NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS = 33;
+const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
+const NATIVE_SNAPSHOT_PUBLISH_INTERVAL_MS = 100;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -3223,6 +3224,8 @@ const SkiaDynamicArena = React.memo(({
   const sevenImages = spriteFrames.SEVEN.map((source) => useSkiaImage(source));
   const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
   const pictureViewRef = useRef<any>(null);
+  const [picture, setPicture] = useState<any>(null);
+  const lastPicturePublishAtRef = useRef(0);
 
   useEffect(() => {
     const imageSet: NativeSkiaImageSet = {
@@ -3257,13 +3260,14 @@ const SkiaDynamicArena = React.memo(({
     ].every(Boolean);
     if (!allImagesReady) return undefined;
     const publisher: NativePicturePublisher = (game, now) => {
-      const picture = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
-      const view = pictureViewRef.current as any;
-      if (!view || typeof view.setPicture !== 'function') return;
-      view.setPicture(picture);
-      if (typeof view.redraw === 'function') {
-        view.redraw();
+      if (
+        lastPicturePublishAtRef.current !== 0
+        && now - lastPicturePublishAtRef.current < NATIVE_PICTURE_PUBLISH_INTERVAL_MS
+      ) {
+        return;
       }
+      lastPicturePublishAtRef.current = now;
+      setPicture(buildNativeDynamicPicture(game, now, renderMargin, imageSet));
     };
     publisherRef.current = publisher;
     onReady();
@@ -3294,6 +3298,7 @@ const SkiaDynamicArena = React.memo(({
   return (
     <SkiaPictureView
       ref={pictureViewRef}
+      picture={picture}
       style={[
         StyleSheet.absoluteFill,
         {
