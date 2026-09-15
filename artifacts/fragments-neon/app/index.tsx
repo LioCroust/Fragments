@@ -5587,7 +5587,7 @@ export default function GameScreen() {
         const angle = Math.random() * Math.PI * 2;
         const speed = 45 + Math.random() * 260;
         const life = 0.55 + Math.random() * 0.85;
-        g.particles.push({
+        appendParticle(g, {
           x: enemy.x,
           y: enemy.y,
           vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 55,
@@ -5654,7 +5654,7 @@ export default function GameScreen() {
         g.smokePuffs.length = 0;
         g.smokeAccumulator = 0;
         if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && splitShips.length > 0) {
-          g.smokePuffs.push(...splitShips.flatMap((splitShip) => (
+          appendSmokePuffs(g, splitShips.flatMap((splitShip) => (
             createShipSmokePuffs(splitShip, g.cell, 3)
           )));
           diagnosticLog('ship-split-smoke-created', {
@@ -5843,7 +5843,7 @@ export default function GameScreen() {
           enemy.targetY = enemy.y;
           enemy.thinkTimer = 0;
           if (SHIP_SMOKE_RENDER_MODE === 'PARTICLES' && enemy.kind === 'SHIP') {
-            g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 5));
+            appendSmokePuffs(g, createShipSmokePuffs(enemy, g.cell, 5));
           }
         }
 
@@ -6283,8 +6283,17 @@ export default function GameScreen() {
         }
 
         const droneIsActive = g.trail.length > 0 || pointInsidePerimeter(g.player, bounds);
-        const collisionRadius = enemyRadius(enemy, g.cell) + playerBodyRadius(g.cell);
-        if (droneIsActive && Math.hypot(enemy.x - g.player.x, enemy.y - g.player.y) < collisionRadius) {
+        // Broad-phase reject before expanding the enemy's full collision
+        // profile. This matters most for the Spider, which has 25 circles.
+        const nearDroneX = Math.abs(enemy.x - g.player.x) <= 100;
+        const nearDroneY = Math.abs(enemy.y - g.player.y) <= 100;
+        const touchesDrone = nearDroneX
+          && nearDroneY
+          && enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y).some(({ center, radius }) => (
+            Math.hypot(center.x - g.player.x, center.y - g.player.y)
+              <= radius + playerBodyRadius(g.cell)
+          ));
+        if (droneIsActive && touchesDrone) {
           if (!playerIsProtected(g, now)) {
             explode(g, now);
             return;
@@ -6386,9 +6395,7 @@ export default function GameScreen() {
           if (velocityLength > 8) {
             g.smokeAccumulator += dt;
             if (g.smokeAccumulator >= 0.07) {
-              if (g.smokePuffs.length < MAX_SMOKE_PUFFS) {
-                g.smokePuffs.push(...createShipSmokePuffs(enemy, g.cell, 1));
-              }
+              appendSmokePuffs(g, createShipSmokePuffs(enemy, g.cell, 1));
               g.smokeAccumulator = 0;
             }
           }
@@ -6506,9 +6513,12 @@ export default function GameScreen() {
           let diamondCaptured = false;
           if (completedPolygons.length > 0) {
             g.claimedPolygons.push(...completedPolygons);
+            // buildOrthogonalCaptureRegions computed this exact area when the
+            // trail closed. Commit the cached value instead of recalculating
+            // the whole claimed surface from inside the animation loop.
             g.capturedArea = Math.min(
               g.totalPlayableArea,
-              g.claimedPolygons.reduce((area, polygon) => area + polygonArea(polygon), 0),
+              g.capturedArea + g.pendingCaptureArea,
             );
             g.bombs.forEach((bomb) => {
               if (
@@ -6533,7 +6543,7 @@ export default function GameScreen() {
               for (let particleIndex = 0; particleIndex < 36; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 35 + Math.random() * 180;
-                g.particles.push({
+                appendParticle(g, {
                   x: diamond.x,
                   y: diamond.y,
                   vx: Math.cos(angle) * speed,
