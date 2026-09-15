@@ -67,6 +67,7 @@ const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
 const NATIVE_GAME_LOOP_INTERVAL_MS = 1000 / 60;
 const NATIVE_ASSET_PRELOAD_TIMEOUT_MS = 5000;
+const NATIVE_INITIAL_START_FALLBACK_DELAY_MS = 2500;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -4744,6 +4745,33 @@ export default function GameScreen() {
     }
   }, [enqueueBanner, rememberLastPlayedSector]);
 
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const fallback = setTimeout(() => {
+      if (
+        gameRef.current.initialized
+        || initialLoadingRevealStartedRef.current
+        || sizeRef.current.width <= 0
+        || sizeRef.current.height <= 0
+      ) {
+        return;
+      }
+      const savedGame = savedGameRef.current;
+      const initialLevel = savedGame?.level
+        ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
+      resetGame(false, false, initialLevel);
+      savedGameRef.current = null;
+      if (!gameRef.current.initialized) return;
+      diagnosticLog('native-start-fallback', { level: initialLevel });
+      revealGameAfterInitialLoad({
+        kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
+        tutorialStep: initialLevel === TUTORIAL_SECTOR ? 1 : undefined,
+        level: gameRef.current.level,
+      });
+    }, NATIVE_INITIAL_START_FALLBACK_DELAY_MS);
+    return () => clearTimeout(fallback);
+  }, [resetGame, revealGameAfterInitialLoad]);
+
   const restoreSavedGame = useCallback((saved: PersistedGame) => {
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return;
@@ -7698,6 +7726,10 @@ export default function GameScreen() {
       if (cancelled) return;
       if (Platform.OS === 'web') {
         loopHandle = requestAnimationFrame(loop);
+      } else if (!gameRef.current.initialized) {
+        // Keep the launch path cooperative so AsyncStorage and native image
+        // callbacks can resolve before switching to the tighter scheduler.
+        loopHandle = setTimeout(loop, NATIVE_GAME_LOOP_INTERVAL_MS);
       } else if (typeof setImmediate === 'function') {
         loopHandle = setImmediate(loop);
       } else {
