@@ -38,6 +38,10 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install React Native Skia binaries
+        working-directory: artifacts/fragments-neon
+        run: pnpm exec install-skia
+
       - name: Build release APK
         working-directory: artifacts/fragments-neon/android
         env:
