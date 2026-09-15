@@ -14,7 +14,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Slot } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 const logStartup = (event: string, details: Record<string, unknown> = {}) => {
@@ -51,19 +51,7 @@ function RootLayoutNav() {
     return () => subscription.remove();
   }, []);
 
-  return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        statusBarHidden: Platform.OS === 'android',
-        statusBarTranslucent: Platform.OS === 'android',
-        navigationBarHidden: true,
-        navigationBarTranslucent: true,
-      }}
-    >
-      <Stack.Screen name="index" options={{ gestureEnabled: false }} />
-    </Stack>
-  );
+  return <Slot />;
 }
 
 export default function RootLayout() {
