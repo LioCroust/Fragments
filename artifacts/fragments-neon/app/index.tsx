@@ -7779,7 +7779,13 @@ export default function GameScreen() {
     if (Platform.OS === 'web' || !nativeSnapshot) return null;
     const snapshot = nativeSnapshot;
     return (
-      <Svg style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}>
+      <Svg
+        width={snapshot.width}
+        height={snapshot.height}
+        viewBox={`0 0 ${snapshot.width} ${snapshot.height}`}
+        preserveAspectRatio="none"
+        style={[StyleSheet.absoluteFill, { overflow: 'visible' }]}
+      >
         <NativeArenaStatic
           width={snapshot.width}
           height={snapshot.height}
