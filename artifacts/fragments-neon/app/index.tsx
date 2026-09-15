@@ -44,7 +44,7 @@ import {
 
 const COLS = 12;
 const INITIAL_BACKGROUND_PRELOAD_COUNT = 10;
-const PERIMETER_HORIZONTAL_INSET_CELLS = 0.65;
+const PERIMETER_HORIZONTAL_INSET_CELLS = 0.85;
 // Keep a little more cockpit breathing room above and below the playfield on
 // every sector, including the tutorial.
 const PERIMETER_VERTICAL_INSET_CELLS = 1.35;
