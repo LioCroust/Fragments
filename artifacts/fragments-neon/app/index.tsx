@@ -3064,6 +3064,38 @@ const buildNativeDynamicPicture = (
   const bounds = perimeterBounds(game.width, game.height, game.cell);
   const pickupSize = pickupVisualSize(game.cell);
 
+  // Keep the native surface visibly anchored even if the separate static SVG
+  // layer has not finished attaching on Android. This is intentionally subtle
+  // so the authored sector background remains visible underneath it.
+  setPaint(fillPaint, '#07111d', 0.34);
+  canvas.drawRect(Skia.XYWHRect(0, 0, game.width, game.height), fillPaint);
+  setPaint(fillPaint, ZONE_COLOR, INITIAL_MAP_OPACITY * 0.55);
+  canvas.drawRect(
+    Skia.XYWHRect(
+      bounds.left,
+      bounds.top,
+      bounds.right - bounds.left,
+      bounds.bottom - bounds.top,
+    ),
+    fillPaint,
+  );
+  setPaint(
+    strokePaint,
+    '#00f3ff',
+    0.95,
+    SkiaPaintStyle.Stroke,
+    PERIMETER_STROKE_WIDTH,
+  );
+  canvas.drawRect(
+    Skia.XYWHRect(
+      bounds.left,
+      bounds.top,
+      bounds.right - bounds.left,
+      bounds.bottom - bounds.top,
+    ),
+    strokePaint,
+  );
+
   if (game.claimedPolygons.length > 0) {
     setPaint(fillPaint, ZONE_COLOR, CAPTURED_ZONE_LAYER_OPACITY);
     for (const polygon of game.claimedPolygons) {
@@ -3446,6 +3478,7 @@ const SkiaDynamicArena = React.memo(({
   const pictureViewRef = useRef<any>(null);
   const [picture, setPicture] = useState<any>(null);
   const lastPicturePublishAtRef = useRef(0);
+  const firstPictureCommittedRef = useRef(false);
 
   useEffect(() => {
     const imageSet: NativeSkiaImageSet = {
@@ -3489,21 +3522,43 @@ const SkiaDynamicArena = React.memo(({
       const nextPicture = buildNativeDynamicPicture(game, now, renderMargin, imageSet);
       const nativeId = pictureViewRef.current?.nativeId;
       const nativeApi = getNativeSkiaViewApi();
-      if (
+      const canPublishThroughJsi = (
         typeof nativeId === 'number'
         && nativeApi?.setJsiProperty
         && nativeApi.requestRedraw
-      ) {
+      );
+      const isFirstPicture = !firstPictureCommittedRef.current;
+
+      // The first picture must travel through the component prop as well as
+      // JSI. The game loop can publish during the same commit that mounts the
+      // native view; in that race the native id/API path can accept the
+      // picture before the view has attached and leave an empty surface.
+      if (isFirstPicture) {
+        firstPictureCommittedRef.current = true;
+        setPicture(nextPicture);
+        diagnosticLog('native-skia-first-picture', {
+          nativeId: typeof nativeId === 'number' ? nativeId : null,
+          width: game.width,
+          height: game.height,
+        });
+      }
+
+      if (canPublishThroughJsi) {
         nativeApi.setJsiProperty(nativeId, 'picture', nextPicture);
         nativeApi.requestRedraw(nativeId);
       } else {
-        // The first game frame can race the native view mount. Keep a single
-        // React-prop path only for that startup case; steady-state animation
-        // must not schedule a React render for every picture.
+        // If the native API is unavailable, keep the declarative path alive
+        // rather than freezing on the first picture. This is only a fallback:
+        // a working native Skia view uses the JSI path above.
         setPicture(nextPicture);
       }
     };
     publisherRef.current = publisher;
+    diagnosticLog('native-skia-publisher-mounted', {
+      width: snapshot.width,
+      height: snapshot.height,
+      renderMargin,
+    });
     if (allImagesReady) onReady();
     return () => {
       if (publisherRef.current === publisher) publisherRef.current = null;
@@ -3533,15 +3588,14 @@ const SkiaDynamicArena = React.memo(({
     <SkiaPictureView
       ref={pictureViewRef}
       picture={picture}
-      style={[
-        StyleSheet.absoluteFill,
-        {
-          left: -renderMargin,
-          top: -renderMargin,
-          width: snapshot.width + renderMargin * 2,
-          height: snapshot.height + renderMargin * 2,
-        },
-      ]}
+      style={{
+        position: 'absolute',
+        left: -renderMargin,
+        top: -renderMargin,
+        width: snapshot.width + renderMargin * 2,
+        height: snapshot.height + renderMargin * 2,
+      }}
+      androidWarmup
       pointerEvents="none"
     />
   );
