@@ -97,7 +97,7 @@ export default function RootLayout() {
         barStyle="light-content"
         backgroundColor="transparent"
         translucent
-        hidden={false}
+        hidden={Platform.OS === 'android'}
       />
       <NavigationBar style="dark" hidden />
       <ErrorBoundary

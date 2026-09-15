@@ -1,10 +1,10 @@
 ---
-name: Android transparent status bar
-description: The game cockpit must remain visible behind Android system status icons.
+name: Android immersive status bar
+description: The game must use the full Android display without exposing system status icons.
 ---
 
-Android status-bar transparency depends on both the native theme and the runtime configuration. Keep the system background transparent, use a translucent light-content status bar, and do not hide it when the game needs to show cockpit artwork beneath the system icons.
+The game uses an immersive Android presentation: the status bar is hidden so the cockpit and HUD can occupy the full display without exposing the time or notification icons.
 
-**Why:** A runtime black background or non-translucent status bar can recreate a black strip even when the Android theme declares a transparent status bar.
+**Why:** Making the status bar transparent still leaves the system icons visible and reserves a top region that the game cannot use as intended.
 
-**How to apply:** When changing the full-screen game layout, verify the runtime status-bar props in the root layout together with the native theme and keep safe-area padding for HUD content.
+**How to apply:** Keep the runtime status bar hidden on Android, keep the navigation bar hidden, and verify that HUD safe-area padding still positions the content correctly after immersive mode changes.
