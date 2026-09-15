@@ -5715,7 +5715,7 @@ export default function GameScreen() {
       for (let index = 0; index < 2; index += 1) {
         const lateralOffset = (Math.random() - 0.5) * g.cell * 0.28;
         const backwardOffset = g.cell * (0.08 + Math.random() * 0.2);
-        const speed = g.cell * (1.65 + Math.random() * 1.55);
+        const speed = g.cell * (2.0 + Math.random() * 1.8);
         const lateralSpeed = g.cell * (Math.random() - 0.5) * 1.8;
         const streak = index === 0;
 
@@ -5724,7 +5724,7 @@ export default function GameScreen() {
           y: nozzle.y + backwardY * backwardOffset + sideY * lateralOffset,
           vx: backwardX * speed + sideX * lateralSpeed,
           vy: backwardY * speed + sideY * lateralSpeed,
-          life: 0.18 + Math.random() * 0.1,
+          life: 0.24 + Math.random() * 0.12,
           size: g.cell * (0.05 + Math.random() * 0.045),
           color: TORCH_PARTICLE_COLORS[
             (g.frame + index) % TORCH_PARTICLE_COLORS.length
