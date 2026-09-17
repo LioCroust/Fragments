@@ -379,6 +379,7 @@ const APP_VERSION = __DEV__
   ? '1.0.16'
   : String(
     process.env.EXPO_PUBLIC_BUILD_NUMBER
+      ?? process.env.APK_BUILD_NUMBER
       ?? Constants.nativeBuildVersion
       ?? Constants.nativeAppVersion
       ?? Constants.expoConfig?.version
