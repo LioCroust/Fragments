@@ -22,6 +22,18 @@ plugins {
   id("expo-autolinking-settings")
 }
 
+// GitHub-hosted Android runners expose the SDK through ANDROID_HOME or
+// ANDROID_SDK_ROOT. Generate local.properties only when the project is built
+// on a machine that does not already provide it.
+def androidSdkPath = System.getenv('ANDROID_HOME')
+  ?: System.getenv('ANDROID_SDK_ROOT')
+  ?: '/usr/local/lib/android/sdk'
+def androidSdkDirectory = new File(androidSdkPath)
+def localPropertiesFile = new File(rootDir, 'local.properties')
+if (androidSdkDirectory.isDirectory() && !localPropertiesFile.exists()) {
+  localPropertiesFile.text = "sdk.dir=${androidSdkDirectory.absolutePath.replace('\\', '\\\\')}\n"
+}
+
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
     ex.autolinkLibrariesFromCommand()
