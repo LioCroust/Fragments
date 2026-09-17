@@ -95,7 +95,7 @@ function validateSubmission(body) {
   if (!Number.isSafeInteger(score) || score < 0 || score > MAX_SCORE) {
     return { ok: false, error: 'invalid_score' };
   }
-  if (!Number.isSafeInteger(sector) || sector < 1 || sector > MAX_SECTOR) {
+  if (!Number.isSafeInteger(sector) || sector < 0 || sector > MAX_SECTOR) {
     return { ok: false, error: 'invalid_sector' };
   }
   return { ok: true, value: { pseudo, score, sector } };
@@ -139,6 +139,11 @@ function publicEntries(entries) {
       rank: index + 1,
       pseudo: entry.pseudo,
       score: entry.score,
+      sector: Number.isSafeInteger(Number(entry.sector))
+        && Number(entry.sector) >= 0
+        && Number(entry.sector) <= MAX_SECTOR
+        ? Number(entry.sector)
+        : null,
     }));
 }
 
