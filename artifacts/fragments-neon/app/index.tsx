@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   Animated,
   Easing,
@@ -36,12 +37,17 @@ import {
 } from '@shopify/react-native-skia';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Asset } from 'expo-asset';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   buildOrthogonalCaptureRegions,
   captureRegionsOverlapCircle,
 } from '../components/captureGeometry';
+import DiamondPurchaseOverlay, { type ShardOffer } from './DiamondPurchaseOverlay';
+import ShopOverlay, { type ShopItem } from './ShopOverlay';
+import { shardProductIdentifierFor, useShardPurchases } from '../lib/revenuecat';
 
 const COLS = 12;
 const INITIAL_BACKGROUND_PRELOAD_COUNT = 10;
@@ -71,6 +77,28 @@ const NATIVE_IMMEDIATE_YIELD_EVERY = 8;
 const NATIVE_IMMEDIATE_YIELD_DELAY_MS = 1;
 const NATIVE_ASSET_PRELOAD_TIMEOUT_MS = 5000;
 const NATIVE_INITIAL_START_FALLBACK_DELAY_MS = 2500;
+const DCA_REVEAL_DURATION_MS = 1800;
+// Keep the DCA slightly larger than the launch base while staying in the
+// same visual scale family as the cockpit installation.
+const DCA_RENDER_WIDTH_CELLS = 1.95;
+const DCA_SPAWN_CHANCE = 1 / 3;
+const DCA_DIRECTION_COUNT = 8;
+const DCA_MAX_CAP = 8;
+const DCA_DUAL_THRESHOLD_LEVEL = 24;
+const DCA_BEAM_INTERVAL_SECONDS = 5;
+const DCA_BEAM_DURATION_SECONDS = 5.5;
+const DCA_CHARGE_DURATION_SECONDS = 1.3;
+const DCA_BEAM_BASE_WIDTH_PX = 20;
+// The beam keeps its 20 px cannon opening, then diverges by a fixed total
+// angle so long shots continue to fill the arena instead of stopping at an
+// arbitrary final pixel width.
+const DCA_BEAM_DIVERGENCE_ANGLE_DEGREES = 28;
+const DCA_BEAM_FILL_OPACITY = 0.74;
+const DCA_BEAM_PEAK_FILL_OPACITY = 0.65;
+const DCA_BEAM_START_VISIBILITY = 0.12;
+const DCA_SHOCKWAVE_DELAY_SECONDS = 3;
+const DCA_SHOCKWAVE_DURATION_SECONDS = 0.9;
+const DCA_SCORE = 1600;
 const CONTACT_FREEZE_DURATION = 1000;
 const BOMB_SCORE = 1200;
 const BOMB_RADIUS_CELLS = 0.5;
@@ -97,13 +125,123 @@ type PerformanceMetrics = {
   particleCount: number;
   peakParticles: number;
 };
+
+type NeonProgressBarProps = {
+  progress: number;
+  trackStyle: any;
+  fillStyle: any;
+  shimmerDuration?: number;
+  shimmerDelay?: number;
+  laserShimmer?: boolean;
+  fillGradient?: boolean;
+  children?: React.ReactNode;
+};
+
+const NeonProgressBar = React.memo(({
+  progress,
+  trackStyle,
+  fillStyle,
+  shimmerDuration = 1450,
+  shimmerDelay = 0,
+  laserShimmer = false,
+  fillGradient = false,
+  children,
+}: NeonProgressBarProps) => {
+  const shimmerPosition = useRef(new Animated.Value(-1)).current;
+  const [fillWidth, setFillWidth] = useState(0);
+
+  useEffect(() => {
+    const shimmerLoop = Animated.loop(Animated.sequence([
+      Animated.timing(shimmerPosition, {
+        toValue: -1,
+        duration: 0,
+        useNativeDriver: true,
+      }),
+      Animated.timing(shimmerPosition, {
+        toValue: 1,
+        duration: shimmerDuration,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.delay(shimmerDelay),
+    ]));
+    shimmerLoop.start();
+    return () => shimmerLoop.stop();
+  }, [shimmerPosition, shimmerDuration, shimmerDelay]);
+
+  const boundedProgress = clamp(progress, 0, 1);
+  const shimmerTranslateX = shimmerPosition.interpolate({
+    inputRange: [-1, 0.72, 1],
+    outputRange: [-26, Math.max(-26, fillWidth - 12), Math.max(0, fillWidth + 4)],
+  });
+  const shimmerOpacity = shimmerPosition.interpolate({
+    inputRange: [-1, -0.72, 0.72, 1],
+    outputRange: [0, 0.96, 0.96, 0],
+  });
+
+  return (
+    <Animated.View style={trackStyle}>
+      <View
+        onLayout={(event) => {
+          const nextWidth = event.nativeEvent.layout.width;
+          setFillWidth((currentWidth) => (
+            Math.abs(currentWidth - nextWidth) > 0.5 ? nextWidth : currentWidth
+          ));
+        }}
+        style={[fillStyle, { width: `${Math.round(boundedProgress * 100)}%` }]}
+      >
+        {fillGradient ? (
+          <LinearGradient
+            colors={['#007c8d', '#00d9e8', '#ffffff', '#00d9e8', '#007c8d']}
+            locations={[0, 0.24, 0.5, 0.76, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.progressFillGradient}
+          />
+        ) : null}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.progressShimmer,
+            {
+              opacity: shimmerOpacity,
+              transform: [{ translateX: shimmerTranslateX }],
+            },
+          ]}
+        >
+          {laserShimmer ? (
+            <LinearGradient
+              colors={[
+                'rgba(0, 243, 255, 0)',
+                'rgba(0, 243, 255, 0.82)',
+                '#ffffff',
+                'rgba(0, 243, 255, 0.82)',
+                'rgba(0, 243, 255, 0)',
+              ]}
+              locations={[0, 0.24, 0.5, 0.76, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.progressLaserGradient}
+            />
+          ) : (
+            <View style={styles.progressShimmerCore} />
+          )}
+        </Animated.View>
+      </View>
+      {children}
+    </Animated.View>
+  );
+});
+
 const ZERO = { x: 0 as const, y: 0 as const };
 const pickupChimeSource = require('../assets/audio/pickup.mp3');
 const diamondCaptureSource = require('../assets/audio/diamond-capture.wav');
 const shieldLossExplosionSource = require('../assets/audio/shield-loss-explosion.wav');
 const sectorTransitionVictorySource = require('../assets/audio/sector-transition-victory-joyful.wav');
 const sevenFireShotSource = require('../assets/audio/seven-fire-shot.mp3');
-const loadingCoverSource = require('../assets/images/loading-cover.png');
+const dcaEngineChargeSource = require('../assets/audio/dca-engine-charge.mp3');
+const dcaShockwaveSource = require('../assets/audio/dca-shockwave.mp3');
+const loadingCoverSource = require('../assets/images/loading-cover-accueil.jpg');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
@@ -112,6 +250,8 @@ const sevenFireOrbSource = require('../assets/images/seven-fire-orb.png');
 const diamondSpriteSource = require('../assets/images/neon-diamond-fragment-sprite-sheet.png');
 const speedBoostSource = require('../assets/images/speed-boost-sprite.png');
 const spiderWebSource = require('../assets/images/spider-web-destination.png');
+const repairVendorSource = require('../assets/images/repair-vendor-merchant.jpg');
+const aegisShieldShopSource = require('../assets/images/aegis-shield-shop.png');
 const sector1SpaceBackgroundSource = require('../assets/images/sector-1-space-background.png');
 const sector2SpaceBackgroundSource = require('../assets/images/sector-2-space-background.png');
 const sector3SpaceBackgroundSource = require('../assets/images/sector-3-space-background.png');
@@ -220,6 +360,9 @@ const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
+const PLAYER_PSEUDO_STORAGE_KEY = 'fragments-neon:player-pseudo';
+const LEADERBOARD_API_URL = String(process.env.EXPO_PUBLIC_LEADERBOARD_API_URL ?? '').replace(/\/+$/, '');
+const LEADERBOARD_LIMIT = 10;
 const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
 const LAST_PLAYED_SECTOR_STORAGE_KEY = 'fragments-neon:last-played-sector:v1';
 const GAME_SAVE_INTERVAL_MS = 1200;
@@ -240,18 +383,25 @@ const CORE_REACTOR_SPRITE_FRAME_DURATION = 5;
 const DIAMOND_SPRITE_FRAME_COUNT = 4;
 const DIAMOND_SPRITE_FRAME_SIZE = 256;
 const DIAMOND_SPRITE_FRAME_DURATION = 7;
+const DIAMOND_RENDER_SCALE = 0.86;
 // Non-player artwork is intentionally rendered at 80% of the previous size
 // to reduce fill-rate and SVG/Canvas work. Gameplay geometry stays unchanged.
 const NON_PLAYER_RENDER_SCALE = 0.8;
 const ENEMY_RENDER_SCALE = 0.88 * NON_PLAYER_RENDER_SCALE;
-const BOSS_RENDER_SCALE = 1.72 * NON_PLAYER_RENDER_SCALE;
+// The previous boss size was the normal enemy sprite multiplied by this
+// transform. Keep that reference so the super boss is exactly 2x the size
+// players already know, rather than 2x an intermediate implementation scale.
+const CURRENT_BOSS_TRANSFORM_SCALE = 1.72 * NON_PLAYER_RENDER_SCALE;
+const CURRENT_BOSS_RENDER_SCALE = ENEMY_RENDER_SCALE * CURRENT_BOSS_TRANSFORM_SCALE;
+const BOSS_RENDER_SCALE = CURRENT_BOSS_RENDER_SCALE * 2;
 const PICKUP_VISUAL_SIZE_CELLS = 1.34 * NON_PLAYER_RENDER_SCALE;
 const PLAYER_MOVE_SPEED = 126;
 const SPEED_BOOST_MULTIPLIER = 2;
-const SPEED_BOOST_DURATION_MS = 5000;
+const SPEED_BOOST_DURATION_SECONDS = 5;
+const SPEED_BOOST_DURATION_MS = SPEED_BOOST_DURATION_SECONDS * 1000;
 const SPEED_BOOST_RADIUS_CELLS = 0.72;
-const PICKUP_FLOAT_AMPLITUDE_CELLS = 0.34;
-const PICKUP_FLOAT_SPEED = 0.095;
+const PICKUP_FLOAT_AMPLITUDE_CELLS = 0.14;
+const PICKUP_FLOAT_SPEED = 0.055;
 const BOSS_SPEED_BOOST = 1.06;
 const CAPTURE_INVINCIBILITY_DURATION = 10;
 const SEVEN_PROJECTILE_COUNT = 7;
@@ -329,6 +479,7 @@ type Enemy = Point & {
   spiderThreadTimer?: number;
   spiderGrade?: number;
   isBoss?: boolean;
+  isSuperBoss?: boolean;
   bossTier?: number;
   isMini?: boolean;
   splitLevel?: number;
@@ -338,10 +489,26 @@ type Enemy = Point & {
   lastSafeY?: number;
 };
 
+type Dca = Point & {
+  revealProgress: number;
+  opacity: number;
+  direction?: number;
+  destroyed?: boolean;
+  beamCooldown?: number;
+  beamChargeRemaining?: number;
+  beamChargeElapsed?: number;
+  beamRemaining?: number;
+  beamElapsed?: number;
+  beamDirection?: number;
+  shockwaveRemaining?: number;
+  shockwaveElapsed?: number;
+};
+
 type EnemySpawnSpec = {
   baseIndex: number;
   spiderGrade?: number;
   isBoss?: boolean;
+  isSuperBoss?: boolean;
   bossTier?: number;
   speedScale?: number;
   curveStrength?: number;
@@ -440,6 +607,11 @@ const ENEMY_SCORE: Record<EnemyKind, number> = {
   SPIDER: 800,
 };
 const DIAMOND_SCORE = 750;
+const MAX_SHIELDS = 5;
+const SHOP_SHIELD_COST = 25;
+const SHOP_PULSE_COST = 10;
+const STARTING_SPEED_BOOST_CHARGES = 2;
+const SWIPE_ACTIVATION_DISTANCE = 6;
 const RECORD_BANNER_MINIMUM_BEST_SCORE = 100;
 const MAX_PARTICLES = 60;
 const TORCH_PARTICLE_COLORS = ['#ffffff', '#ffe59a', '#9eeeff'] as const;
@@ -553,8 +725,10 @@ type Game = {
   trail: Point[];
   protectedTrails: Point[][];
   enemies: Enemy[];
+  dcas: Dca[];
   diamonds: Diamond[];
   speedBoosts: SpeedBoost[];
+  speedBoostCharges: number;
   bombs: Bomb[];
   projectiles: SevenProjectile[];
   missiles: PlayerMissile[];
@@ -575,11 +749,14 @@ type Game = {
   capturedArea: number;
   totalPlayableArea: number;
   pendingCaptureArea: number;
+  diamondsCollected: number;
   level: number;
   frame: number;
   trailScoreAccumulator: number;
+  launchBaseDismissed: boolean;
+  launchBaseFadeProgress: number;
   initialized: boolean;
-  status: 'PLAYING' | 'FUSING' | 'RESPAWN' | 'GAME_OVER' | 'SECTOR_TRANSITION';
+  status: 'PLAYING' | 'FUSING' | 'RESPAWN' | 'GAME_OVER' | 'SECTOR_TRANSITION' | 'SHOP';
   respawnAt: number;
   invincibleUntil: number;
   speedBoostUntil: number;
@@ -611,21 +788,204 @@ type Hud = {
   score: number;
   bestScore: number;
   shields: number;
+  diamonds: number;
+  speedBoostCharges: number;
   capture: number;
   level: number;
   mode: Mode;
   feedback: string;
 };
 
+type LeaderboardEntry = {
+  rank: number;
+  pseudo: string;
+  score: number;
+};
+
+type LeaderboardStatus = 'idle' | 'loading' | 'ready' | 'submitting' | 'submitted' | 'error';
+
+type GameOverStage = 'DEATH' | 'LEADERBOARD';
+
+const normalizePseudo = (value: string) => (
+  value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 8)
+);
+
+const leaderboardEntriesFromPayload = (payload: unknown): LeaderboardEntry[] => {
+  const source = Array.isArray(payload)
+    ? payload
+    : (
+      payload
+      && typeof payload === 'object'
+      && Array.isArray((payload as { entries?: unknown }).entries)
+        ? (payload as { entries: unknown[] }).entries
+        : []
+    );
+  return source
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const item = entry as { pseudo?: unknown; score?: unknown };
+      const pseudo = normalizePseudo(String(item.pseudo ?? ''));
+      const score = Number(item.score);
+      if (!pseudo || !Number.isFinite(score) || score < 0) return null;
+      return {
+        rank: index + 1,
+        pseudo,
+        score: Math.floor(score),
+      };
+    })
+    .filter((entry): entry is LeaderboardEntry => entry !== null)
+    .sort((left, right) => right.score - left.score || left.pseudo.localeCompare(right.pseudo))
+    .slice(0, LEADERBOARD_LIMIT)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+};
+
+type LeaderboardOverlayProps = {
+  score: number;
+  bestScore: number;
+  entries: LeaderboardEntry[];
+  pseudoDraft: string;
+  playerPseudo: string;
+  status: LeaderboardStatus;
+  message: string;
+  onPseudoChange: (value: string) => void;
+  onSubmit: () => void;
+  onRetry: () => void;
+  onResume: () => void;
+};
+
+const LeaderboardOverlay = ({
+  score,
+  bestScore,
+  entries,
+  pseudoDraft,
+  playerPseudo,
+  status,
+  message,
+  onPseudoChange,
+  onSubmit,
+  onRetry,
+  onResume,
+}: LeaderboardOverlayProps) => {
+  const isSubmitting = status === 'submitting';
+  const needsPseudo = !playerPseudo;
+  return (
+    <View style={styles.leaderboardOverlay}>
+      <View style={styles.leaderboardPanel}>
+        <View style={styles.leaderboardRule} />
+        <Text style={styles.leaderboardTitle}>CLASSEMENT</Text>
+        <Text style={styles.leaderboardScore}>SCORE {String(score).padStart(6, '0')}</Text>
+        <Text style={styles.leaderboardBestScore}>
+          MEILLEUR SCORE : {String(bestScore).padStart(6, '0')}
+        </Text>
+
+        {needsPseudo ? (
+          <View style={styles.pseudoEntryBlock}>
+            <Text style={styles.pseudoPrompt}>ENTRE TON PSEUDO POUR ÊTRE CLASSÉ</Text>
+            <TextInput
+              value={pseudoDraft}
+              onChangeText={onPseudoChange}
+              style={styles.pseudoInput}
+              maxLength={8}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder="3 À 8 CARACTÈRES"
+              placeholderTextColor="rgba(255, 245, 207, 0.38)"
+              selectionColor={HUD_COLORS.cyan}
+              returnKeyType="done"
+              onSubmitEditing={onSubmit}
+              accessibilityLabel="Pseudo du joueur"
+              testID="leaderboard-pseudo-input"
+            />
+            <Pressable
+              style={[styles.leaderboardAction, isSubmitting && styles.leaderboardActionDisabled]}
+              onPress={onSubmit}
+              disabled={isSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Enregistrer le score"
+              testID="leaderboard-submit"
+            >
+              <Text style={styles.leaderboardActionText}>
+                {isSubmitting ? 'ENVOI…' : 'ENREGISTRER LE SCORE'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.pseudoSavedBlock}>
+            <Text style={styles.pseudoSavedLabel}>PSEUDO</Text>
+            <Text style={styles.pseudoSavedValue}>{playerPseudo}</Text>
+            <Text style={styles.leaderboardStatusText}>
+              {isSubmitting ? 'ENVOI DU SCORE…' : message || 'SCORE PRÊT À ÊTRE ENVOYÉ'}
+            </Text>
+            {status === 'error' ? (
+              <Pressable
+                style={styles.leaderboardSmallAction}
+                onPress={onRetry}
+                accessibilityRole="button"
+                accessibilityLabel="Réessayer l'envoi du score"
+              >
+                <Text style={styles.leaderboardSmallActionText}>RÉESSAYER</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+
+        {message && needsPseudo ? (
+          <Text style={styles.leaderboardErrorText}>{message}</Text>
+        ) : null}
+
+        <View style={styles.leaderboardTableHeader}>
+          <Text style={[styles.leaderboardTableHeading, styles.leaderboardRankColumn]}>#</Text>
+          <Text style={[styles.leaderboardTableHeading, styles.leaderboardPseudoColumn]}>PSEUDO</Text>
+          <Text style={[styles.leaderboardTableHeading, styles.leaderboardPointsColumn]}>SCORE</Text>
+        </View>
+        <ScrollView
+          style={styles.leaderboardList}
+          contentContainerStyle={styles.leaderboardListContent}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+        >
+          {entries.length > 0 ? entries.map((entry) => (
+            <View key={`${entry.rank}-${entry.pseudo}`} style={styles.leaderboardRow}>
+              <Text style={[styles.leaderboardRank, styles.leaderboardRankColumn]}>
+                {String(entry.rank).padStart(2, '0')}
+              </Text>
+              <Text style={[styles.leaderboardPseudo, styles.leaderboardPseudoColumn]}>
+                {entry.pseudo}
+              </Text>
+              <Text style={[styles.leaderboardPoints, styles.leaderboardPointsColumn]}>
+                {String(entry.score).padStart(6, '0')}
+              </Text>
+            </View>
+          )) : (
+            <Text style={styles.leaderboardEmpty}>
+              {status === 'loading' ? 'CHARGEMENT DU CLASSEMENT…' : 'AUCUN SCORE À AFFICHER'}
+            </Text>
+          )}
+        </ScrollView>
+
+        <Pressable
+          style={styles.leaderboardResumeAction}
+          onPress={onResume}
+          accessibilityRole="button"
+          accessibilityLabel="Reprendre la partie"
+          testID="leaderboard-resume"
+        >
+          <Text style={styles.leaderboardResumeText}>REPRENDRE AU SECTEUR</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+};
+
 type Banner = {
-  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SPEED_BOOST' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER' | 'TUTORIAL';
+  kind: 'RECORD' | 'DIAMOND' | 'BOMB' | 'SPEED_BOOST' | 'SECTOR' | 'SECTOR_START' | 'BOSS' | 'SHIELD' | 'ENEMY' | 'DCA' | 'BOSS_SPLIT' | 'SPLIT' | 'CLEAN' | 'GAME_OVER' | 'TUTORIAL';
   score?: number;
   points?: number;
   level?: number;
   bossKind?: EnemyKind;
   enemyKind?: EnemyKind;
   tutorialCompleted?: boolean;
-  tutorialStep?: 1 | 2 | 3 | 4;
+  tutorialStep?: 1 | 2 | 3 | 4 | 5;
   tutorialPrompt?: 'SECURE_AREA';
   onComplete?: () => void;
 };
@@ -640,8 +1000,11 @@ type Snapshot = {
   trail: Point[];
   protectedTrails: Point[][];
   player: Point;
+  launchBaseDismissed: boolean;
+  launchBaseFadeProgress: number;
   direction: Direction;
   enemies: Enemy[];
+  dcas: Dca[];
   diamonds: Diamond[];
   speedBoosts: SpeedBoost[];
   bombs: Bomb[];
@@ -668,8 +1031,11 @@ const snapshotFromGame = (game: Game): Snapshot => ({
   trail: game.trail,
   protectedTrails: game.protectedTrails,
   player: { ...game.player },
+  launchBaseDismissed: game.launchBaseDismissed,
+  launchBaseFadeProgress: game.launchBaseFadeProgress,
   direction: game.trail.length > 0 ? game.cutDir : game.facingDir,
   enemies: game.enemies.map((enemy) => ({ ...enemy })),
+  dcas: game.dcas.map((dca) => ({ ...dca })),
   diamonds: game.diamonds.map((diamond) => ({ ...diamond })),
   speedBoosts: game.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
   bombs: game.bombs.map((bomb) => ({ ...bomb })),
@@ -739,6 +1105,8 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   cell: game.cell,
   rows: game.rows,
   player: { ...game.player },
+  launchBaseDismissed: game.launchBaseDismissed,
+  launchBaseFadeProgress: game.launchBaseFadeProgress,
   inputDir: { ...game.inputDir },
   facingDir: { ...game.facingDir },
   hasMoveCommand: game.hasMoveCommand,
@@ -747,8 +1115,10 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   trail: game.trail.map((point) => ({ ...point })),
   protectedTrails: game.protectedTrails.map((trail) => trail.map((point) => ({ ...point }))),
   enemies: game.enemies.map((enemy) => ({ ...enemy })),
+  dcas: game.dcas.map((dca) => ({ ...dca })),
   diamonds: game.diamonds.map((diamond) => ({ ...diamond })),
   speedBoosts: game.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
+  speedBoostCharges: Math.max(0, Math.floor(game.speedBoostCharges ?? 0)),
   bombs: game.bombs.map((bomb) => ({ ...bomb })),
   projectiles: game.projectiles.map((projectile) => ({ ...projectile })),
   missiles: game.missiles.map((missile) => ({ ...missile })),
@@ -771,24 +1141,38 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   capturedArea: game.capturedArea,
   totalPlayableArea: game.totalPlayableArea,
   pendingCaptureArea: game.pendingCaptureArea,
+  diamondsCollected: game.diamondsCollected,
   level: game.level,
   trailScoreAccumulator: game.trailScoreAccumulator,
   invincibleRemainingMs: Math.max(0, game.invincibleUntil - now),
   speedBoostRemainingMs: Math.max(0, game.speedBoostUntil - now),
 });
 
-const playerSpeedFor = (game: Game, now: number) => (
-  game.level !== TUTORIAL_SECTOR
-  && !isBossSector(game.level)
-  && game.speedBoostUntil > now
+const playerSpeedFor = (game: Game, now: number, tutorialStep = 0) => {
+  const speedBoostAllowed = game.level !== TUTORIAL_SECTOR || tutorialStep >= 3;
+  return speedBoostAllowed
+    && !isBossSector(game.level)
+    && game.speedBoostUntil > now
     ? PLAYER_MOVE_SPEED * SPEED_BOOST_MULTIPLIER
-    : PLAYER_MOVE_SPEED
-);
+    : PLAYER_MOVE_SPEED;
+};
 
 const cardinalDirection = (dx: number, dy: number): Direction => {
   if (Math.abs(dx) >= Math.abs(dy)) return { x: dx >= 0 ? 1 : -1, y: 0 };
   return { x: 0, y: dy >= 0 ? 1 : -1 };
 };
+
+const arenaTouchPoint = (event: any) => {
+  const nativeEvent = event.nativeEvent ?? {};
+  return {
+    // pageX/pageY keep the same coordinate space even when the native touch
+    // target changes between the start and move callbacks.
+    x: Number.isFinite(nativeEvent.pageX) ? nativeEvent.pageX : nativeEvent.locationX ?? 0,
+    y: Number.isFinite(nativeEvent.pageY) ? nativeEvent.pageY : nativeEvent.locationY ?? 0,
+  };
+};
+
+const arenaTouchIdentifier = (event: any) => event.nativeEvent?.identifier ?? null;
 
 const distanceToSegment = (point: Point, a: Point, b: Point) => {
   const dx = b.x - a.x;
@@ -1408,6 +1792,24 @@ const perimeterEntryContact = (
 const playerBodyRadius = (cell: number) => cell * 0.34;
 const playerSpriteSize = (cell: number) => ({ width: cell * 1.18, height: cell * 1.68 });
 const OUTER_STOP_GAP = 5;
+const LAUNCH_BASE_FADE_DURATION_SECONDS = 3.2;
+const LAUNCH_BASE_DEPARTURE_DISTANCE_CELLS = 0.18;
+
+const launchBaseVisualState = (
+  player: Point,
+  launchPoint: Point,
+  cell: number,
+  dismissed: boolean,
+  fadeProgress: number,
+) => {
+  const departure = dismissed ? clamp(fadeProgress, 0, 1) : 0;
+  const easedDeparture = departure * departure * (3 - departure * 2);
+  return {
+    visible: !dismissed || easedDeparture < 1,
+    scale: 1 - easedDeparture,
+    descent: easedDeparture * cell * 0.62,
+  };
+};
 
 const playerOuterBounds = (
   bounds: ReturnType<typeof perimeterBounds>,
@@ -1489,7 +1891,28 @@ const spriteFrames: Record<EnemyKind, any[]> = {
 };
 const diamondSource = require('../assets/images/neon-diamond-fragment.png');
 const playerSource = require('../assets/images/player-drone-prism-arrow.png');
+const launchBaseSource = require('../assets/images/drone-launch-base.jpg');
 const playerMissileSource = require('../assets/images/player-missile-transparent.png');
+const dcaDirectionSources = [
+  require('../assets/images/dca-direction-0.png'),
+  require('../assets/images/dca-direction-1.png'),
+  require('../assets/images/dca-direction-2.png'),
+  require('../assets/images/dca-direction-3.png'),
+  require('../assets/images/dca-direction-4.png'),
+  require('../assets/images/dca-direction-5.png'),
+  require('../assets/images/dca-direction-6.png'),
+  require('../assets/images/dca-direction-7.png'),
+];
+// Native Skia loads one finished enemy illustration per kind. The web canvas
+// keeps the six-frame animation below, while Expo Go avoids decoding 24 large
+// independent PNGs before the first playable native frame.
+const nativeEnemySpriteSources = {
+  SHIP: require('../assets/images/enemy-ship-final.png'),
+  DRAGON: require('../assets/images/enemy-dragon-final.png'),
+  SEVEN: require('../assets/images/enemy-seven-branch-final.png'),
+  SPIDER: require('../assets/images/enemy-spider-final.png'),
+};
+const nativeDcaSources = dcaDirectionSources;
 
 const createDiamond = (width: number, height: number, cell: number): Diamond => {
   const bounds = perimeterBounds(width, height, cell);
@@ -1607,8 +2030,9 @@ const placeSpeedBoostsInOpenSurface = (
 };
 
 const diamondCountForLevel = (level: number) => {
-  if (isBossSector(level)) return 0;
-  return level <= 2 ? 0 : level <= 12 ? 1 : level <= 24 ? 2 : 1;
+  if (level === TUTORIAL_SECTOR || isBossSector(level)) return 0;
+  // Keep the diamond economy useful without flooding the playfield.
+  return 3 + ((level * 7) % 4);
 };
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
@@ -1636,8 +2060,7 @@ const enemyAnimationTransform = (enemy: Enemy, cell: number) => {
       : 0;
   return {
     rotation: directionRotation + sway,
-    scale: (enemy.isBoss ? BOSS_RENDER_SCALE : 1)
-      + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
+    scale: 1 + Math.sin(phase * (enemy.kind === 'SPIDER' ? 1.6 : 1.25)) * 0.035,
     offsetY: Math.sin(phase * 1.05) * cell * 0.08,
   };
 };
@@ -1789,10 +2212,515 @@ const enemyRenderSize = (kind: EnemyKind, cell: number, isMini = false) => {
   };
 };
 
+const isSuperBossEnemy = (enemy: Enemy) => (
+  enemy.isSuperBoss === true
+);
+
+// Keep gameplay geometry in the same coordinate space as the rendered PNG.
+// Regular enemies are drawn through ENEMY_RENDER_SCALE, while bosses use their
+// dedicated render scales. Previously collision geometry omitted the regular
+// render scale, making enemy bodies substantially larger than their sprites.
+const enemyGeometryScale = (enemy: Enemy) => (
+  (isSuperBossEnemy(enemy)
+    ? BOSS_RENDER_SCALE
+    : enemy.isBoss
+      ? CURRENT_BOSS_RENDER_SCALE
+      : ENEMY_RENDER_SCALE)
+);
+
+const enemyRenderSizeForEnemy = (enemy: Enemy, cell: number) => {
+  const size = enemySpriteSize(enemy.kind, cell, enemy.isMini);
+  return {
+    width: size.width * enemyGeometryScale(enemy),
+    height: size.height * enemyGeometryScale(enemy),
+  };
+};
+
+const dcaVisualSize = (cell: number) => ({
+  width: cell * DCA_RENDER_WIDTH_CELLS,
+  height: cell * DCA_RENDER_WIDTH_CELLS,
+});
+
+const dcaIsDestroyed = (dca: Dca | null | undefined) => dca?.destroyed === true;
+
+const dcaDirectionIndex = (dca: Dca | null | undefined) => {
+  const direction = Math.round(dca?.direction ?? 0);
+  return ((direction % DCA_DIRECTION_COUNT) + DCA_DIRECTION_COUNT) % DCA_DIRECTION_COUNT;
+};
+
+const dcaDirectionIndexForAngle = (angle: number) => {
+  // Direction 0 is the source sprite with the cannons pointing left. The
+  // generated sprites rotate clockwise through screen space in 45° steps.
+  const index = Math.round((angle - Math.PI) / (Math.PI / 4));
+  return ((index % DCA_DIRECTION_COUNT) + DCA_DIRECTION_COUNT) % DCA_DIRECTION_COUNT;
+};
+
+const dcaDirectionAngle = (direction: number) => (
+  Math.PI + dcaDirectionIndex({ direction } as Dca) * (Math.PI / 4)
+);
+
+const dcaRayEndpoint = (
+  start: Point,
+  direction: Point,
+  bounds: ReturnType<typeof perimeterBounds>,
+) => {
+  const candidates: number[] = [];
+  const addCandidate = (distance: number, coordinate: number, min: number, max: number) => {
+    if (distance > 0 && coordinate >= min - 0.01 && coordinate <= max + 0.01) {
+      candidates.push(distance);
+    }
+  };
+  if (Math.abs(direction.x) > 1e-6) {
+    addCandidate(
+      (bounds.left - start.x) / direction.x,
+      start.y + ((bounds.left - start.x) / direction.x) * direction.y,
+      bounds.top,
+      bounds.bottom,
+    );
+    addCandidate(
+      (bounds.right - start.x) / direction.x,
+      start.y + ((bounds.right - start.x) / direction.x) * direction.y,
+      bounds.top,
+      bounds.bottom,
+    );
+  }
+  if (Math.abs(direction.y) > 1e-6) {
+    addCandidate(
+      (bounds.top - start.y) / direction.y,
+      start.x + ((bounds.top - start.y) / direction.y) * direction.x,
+      bounds.left,
+      bounds.right,
+    );
+    addCandidate(
+      (bounds.bottom - start.y) / direction.y,
+      start.x + ((bounds.bottom - start.y) / direction.y) * direction.x,
+      bounds.left,
+      bounds.right,
+    );
+  }
+  const distance = Math.min(...candidates);
+  const safeDistance = Number.isFinite(distance) ? distance : 0;
+  return {
+    x: start.x + direction.x * safeDistance,
+    y: start.y + direction.y * safeDistance,
+  };
+};
+
+type DcaBeamGeometry = {
+  zone: Point[];
+};
+
+const dcaBeamRayPointBeyondBounds = (
+  start: Point,
+  direction: Point,
+  bounds: ReturnType<typeof perimeterBounds>,
+) => {
+  // Keep the cone infinite for clipping purposes. Stopping each edge at its
+  // first perimeter hit leaves the opposite bottom corner outside the
+  // polygon when an edge reaches a side wall before the bottom wall.
+  const directionLength = Math.hypot(direction.x, direction.y) || 1;
+  const reach = Math.hypot(
+    bounds.right - bounds.left,
+    bounds.bottom - bounds.top,
+  ) * 3;
+  return {
+    x: start.x + (direction.x / directionLength) * reach,
+    y: start.y + (direction.y / directionLength) * reach,
+  };
+};
+
+const clipPolygonToBounds = (
+  polygon: Point[],
+  bounds: ReturnType<typeof perimeterBounds>,
+) => {
+  const clipAgainst = (
+    points: Point[],
+    inside: (point: Point) => boolean,
+    intersection: (start: Point, end: Point) => Point,
+  ) => {
+    if (points.length === 0) return points;
+    const clipped: Point[] = [];
+    let previous = points[points.length - 1];
+    let previousInside = inside(previous);
+    points.forEach((current) => {
+      const currentInside = inside(current);
+      if (currentInside !== previousInside) {
+        clipped.push(intersection(previous, current));
+      }
+      if (currentInside) clipped.push(current);
+      previous = current;
+      previousInside = currentInside;
+    });
+    return clipped;
+  };
+  const verticalIntersection = (x: number, start: Point, end: Point) => {
+    const denominator = end.x - start.x;
+    const ratio = Math.abs(denominator) > 1e-6 ? (x - start.x) / denominator : 0;
+    return {
+      x,
+      y: start.y + (end.y - start.y) * ratio,
+    };
+  };
+  const horizontalIntersection = (y: number, start: Point, end: Point) => {
+    const denominator = end.y - start.y;
+    const ratio = Math.abs(denominator) > 1e-6 ? (y - start.y) / denominator : 0;
+    return {
+      x: start.x + (end.x - start.x) * ratio,
+      y,
+    };
+  };
+  return [
+    {
+      inside: (point: Point) => point.x >= bounds.left,
+      intersection: (start: Point, end: Point) => (
+        verticalIntersection(bounds.left, start, end)
+      ),
+    },
+    {
+      inside: (point: Point) => point.x <= bounds.right,
+      intersection: (start: Point, end: Point) => (
+        verticalIntersection(bounds.right, start, end)
+      ),
+    },
+    {
+      inside: (point: Point) => point.y >= bounds.top,
+      intersection: (start: Point, end: Point) => (
+        horizontalIntersection(bounds.top, start, end)
+      ),
+    },
+    {
+      inside: (point: Point) => point.y <= bounds.bottom,
+      intersection: (start: Point, end: Point) => (
+        horizontalIntersection(bounds.bottom, start, end)
+      ),
+    },
+  ].reduce(
+    (points, edge) => clipAgainst(points, edge.inside, edge.intersection),
+    polygon,
+  );
+};
+
+const dcaBeamGeometry = (
+  dca: Dca,
+  cell: number,
+  bounds: ReturnType<typeof perimeterBounds>,
+): DcaBeamGeometry => {
+  const angle = dcaDirectionAngle(dca.beamDirection ?? dca.direction ?? 0);
+  const forward = { x: Math.cos(angle), y: Math.sin(angle) };
+  const side = { x: -forward.y, y: forward.x };
+  const cannonBase = { x: dca.x, y: dca.y };
+  const cannonHalfWidth = DCA_BEAM_BASE_WIDTH_PX * 0.5;
+  const leftStart = {
+    x: cannonBase.x + side.x * cannonHalfWidth,
+    y: cannonBase.y + side.y * cannonHalfWidth,
+  };
+  const rightStart = {
+    x: cannonBase.x - side.x * cannonHalfWidth,
+    y: cannonBase.y - side.y * cannonHalfWidth,
+  };
+  const halfDivergenceAngle = (
+    DCA_BEAM_DIVERGENCE_ANGLE_DEGREES * Math.PI
+  ) / 360;
+  const spreadTangent = Math.tan(halfDivergenceAngle);
+  const leftEdgeDirection = {
+    x: forward.x + side.x * spreadTangent,
+    y: forward.y + side.y * spreadTangent,
+  };
+  const rightEdgeDirection = {
+    x: forward.x - side.x * spreadTangent,
+    y: forward.y - side.y * spreadTangent,
+  };
+  const leftEnd = dcaBeamRayPointBeyondBounds(leftStart, leftEdgeDirection, bounds);
+  const rightEnd = dcaBeamRayPointBeyondBounds(rightStart, rightEdgeDirection, bounds);
+  return {
+    zone: clipPolygonToBounds(
+      [leftStart, leftEnd, rightEnd, rightStart],
+      bounds,
+    ),
+  };
+};
+
+type DcaShockwaveGeometry = {
+  head: Point;
+  left: Point;
+  right: Point;
+  progress: number;
+};
+
+const clipSegmentToBounds = (
+  start: Point,
+  end: Point,
+  bounds: ReturnType<typeof perimeterBounds>,
+) => {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  let minimum = 0;
+  let maximum = 1;
+  const clip = (coefficient: number, constant: number) => {
+    if (Math.abs(coefficient) < 1e-6) return constant >= 0;
+    const ratio = constant / coefficient;
+    if (coefficient < 0) {
+      minimum = Math.max(minimum, ratio);
+    } else {
+      maximum = Math.min(maximum, ratio);
+    }
+    return minimum <= maximum;
+  };
+  if (
+    !clip(-deltaX, start.x - bounds.left)
+    || !clip(deltaX, bounds.right - start.x)
+    || !clip(-deltaY, start.y - bounds.top)
+    || !clip(deltaY, bounds.bottom - start.y)
+  ) {
+    return null;
+  }
+  return [
+    { x: start.x + deltaX * minimum, y: start.y + deltaY * minimum },
+    { x: start.x + deltaX * maximum, y: start.y + deltaY * maximum },
+  ] as const;
+};
+
+const dcaShockwaveGeometry = (
+  dca: Dca,
+  bounds: ReturnType<typeof perimeterBounds>,
+): DcaShockwaveGeometry => {
+  const angle = dcaDirectionAngle(dca.beamDirection ?? dca.direction ?? 0);
+  const forward = { x: Math.cos(angle), y: Math.sin(angle) };
+  const start = { x: dca.x, y: dca.y };
+  const progress = clamp(
+    (dca.shockwaveElapsed ?? 0) / DCA_SHOCKWAVE_DURATION_SECONDS,
+    0,
+    1,
+  );
+  const easedProgress = 1 - (1 - progress) ** 3;
+  const centralRayEnd = dcaRayEndpoint(start, forward, bounds);
+  const centralRayDistance = Math.hypot(
+    centralRayEnd.x - start.x,
+    centralRayEnd.y - start.y,
+  );
+  // The white beam can continue past the central ray's first frame contact
+  // toward a farther corner, depending on its angle. Use the farthest point
+  // of the clipped white polygon so the cyan blade always reaches the actual
+  // visual end of the beam.
+  const beamZone = dcaBeamGeometry(dca, 0, bounds).zone;
+  const terminalDistance = beamZone.reduce((farthest, point) => (
+    Math.max(
+      farthest,
+      (point.x - start.x) * forward.x + (point.y - start.y) * forward.y,
+    )
+  ), centralRayDistance);
+  const distance = terminalDistance * (
+    progress >= 0.9 ? 1 : easedProgress
+  );
+  const center = {
+    x: start.x + forward.x * distance,
+    y: start.y + forward.y * distance,
+  };
+  const side = { x: -forward.y, y: forward.x };
+  const halfWidth = DCA_BEAM_BASE_WIDTH_PX * 0.5 + distance * Math.tan(
+    (DCA_BEAM_DIVERGENCE_ANGLE_DEGREES * Math.PI) / 360,
+  );
+  const rawLeft = {
+    x: center.x + side.x * halfWidth,
+    y: center.y + side.y * halfWidth,
+  };
+  const rawRight = {
+    x: center.x - side.x * halfWidth,
+    y: center.y - side.y * halfWidth,
+  };
+  // Keep the blade inside the same expanding cone as the white laser. The
+  // perimeter clip only removes the part that is outside the playable frame;
+  // never replace this segment with a full-frame chord.
+  const transverseSegment = clipSegmentToBounds(rawLeft, rawRight, bounds);
+  return {
+    head: center,
+    left: transverseSegment?.[0] ?? rawLeft,
+    right: transverseSegment?.[1] ?? rawRight,
+    progress,
+  };
+};
+
+const dcaShockwaveIntensity = (progress: number) => (
+  0.3 + Math.sin(progress * Math.PI) * 0.7
+);
+
+const dcaShockwaveFlashOpacity = (dcas: Dca[]) => (
+  dcas.reduce((strongestFlash, dca) => {
+    if (
+      dcaIsDestroyed(dca)
+      || (dca.beamRemaining ?? 0) <= 0
+      || (dca.shockwaveRemaining ?? 0) <= 0
+    ) {
+      return strongestFlash;
+    }
+    const elapsed = dca.shockwaveElapsed ?? 0;
+    const flashProgress = clamp(elapsed / 0.095, 0, 1);
+    const flash = 0.62 * (1 - flashProgress) ** 2.4;
+    return Math.max(strongestFlash, flash);
+  }, 0)
+);
+
+const dcaBeamOpacity = (dca: Dca) => (
+  DCA_BEAM_START_VISIBILITY
+    + (1 - DCA_BEAM_START_VISIBILITY) * (
+      clamp((dca.beamElapsed ?? 0) / DCA_BEAM_DURATION_SECONDS, 0, 1) ** 0.82
+    )
+);
+
+const dcaBeamFillOpacity = (dca: Dca) => {
+  const progress = clamp(
+    (dca.beamElapsed ?? 0) / DCA_BEAM_DURATION_SECONDS,
+    0,
+    1,
+  );
+  const peakProgress = clamp((progress - 0.72) / 0.28, 0, 1);
+  return DCA_BEAM_FILL_OPACITY + (
+    DCA_BEAM_PEAK_FILL_OPACITY - DCA_BEAM_FILL_OPACITY
+  ) * peakProgress ** 0.7;
+};
+
+const dcaCapForLevel = (level: number) => {
+  if (level < 5 || isBossSector(level)) return 0;
+  return Math.min(DCA_MAX_CAP, 2 + Math.floor((level - 5) / 5));
+};
+
+const dcaActiveCount = (dcas: Dca[]) => dcas.filter((dca) => !dcaIsDestroyed(dca)).length;
+
+const dcaDestroyedCount = (dcas: Dca[]) => dcas.filter((dca) => dcaIsDestroyed(dca)).length;
+
+const dcaMaxLiveCountForLevel = (level: number) => (
+  level > DCA_DUAL_THRESHOLD_LEVEL ? 2 : 1
+);
+
+const dcaEffectiveCap = (level: number, dcas: Dca[]) => (
+  Math.max(0, dcaCapForLevel(level) - dcaDestroyedCount(dcas))
+);
+
+const dcaCanSpawn = (level: number, dcas: Dca[]) => (
+  dcaActiveCount(dcas) < dcaMaxLiveCountForLevel(level)
+  && dcaActiveCount(dcas) < dcaEffectiveCap(level, dcas)
+);
+
+const dcaCollisionRadius = (cell: number) => dcaVisualSize(cell).width * 0.46;
+
+const dcaTouchesSegment = (
+  dca: Dca,
+  cell: number,
+  start: Point,
+  end: Point,
+  padding = 0,
+) => distanceToSegment(dca, start, end) <= dcaCollisionRadius(cell) + padding;
+
+const dcaRevealScale = (dca: Dca) => 0.82 + clamp(dca.revealProgress, 0, 1) * 0.18;
+
+const polygonCenter = (polygon: Point[]): Point => {
+  let signedArea = 0;
+  let centerX = 0;
+  let centerY = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    const cross = current.x * next.y - next.x * current.y;
+    signedArea += cross;
+    centerX += (current.x + next.x) * cross;
+    centerY += (current.y + next.y) * cross;
+  }
+  if (Math.abs(signedArea) < 1e-6) {
+    const average = polygon.reduce(
+      (sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }),
+      { x: 0, y: 0 },
+    );
+    return {
+      x: average.x / Math.max(1, polygon.length),
+      y: average.y / Math.max(1, polygon.length),
+    };
+  }
+  const factor = 1 / (3 * signedArea);
+  return { x: centerX * factor, y: centerY * factor };
+};
+
+const dcaFitsInPolygon = (
+  center: Point,
+  polygon: Point[],
+  cell: number,
+) => {
+  const size = dcaVisualSize(cell);
+  const halfWidth = size.width * 0.5;
+  const halfHeight = size.height * 0.5;
+  return [
+    center,
+    { x: center.x - halfWidth, y: center.y - halfHeight },
+    { x: center.x + halfWidth, y: center.y - halfHeight },
+    { x: center.x + halfWidth, y: center.y + halfHeight },
+    { x: center.x - halfWidth, y: center.y + halfHeight },
+  ].every((point) => pointInPolygon(point, polygon));
+};
+
+const dcaForCapture = (
+  polygons: Point[][],
+  cell: number,
+  occupiedDcas: Dca[] = [],
+): Dca | null => {
+  const orderedPolygons = [...polygons]
+    .sort((first, second) => polygonArea(second) - polygonArea(first));
+
+  for (const polygon of orderedPolygons) {
+    if (polygon.length < 3) continue;
+    const bounds = polygon.reduce(
+      (result, point) => ({
+        left: Math.min(result.left, point.x),
+        right: Math.max(result.right, point.x),
+        top: Math.min(result.top, point.y),
+        bottom: Math.max(result.bottom, point.y),
+      }),
+      {
+        left: Number.POSITIVE_INFINITY,
+        right: Number.NEGATIVE_INFINITY,
+        top: Number.POSITIVE_INFINITY,
+        bottom: Number.NEGATIVE_INFINITY,
+      },
+    );
+    const candidates = [
+      polygonCenter(polygon),
+      { x: (bounds.left + bounds.right) * 0.5, y: (bounds.top + bounds.bottom) * 0.5 },
+      polygon.reduce(
+        (sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }),
+        { x: 0, y: 0 },
+      ),
+    ];
+    const average = candidates[2];
+    average.x /= polygon.length;
+    average.y /= polygon.length;
+    const center = candidates.find((candidate) => (
+      dcaFitsInPolygon(candidate, polygon, cell)
+      && occupiedDcas.every((dca) => (
+        dcaIsDestroyed(dca)
+        || Math.hypot(candidate.x - dca.x, candidate.y - dca.y) > dcaCollisionRadius(cell) * 2.2
+      ))
+    ));
+    if (center) return {
+      ...center,
+      revealProgress: 0,
+      opacity: 0,
+      direction: 0,
+      destroyed: false,
+      beamCooldown: DCA_BEAM_INTERVAL_SECONDS,
+      beamChargeRemaining: 0,
+      beamChargeElapsed: 0,
+      beamRemaining: 0,
+      beamElapsed: 0,
+      beamDirection: 0,
+      shockwaveRemaining: 0,
+      shockwaveElapsed: 0,
+    };
+  }
+  return null;
+};
+
 const pickupVisualSize = (cell: number) => cell * PICKUP_VISUAL_SIZE_CELLS;
 const speedBoostRadius = (cell: number) => cell * SPEED_BOOST_RADIUS_CELLS;
 const pickupFloatOffset = (frame: number, phase: number, cell: number) => (
-  Math.sin(frame * PICKUP_FLOAT_SPEED + phase) * cell * PICKUP_FLOAT_AMPLITUDE_CELLS
+  cell * 0.08 + Math.sin(frame * PICKUP_FLOAT_SPEED + phase) * cell * PICKUP_FLOAT_AMPLITUDE_CELLS
 );
 
 const enemyRadius = (enemy: Enemy, cell: number) => {
@@ -1804,18 +2732,21 @@ const enemyRadius = (enemy: Enemy, cell: number) => {
       : enemy.kind === 'SEVEN'
         ? cell * 1.32 * miniScale
         : cell * 0.8 * miniScale;
-  return baseRadius * (enemy.isBoss ? 1.08 : 1);
+  return baseRadius * enemyGeometryScale(enemy);
 };
 
 const enemyVisualRadius = (enemy: Enemy, cell: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
-  return Math.max(enemyRadius(enemy, cell), Math.hypot(sprite.width, sprite.height) * 0.5) + PERIMETER_STROKE_WIDTH * 0.5;
+  return Math.max(
+    enemyRadius(enemy, cell),
+    Math.hypot(sprite.width, sprite.height) * enemyGeometryScale(enemy) * 0.5,
+  ) + PERIMETER_STROKE_WIDTH * 0.5;
 };
 
 const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
-  const scale = normalizedSpriteScale(motion.scale);
+  const scale = enemyGeometryScale(enemy) * normalizedSpriteScale(motion.scale);
   const halfWidth = sprite.width * scale * 0.5;
   const halfHeight = sprite.height * scale * 0.5;
   const step = Math.max(3, cell * 0.22);
@@ -1837,7 +2768,7 @@ const enemySpriteFootprint = (enemy: Enemy, cell: number, x: number, y: number) 
 const enemySpriteCorners = (enemy: Enemy, cell: number, x: number, y: number) => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
-  const scale = normalizedSpriteScale(motion.scale);
+  const scale = enemyGeometryScale(enemy) * normalizedSpriteScale(motion.scale);
   const halfWidth = sprite.width * scale * 0.5;
   const halfHeight = sprite.height * scale * 0.5;
   const cos = Math.cos(motion.rotation);
@@ -1937,7 +2868,7 @@ const enemyCollisionCircles = (
 ): CollisionCircle[] => {
   const sprite = enemySpriteSize(enemy.kind, cell, enemy.isMini);
   const motion = enemyAnimationTransform(enemy, cell);
-  const scale = normalizedSpriteScale(motion.scale);
+  const scale = enemyGeometryScale(enemy) * normalizedSpriteScale(motion.scale);
   const halfWidth = sprite.width * scale * 0.5;
   const halfHeight = sprite.height * scale * 0.5;
   const cos = Math.cos(motion.rotation);
@@ -1952,6 +2883,16 @@ const enemyCollisionCircles = (
     radius: radius * radiusScale,
   }));
 };
+
+const enemyCollisionTouchesSegment = (
+  enemy: Enemy,
+  cell: number,
+  start: Point,
+  end: Point,
+  padding = 0,
+) => enemyCollisionCircles(enemy, cell, enemy.x, enemy.y).some(({ center, radius }) => (
+  distanceToSegment(center, start, end) <= radius + padding
+));
 
 const bombRadius = (cell: number) => cell * BOMB_RADIUS_CELLS;
 const bombVisualRadius = (cell: number) => cell * 0.72;
@@ -2245,6 +3186,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
       rosterByLevel[sector] = [{
         baseIndex,
         isBoss: true,
+        isSuperBoss: true,
         bossTier: sector / 10,
         spiderGrade: bossKind === 'SPIDER' ? (sector === 10 ? 3 : 5) : undefined,
       }];
@@ -2302,6 +3244,7 @@ const createEnemies = (width: number, height: number, cell: number, level: numbe
       vy: enemy.vy * bossSpeed * (spec.speedScale ?? 1),
       curveStrength: spec.curveStrength ?? enemy.curveStrength,
       curvePhase: spec.curvePhase ?? enemy.curvePhase,
+      isSuperBoss: spec.isSuperBoss === true,
       spiderThreadTimer: spiderDifficulty?.initialDelay,
       visualRotation: enemy.kind === 'SHIP' ? Math.atan2(enemy.vy, enemy.vx) + Math.PI / 2 : undefined,
     };
@@ -2361,9 +3304,10 @@ const bossObjectiveComplete = (level: number, enemies: Enemy[]) => (
   || enemies.some((enemy) => enemy.isBoss && enemyIsDestroyed(enemy))
 );
 
-const sectorHasLiveTargets = (enemies: Enemy[], bombs: Bomb[]) => (
+const sectorHasLiveTargets = (enemies: Enemy[], bombs: Bomb[], dcas: Dca[] = []) => (
   enemies.some((enemy) => !enemyIsDestroyed(enemy))
   || bombs.some((bomb) => !bomb.destroyed)
+  || dcas.some((dca) => !dcaIsDestroyed(dca))
 );
 
 const preserveDestroyedEnemies = (enemies: Enemy[], previousEnemies: Enemy[]) => {
@@ -2589,8 +3533,8 @@ const EnemySprite = React.memo(
   ({ enemy, enemyIndex, cell, spriteFrames }: any) => {
     const frame = useMemo(() => enemyFrameIndex(enemy), [enemy.phase]);
     const size = useMemo(
-      () => enemyRenderSize(enemy.kind, cell, enemy.isMini),
-      [enemy.kind, cell, enemy.isMini],
+      () => enemyRenderSizeForEnemy(enemy, cell),
+      [enemy.kind, cell, enemy.isMini, enemy.isBoss, enemy.isSuperBoss],
     );
     const motion = useMemo(
       () => enemyAnimationTransform(enemy, cell),
@@ -2623,6 +3567,120 @@ const EnemySprite = React.memo(
       && previous.cell === next.cell
       && previous.enemy.kind === next.enemy.kind
       && previous.enemy.isMini === next.enemy.isMini
+      && previous.enemy.isBoss === next.enemy.isBoss
+      && previous.enemy.isSuperBoss === next.enemy.isSuperBoss
+  ),
+);
+
+const DcaBeamSprite = React.memo(
+  ({ dca, cell, width, height }: {
+    dca: Dca;
+    cell: number;
+    width: number;
+    height: number;
+  }) => {
+    const beamActive = (dca.beamRemaining ?? 0) > 0;
+    const shockwaveActive = (dca.shockwaveRemaining ?? 0) > 0;
+    if (!beamActive && !shockwaveActive) return null;
+    const opacity = beamActive ? dcaBeamOpacity(dca) : 0;
+    const geometry = dcaBeamGeometry(
+      dca,
+      cell,
+      perimeterBounds(width, height, cell),
+    );
+    const bounds = perimeterBounds(width, height, cell);
+    const shockwave = beamActive && (dca.shockwaveRemaining ?? 0) > 0
+      ? dcaShockwaveGeometry(dca, bounds)
+      : null;
+    const shockwaveIntensity = shockwave
+      ? dcaShockwaveIntensity(shockwave.progress)
+      : 0;
+    return (
+      <>
+        {beamActive && opacity > 0 && (
+          <Polygon
+            points={pointsToString(geometry.zone)}
+            fill="#ffffff"
+            opacity={opacity * dcaBeamFillOpacity(dca)}
+          />
+        )}
+        {shockwave && (
+          <G>
+            <Line
+              x1={shockwave.left.x}
+              y1={shockwave.left.y}
+              x2={shockwave.right.x}
+              y2={shockwave.right.y}
+              stroke="#35e6ff"
+              strokeWidth={cell * 0.28}
+              opacity={0.18 * shockwaveIntensity}
+              strokeLinecap="round"
+            />
+            <Line
+              x1={shockwave.left.x}
+              y1={shockwave.left.y}
+              x2={shockwave.right.x}
+              y2={shockwave.right.y}
+              stroke="#00bfff"
+              strokeWidth={cell * 0.13}
+              opacity={0.48 * shockwaveIntensity}
+              strokeLinecap="round"
+            />
+            <Line
+              x1={shockwave.left.x}
+              y1={shockwave.left.y}
+              x2={shockwave.right.x}
+              y2={shockwave.right.y}
+              stroke="#a8f5ff"
+              strokeWidth={Math.max(3, cell * 0.045)}
+              opacity={0.98 * shockwaveIntensity}
+              strokeLinecap="round"
+            />
+          </G>
+        )}
+      </>
+    );
+  },
+  (previous, next) => (
+    previous.dca.x === next.dca.x
+      && previous.dca.y === next.dca.y
+      && previous.dca.beamRemaining === next.dca.beamRemaining
+      && previous.dca.beamElapsed === next.dca.beamElapsed
+      && previous.dca.beamDirection === next.dca.beamDirection
+      && previous.dca.shockwaveRemaining === next.dca.shockwaveRemaining
+      && previous.dca.shockwaveElapsed === next.dca.shockwaveElapsed
+      && previous.cell === next.cell
+      && previous.width === next.width
+      && previous.height === next.height
+  ),
+);
+
+const DcaSprite = React.memo(
+  ({ dca, cell }: { dca: Dca; cell: number }) => {
+    const size = dcaVisualSize(cell);
+    const revealScale = dcaRevealScale(dca);
+    return (
+      <G
+        transform={`translate(${dca.x} ${dca.y}) scale(${revealScale})`}
+        opacity={clamp(dca.opacity, 0, 1) * 0.98}
+      >
+        <SvgImage
+          href={dcaDirectionSources[dcaDirectionIndex(dca)]}
+          x={-size.width / 2}
+          y={-size.height / 2}
+          width={size.width}
+          height={size.height}
+        />
+      </G>
+    );
+  },
+  (previous, next) => (
+    previous.dca.x === next.dca.x
+      && previous.dca.y === next.dca.y
+      && previous.dca.opacity === next.dca.opacity
+      && previous.dca.revealProgress === next.dca.revealProgress
+      && previous.dca.direction === next.dca.direction
+      && previous.cell === next.cell
   ),
 );
 
@@ -2962,6 +4020,7 @@ type SkiaDynamicArenaProps = {
 
 type NativeSkiaImageSet = {
   player: any;
+  launchBase: any;
   diamond: any;
   speedBoost: any;
   coreReactor: any;
@@ -2969,10 +4028,32 @@ type NativeSkiaImageSet = {
   missile: any;
   spiderWeb: any;
   shipSmoke: any;
+  dca: any[];
   enemies: Record<EnemyKind, any[]>;
 };
 
 type NativePicturePublisher = (game: Game, now: number) => void;
+
+const useLocalSkiaImage = (source: any) => {
+  const [assetUri, setAssetUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const asset = Asset.fromModule(source);
+    void asset.downloadAsync()
+      .then(() => {
+        if (!cancelled) setAssetUri(asset.localUri ?? asset.uri);
+      })
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to load native sprite asset', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+
+  return useSkiaImage(assetUri);
+};
 
 type NativeSkiaViewApi = {
   setJsiProperty: (nativeId: number, property: string, value: unknown) => void;
@@ -3094,7 +4175,7 @@ const drawSkiaFallbackEnemy = (
   fillPaint: any,
   strokePaint: any,
 ) => {
-  const size = enemyRenderSize(enemy.kind, cell, enemy.isMini);
+  const size = enemyRenderSizeForEnemy(enemy, cell);
   const motion = enemyAnimationTransform(enemy, cell);
   const color = enemy.kind === 'SHIP'
     ? '#ffb02e'
@@ -3193,6 +4274,16 @@ const buildNativeDynamicPicture = (
 
   const bounds = perimeterBounds(game.width, game.height, game.cell);
   const pickupSize = pickupVisualSize(game.cell);
+  const diamondSize = pickupSize * DIAMOND_RENDER_SCALE;
+  const shockwaveFlashOpacity = dcaShockwaveFlashOpacity(game.dcas);
+
+  if (shockwaveFlashOpacity > 0) {
+    setPaint(fillPaint, '#ffffff', shockwaveFlashOpacity);
+    canvas.drawRect(
+      Skia.XYWHRect(0, 0, game.width, game.height),
+      fillPaint,
+    );
+  }
 
   if (game.claimedPolygons.length > 0) {
     setPaint(fillPaint, ZONE_COLOR, CAPTURED_ZONE_LAYER_OPACITY);
@@ -3200,6 +4291,31 @@ const buildNativeDynamicPicture = (
       drawSkiaPolyline(canvas, polygon, fillPaint, true);
     }
   }
+
+  game.dcas.forEach((dca) => {
+    const dcaImage = images.dca[dcaDirectionIndex(dca)];
+    if (dcaIsDestroyed(dca) || !dcaImage) return;
+    const dcaSize = dcaVisualSize(game.cell);
+    const revealScale = dcaRevealScale(dca);
+    canvas.save();
+    canvas.translate(dca.x, dca.y);
+    canvas.scale(revealScale, revealScale);
+    imagePaint.setAlphaf(clamp(dca.opacity, 0, 1) * 0.98);
+    drawSkiaImage(
+      canvas,
+      dcaImage,
+      1224,
+      1224,
+      {
+        x: -dcaSize.width / 2,
+        y: -dcaSize.height / 2,
+        width: dcaSize.width,
+        height: dcaSize.height,
+      },
+      imagePaint,
+    );
+    canvas.restore();
+  });
 
   if (game.protectedTrails.length > 0) {
     setPaint(strokePaint, '#ff5500', 1, SkiaPaintStyle.Stroke, 5);
@@ -3219,7 +4335,7 @@ const buildNativeDynamicPicture = (
     % DIAMOND_SPRITE_FRAME_COUNT;
   for (const diamond of game.diamonds) {
     if (diamond.collected || !images.diamond) continue;
-    const size = pickupSize;
+    const size = diamondSize;
     drawSkiaSpriteFrame(
       canvas,
       images.diamond,
@@ -3436,12 +4552,15 @@ const buildNativeDynamicPicture = (
   for (const enemy of game.enemies) {
     if (enemy.respawnAt > now) continue;
     const frame = enemyFrameIndex(enemy);
-    const image = images.enemies[enemy.kind]?.[frame];
+    const enemyImages = images.enemies[enemy.kind];
+    const image = enemyImages?.length
+      ? enemyImages[Math.min(frame, enemyImages.length - 1)]
+      : null;
     if (!image) {
       drawSkiaFallbackEnemy(canvas, enemy, game.cell, now, fillPaint, strokePaint);
       continue;
     }
-    const size = enemyRenderSize(enemy.kind, game.cell, enemy.isMini);
+    const size = enemyRenderSizeForEnemy(enemy, game.cell);
     const motion = enemyAnimationTransform(enemy, game.cell);
     canvas.save();
     canvas.translate(enemy.x, enemy.y + motion.offsetY);
@@ -3463,6 +4582,67 @@ const buildNativeDynamicPicture = (
       imagePaint,
     );
     canvas.restore();
+  }
+
+  for (const dca of game.dcas) {
+    if (dcaIsDestroyed(dca) || (dca.beamRemaining ?? 0) <= 0) continue;
+    const opacity = dcaBeamOpacity(dca);
+    if (opacity <= 0) continue;
+    const geometry = dcaBeamGeometry(dca, game.cell, bounds);
+    setPaint(fillPaint, '#ffffff', opacity * dcaBeamFillOpacity(dca));
+    drawSkiaPolyline(canvas, geometry.zone, fillPaint, true);
+  }
+
+  for (const dca of game.dcas) {
+    if (
+      dcaIsDestroyed(dca)
+      || (dca.beamRemaining ?? 0) <= 0
+      || (dca.shockwaveRemaining ?? 0) <= 0
+    ) continue;
+    const shockwave = dcaShockwaveGeometry(dca, bounds);
+    const intensity = dcaShockwaveIntensity(shockwave.progress);
+    setPaint(
+      strokePaint,
+      '#35e6ff',
+      0.18 * intensity,
+      SkiaPaintStyle.Stroke,
+      game.cell * 0.28,
+    );
+    canvas.drawLine(
+      shockwave.left.x,
+      shockwave.left.y,
+      shockwave.right.x,
+      shockwave.right.y,
+      strokePaint,
+    );
+    setPaint(
+      strokePaint,
+      '#00bfff',
+      0.48 * intensity,
+      SkiaPaintStyle.Stroke,
+      game.cell * 0.13,
+    );
+    canvas.drawLine(
+      shockwave.left.x,
+      shockwave.left.y,
+      shockwave.right.x,
+      shockwave.right.y,
+      strokePaint,
+    );
+    setPaint(
+      strokePaint,
+      '#a8f5ff',
+      0.98 * intensity,
+      SkiaPaintStyle.Stroke,
+      Math.max(3, game.cell * 0.045),
+    );
+    canvas.drawLine(
+      shockwave.left.x,
+      shockwave.left.y,
+      shockwave.right.x,
+      shockwave.right.y,
+      strokePaint,
+    );
   }
 
   for (const polygon of game.pendingCapturePolygons) {
@@ -3516,6 +4696,34 @@ const buildNativeDynamicPicture = (
   }
 
   const currentDirection = game.trail.length > 0 ? game.cutDir : game.facingDir;
+  const launchBasePoint = {
+    x: bounds.left + game.cell,
+    y: bounds.top - game.cell * PLAYER_RADIUS_CELLS,
+  };
+  const launchBase = launchBaseVisualState(
+    game.player,
+    launchBasePoint,
+    game.cell,
+    game.launchBaseDismissed,
+    game.launchBaseFadeProgress,
+  );
+  if (images.launchBase && launchBase.visible) {
+    const launchBaseSize = game.cell * 1.68 * launchBase.scale;
+    imagePaint.setAlphaf(0.9 * launchBase.scale);
+    drawSkiaImage(
+      canvas,
+      images.launchBase,
+      639,
+      640,
+      {
+        x: launchBasePoint.x - launchBaseSize / 2,
+        y: launchBasePoint.y - launchBaseSize / 2 + launchBase.descent,
+        width: launchBaseSize,
+        height: launchBaseSize,
+      },
+      imagePaint,
+    );
+  }
   const playerSize = playerSpriteSize(game.cell);
   if (images.player) {
     canvas.save();
@@ -3562,18 +4770,57 @@ const SkiaDynamicArena = React.memo(({
   publisherRef,
   onReady,
 }: SkiaDynamicArenaProps) => {
-  const playerImage = useSkiaImage(playerSource);
-  const diamondImage = useSkiaImage(diamondSpriteSource);
-  const speedBoostImage = useSkiaImage(speedBoostSource);
-  const coreReactorImage = useSkiaImage(coreReactorSpriteSource);
-  const projectileImage = useSkiaImage(sevenFireOrbSource);
-  const missileImage = useSkiaImage(playerMissileSource);
-  const spiderWebImage = useSkiaImage(spiderWebSource);
-  const shipSmokeImage = useSkiaImage(shipSmokeSpriteSource);
-  const shipImages = spriteFrames.SHIP.map((source) => useSkiaImage(source));
-  const dragonImages = spriteFrames.DRAGON.map((source) => useSkiaImage(source));
-  const sevenImages = spriteFrames.SEVEN.map((source) => useSkiaImage(source));
-  const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
+  const playerImage = useLocalSkiaImage(playerSource);
+  const launchBaseImage = useLocalSkiaImage(launchBaseSource);
+  const diamondImage = useLocalSkiaImage(diamondSpriteSource);
+  const speedBoostImage = useLocalSkiaImage(speedBoostSource);
+  const coreReactorImage = useLocalSkiaImage(coreReactorSpriteSource);
+  const projectileImage = useLocalSkiaImage(sevenFireOrbSource);
+  const missileImage = useLocalSkiaImage(playerMissileSource);
+  const spiderWebImage = useLocalSkiaImage(spiderWebSource);
+  const shipSmokeImage = useLocalSkiaImage(shipSmokeSpriteSource);
+  const dcaImage0 = useLocalSkiaImage(nativeDcaSources[0]);
+  const dcaImage1 = useLocalSkiaImage(nativeDcaSources[1]);
+  const dcaImage2 = useLocalSkiaImage(nativeDcaSources[2]);
+  const dcaImage3 = useLocalSkiaImage(nativeDcaSources[3]);
+  const dcaImage4 = useLocalSkiaImage(nativeDcaSources[4]);
+  const dcaImage5 = useLocalSkiaImage(nativeDcaSources[5]);
+  const dcaImage6 = useLocalSkiaImage(nativeDcaSources[6]);
+  const dcaImage7 = useLocalSkiaImage(nativeDcaSources[7]);
+  const dcaImages = [
+    dcaImage0,
+    dcaImage1,
+    dcaImage2,
+    dcaImage3,
+    dcaImage4,
+    dcaImage5,
+    dcaImage6,
+    dcaImage7,
+  ];
+  const shipImage = useLocalSkiaImage(nativeEnemySpriteSources.SHIP);
+  const dragonImage = useLocalSkiaImage(nativeEnemySpriteSources.DRAGON);
+  const sevenImage = useLocalSkiaImage(nativeEnemySpriteSources.SEVEN);
+  const spiderImage = useLocalSkiaImage(nativeEnemySpriteSources.SPIDER);
+  const shipImages = [shipImage];
+  const dragonImages = [dragonImage];
+  const sevenImages = [sevenImage];
+  const spiderImages = [spiderImage];
+  const skiaImagesReady = [
+    playerImage,
+    launchBaseImage,
+    diamondImage,
+    speedBoostImage,
+    coreReactorImage,
+    projectileImage,
+    missileImage,
+    spiderWebImage,
+    shipSmokeImage,
+    ...dcaImages,
+    shipImage,
+    dragonImage,
+    sevenImage,
+    spiderImage,
+  ].every(Boolean);
   const pictureViewRef = useRef<any>(null);
   const [picture, setPicture] = useState<any>(null);
   const layoutReportedRef = useRef(false);
@@ -3583,8 +4830,13 @@ const SkiaDynamicArena = React.memo(({
   const lastPicturePublishAtRef = useRef(0);
 
   useEffect(() => {
+    if (skiaImagesReady) onReady();
+  }, [onReady, skiaImagesReady]);
+
+  useEffect(() => {
     const imageSet: NativeSkiaImageSet = {
       player: playerImage,
+      launchBase: launchBaseImage,
       diamond: diamondImage,
       speedBoost: speedBoostImage,
       coreReactor: coreReactorImage,
@@ -3592,6 +4844,7 @@ const SkiaDynamicArena = React.memo(({
       missile: missileImage,
       spiderWeb: spiderWebImage,
       shipSmoke: shipSmokeImage,
+       dca: dcaImages,
       enemies: {
         SHIP: shipImages,
         DRAGON: dragonImages,
@@ -3599,20 +4852,6 @@ const SkiaDynamicArena = React.memo(({
         SPIDER: spiderImages,
       },
     };
-    const allImagesReady = [
-      playerImage,
-      diamondImage,
-      speedBoostImage,
-      coreReactorImage,
-      projectileImage,
-      missileImage,
-      spiderWebImage,
-      shipSmokeImage,
-      ...shipImages,
-      ...dragonImages,
-      ...sevenImages,
-      ...spiderImages,
-    ].every(Boolean);
     const publisher: NativePicturePublisher = (game, now) => {
       if (
         lastPicturePublishAtRef.current !== 0
@@ -3645,6 +4884,10 @@ const SkiaDynamicArena = React.memo(({
         // Always deliver the first frame through React so the native view
         // receives a picture even if the JSI view registry is not ready yet.
         setPicture(nextPicture);
+        diagnosticLog('skia-first-frame-ready', {
+          hasNativeJsi: usesNativeJsi,
+          hasPlayer: Boolean(imageSet.player),
+        });
       }
       if (usesNativeJsi && nativeApi) {
         nativeApi.setJsiProperty(nativeId, 'picture', nextPicture);
@@ -3666,7 +4909,6 @@ const SkiaDynamicArena = React.memo(({
         hasPicture: Boolean(picture),
       });
     }
-    if (allImagesReady) onReady();
     return () => {
       if (publisherRef.current === publisher) publisherRef.current = null;
     };
@@ -3675,6 +4917,7 @@ const SkiaDynamicArena = React.memo(({
     publisherRef,
     onReady,
     playerImage,
+    launchBaseImage,
     diamondImage,
     speedBoostImage,
     coreReactorImage,
@@ -3682,6 +4925,7 @@ const SkiaDynamicArena = React.memo(({
     missileImage,
     spiderWebImage,
     shipSmokeImage,
+     ...dcaImages,
     shipImages,
     dragonImages,
     sevenImages,
@@ -3731,43 +4975,7 @@ const SkiaDynamicArena = React.memo(({
   && previous.snapshot.cell === next.snapshot.cell
   && previous.renderMargin === next.renderMargin
   && previous.publisherRef === next.publisherRef
-  && previous.onReady === next.onReady
 ));
-
-const NativeSkiaAssetPreloader = ({ onReady }: { onReady: () => void }) => {
-  const playerImage = useSkiaImage(playerSource);
-  const diamondImage = useSkiaImage(diamondSpriteSource);
-  const speedBoostImage = useSkiaImage(speedBoostSource);
-  const coreReactorImage = useSkiaImage(coreReactorSpriteSource);
-  const projectileImage = useSkiaImage(sevenFireOrbSource);
-  const missileImage = useSkiaImage(playerMissileSource);
-  const spiderWebImage = useSkiaImage(spiderWebSource);
-  const shipSmokeImage = useSkiaImage(shipSmokeSpriteSource);
-  const shipImages = spriteFrames.SHIP.map((source) => useSkiaImage(source));
-  const dragonImages = spriteFrames.DRAGON.map((source) => useSkiaImage(source));
-  const sevenImages = spriteFrames.SEVEN.map((source) => useSkiaImage(source));
-  const spiderImages = spriteFrames.SPIDER.map((source) => useSkiaImage(source));
-  const ready = [
-    playerImage,
-    diamondImage,
-    speedBoostImage,
-    coreReactorImage,
-    projectileImage,
-    missileImage,
-    spiderWebImage,
-    shipSmokeImage,
-    ...shipImages,
-    ...dragonImages,
-    ...sevenImages,
-    ...spiderImages,
-  ].every(Boolean);
-
-  useEffect(() => {
-    if (ready) onReady();
-  }, [onReady, ready]);
-
-  return null;
-};
 
 const NativeArenaDynamic = React.memo(({
   snapshot,
@@ -3782,7 +4990,19 @@ const NativeArenaDynamic = React.memo(({
   const angle = Math.atan2(snapshot.direction.y, snapshot.direction.x);
   const playerRotationDegrees = angle * (180 / Math.PI) + 90;
   const playerSize = playerSpriteSize(snapshot.cell);
+  const launchBasePoint = {
+    x: arenaBounds.left + snapshot.cell,
+    y: arenaBounds.top - snapshot.cell * PLAYER_RADIUS_CELLS,
+  };
+  const launchBase = launchBaseVisualState(
+    snapshot.player,
+    launchBasePoint,
+    snapshot.cell,
+    snapshot.launchBaseDismissed,
+    snapshot.launchBaseFadeProgress,
+  );
   const pickupSize = pickupVisualSize(snapshot.cell);
+  const diamondSize = pickupSize * DIAMOND_RENDER_SCALE;
   const invincibilityRemaining = Math.max(0, snapshot.invincibleUntil - Date.now());
   const protectionPulse = clamp(
     0.5
@@ -3797,8 +5017,20 @@ const NativeArenaDynamic = React.memo(({
   const scanIntervals = snapshot.pendingCapturePolygons.flatMap((polygon) => (
     polygonHorizontalIntervals(polygon, snapshot.scanY)
   ));
+  const shockwaveFlashOpacity = dcaShockwaveFlashOpacity(snapshot.dcas);
   return (
     <>
+      {shockwaveFlashOpacity > 0 && (
+        <Rect
+          pointerEvents="none"
+          x={0}
+          y={0}
+          width={snapshot.width}
+          height={snapshot.height}
+          fill="#ffffff"
+          opacity={shockwaveFlashOpacity}
+        />
+      )}
       {snapshot.diamonds.map((diamond, index) => (
         <DiamondSprite
           key={`diamond-${index}`}
@@ -3806,7 +5038,7 @@ const NativeArenaDynamic = React.memo(({
           diamondIndex={index}
           cell={snapshot.cell}
           frame={diamondFrame}
-          pickupSize={pickupSize}
+          pickupSize={diamondSize}
           diamondSpriteSource={diamondSpriteSource}
         />
       ))}
@@ -3960,6 +5192,25 @@ const NativeArenaDynamic = React.memo(({
           arenaBounds={arenaBounds}
         />
       ))}
+      {snapshot.dcas
+        .filter((dca) => (
+          !dcaIsDestroyed(dca)
+          && ((dca.beamRemaining ?? 0) > 0 || (dca.shockwaveRemaining ?? 0) > 0)
+        ))
+        .map((dca, index) => (
+          <DcaBeamSprite
+            key={`dca-beam-${index}`}
+            dca={dca}
+            cell={snapshot.cell}
+            width={snapshot.width}
+            height={snapshot.height}
+          />
+        ))}
+      {snapshot.dcas
+        .filter((dca) => !dcaIsDestroyed(dca))
+        .map((dca, index) => (
+          <DcaSprite key={`dca-${index}`} dca={dca} cell={snapshot.cell} />
+        ))}
       {snapshot.enemies
         .filter((enemy) => !(skiaShipReady && enemy.kind === 'SHIP'))
         .map((enemy, enemyIndex) => (
@@ -4031,6 +5282,16 @@ const NativeArenaDynamic = React.memo(({
           />
         </G>
       )}
+      {launchBase.visible && (
+        <SvgImage
+          href={launchBaseSource}
+          x={launchBasePoint.x - snapshot.cell * 0.84 * launchBase.scale}
+          y={launchBasePoint.y - snapshot.cell * 0.84 * launchBase.scale + launchBase.descent}
+          width={snapshot.cell * 1.68 * launchBase.scale}
+          height={snapshot.cell * 1.68 * launchBase.scale}
+          opacity={0.9 * launchBase.scale}
+        />
+      )}
       {!skiaPlayerReady && (
         <G transform={`translate(${snapshot.player.x} ${snapshot.player.y}) rotate(${playerRotationDegrees})`}>
           <SvgImage
@@ -4055,7 +5316,7 @@ const DebugSectorSelector = ({
   bottomInset,
 }: {
   currentSector: number;
-  tutorialStep: 1 | 2 | 3 | 4;
+  tutorialStep: 1 | 2 | 3 | 4 | 5;
   onSelect: (sector: number) => void;
   onSkipTutorial: () => void;
   bottomInset: number;
@@ -4067,8 +5328,10 @@ const DebugSectorSelector = ({
       : tutorialStep === 2
         ? 'SÉCURISE 80% DE LA ZONE'
         : tutorialStep === 3
+        ? 'DOUBLE TAP : SURCHARGE IONIQUE'
+        : tutorialStep === 4
           ? 'CAPTURE LE VAISSEAU + 80%'
-          : 'DÉTRUIS LE VAISSEAU + 80%'
+          : 'TIRE SUR LE VAISSEAU'
   );
   return (
     <View style={[styles.debugSectorSelector, { bottom: bottomInset }]}>
@@ -4180,7 +5443,17 @@ const TutorialSwipeGuide = ({ counts }: { counts: TutorialSwipeCounts }) => {
 
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const loadingSideInset = clamp(viewportWidth * 0.055, 20, 32);
+  const loadingBottomInset = Math.max(
+    insets.bottom + 18,
+    Math.round(viewportHeight * 0.055),
+  );
+  const loadingControlGap = clamp(viewportWidth * 0.022, 8, 12);
+  const loadingButtonHeight = clamp(viewportWidth * 0.18, 64, 76);
+  const loadingButtonPadding = clamp(viewportWidth * 0.024, 8, 12);
+  const loadingButtonTitleSize = clamp(viewportWidth * 0.03, 11, 13);
+  const loadingButtonSubtitleSize = clamp(viewportWidth * 0.021, 7, 9);
   const canvasRef = useRef<any>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const gameRef = useRef<Game>({
@@ -4197,8 +5470,10 @@ export default function GameScreen() {
     trail: [],
     protectedTrails: [],
     enemies: [],
+    dcas: [],
     diamonds: [],
     speedBoosts: [],
+    speedBoostCharges: STARTING_SPEED_BOOST_CHARGES,
     bombs: [],
     projectiles: [],
     missiles: [],
@@ -4219,9 +5494,12 @@ export default function GameScreen() {
     capturedArea: 0,
     totalPlayableArea: 1,
     pendingCaptureArea: 0,
+    diamondsCollected: 0,
     level: 1,
     frame: 0,
     trailScoreAccumulator: 0,
+    launchBaseDismissed: false,
+    launchBaseFadeProgress: 0,
     initialized: false,
     status: 'PLAYING',
     respawnAt: 0,
@@ -4233,6 +5511,8 @@ export default function GameScreen() {
     score: 0,
     bestScore: 0,
     shields: 3,
+    diamonds: 0,
+    speedBoostCharges: STARTING_SPEED_BOOST_CHARGES,
     capture: 0,
     level: 1,
     mode: 'SLOW',
@@ -4249,10 +5529,30 @@ export default function GameScreen() {
   }, []);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [gameOverSector, setGameOverSector] = useState<number | null>(null);
+  const [gameOverScore, setGameOverScore] = useState<number | null>(null);
+  const [gameOverBestScore, setGameOverBestScore] = useState<number | null>(null);
+  const [gameOverStage, setGameOverStage] = useState<GameOverStage>('DEATH');
+  const [playerPseudo, setPlayerPseudo] = useState('');
+  const [pseudoDraft, setPseudoDraft] = useState('');
+  const [isPlayerPseudoHydrated, setIsPlayerPseudoHydrated] = useState(false);
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardStatus, setLeaderboardStatus] = useState<LeaderboardStatus>('idle');
+  const [leaderboardMessage, setLeaderboardMessage] = useState('');
+  const [isShopOpen, setIsShopOpen] = useState(false);
+  const [shopNotice, setShopNotice] = useState('');
+  const [isDiamondPurchaseOpen, setIsDiamondPurchaseOpen] = useState(false);
+  const [diamondPurchaseNotice, setDiamondPurchaseNotice] = useState('');
+  const shardPurchases = useShardPurchases();
   const [isLoadingScreenVisible, setIsLoadingScreenVisible] = useState(true);
 
   const [isInitialLoadingReady, setIsInitialLoadingReady] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isLoadingArtworkReady, setIsLoadingArtworkReady] = useState(false);
+  const [isSavedGameStorageReady, setIsSavedGameStorageReady] = useState(false);
+  const [isLastPlayedSectorStorageReady, setIsLastPlayedSectorStorageReady] = useState(false);
+  const [resumeSector, setResumeSector] = useState(0);
+  const loadingArtworkReadyRef = useRef(false);
+  const loadingProgressTargetRef = useRef(0);
   const [nativeSnapshot, setNativeSnapshot] = useState<Snapshot | null>(null);
   const performanceMetricsRef = useRef<PerformanceMetrics>({
     frames: 0,
@@ -4284,6 +5584,8 @@ export default function GameScreen() {
   const webAssetLoadPromisesRef = useRef<Record<string, Promise<void>>>({});
   const allGameAssetsPromiseRef = useRef<Promise<void> | null>(null);
   const initialSectorPreparationStartedRef = useRef(false);
+  const pendingInitialAssetPreloadLevelRef = useRef<number | null>(null);
+  const initialAssetPreloadStartedRef = useRef(false);
   const bestScoreRef = useRef(0);
   const bestScoreHydratedRef = useRef(false);
   const savedGameRef = useRef<PersistedGame | null>(null);
@@ -4293,30 +5595,71 @@ export default function GameScreen() {
   const recordBannerShownRef = useRef(false);
   const bannerQueueRef = useRef<Banner[]>([]);
   const bannerAnimatingRef = useRef(false);
+  const afterBannerQueueRef = useRef<(() => void) | null>(null);
   const bannerSequenceRef = useRef(0);
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const nativeBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameOverSectorRef = useRef<number | null>(null);
+  const leaderboardSubmitAttemptRef = useRef<string | null>(null);
   const resumeFromGameOverRef = useRef<() => void>(() => undefined);
   const initialLoadingRevealStartedRef = useRef(false);
   const initialLoadingTapHandledRef = useRef(false);
   const initialLoadingBannerRef = useRef<Banner | null>(null);
+  const pendingInitialRevealRef = useRef<Banner | null>(null);
   const loadingBannerTranslateX = useRef(new Animated.Value(0)).current;
+  const shopNextLevelRef = useRef<number | null>(null);
+  const shopPreviousLevelRef = useRef<number | null>(null);
   const lastPlayedSectorRef = useRef(0);
   const lastPlayedSectorHydratedRef = useRef(false);
   const tutorialSwipeCountsRef = useRef<TutorialSwipeCounts>({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
   const tutorialSwipeGestureDirectionRef = useRef<TutorialDirection | null>(null);
+  const arenaTouchStartRef = useRef({ x: 0, y: 0 });
+  const arenaTouchMovedRef = useRef(false);
+  const arenaSwipeDirectionRef = useRef<Direction | null>(null);
+  const arenaPanResponderActiveRef = useRef(false);
+  const arenaTouchIdentifierRef = useRef<number | string | null>(null);
+  const arenaTouchActiveRef = useRef(false);
+  const lastArenaTapRef = useRef<{ at: number; x: number; y: number } | null>(null);
   const tutorialCompletionBannerShownRef = useRef(false);
   const tutorialCaptureCompletionBannerShownRef = useRef(false);
   const tutorialEnemyCaptureCompletionBannerShownRef = useRef(false);
   const tutorialEnemyCaptureProgressBannerShownRef = useRef(false);
   const tutorialEnemyDestroyedRef = useRef(false);
   const tutorialEnemyDestructionCompletionBannerShownRef = useRef(false);
-  const tutorialStepRef = useRef<1 | 2 | 3 | 4>(1);
+  const tutorialBoostActivatedRef = useRef(false);
+  const tutorialStepRef = useRef<1 | 2 | 3 | 4 | 5>(1);
   const [tutorialSwipeCounts, setTutorialSwipeCounts] = useState<TutorialSwipeCounts>({
     ...EMPTY_TUTORIAL_SWIPE_COUNTS,
   });
-  const [tutorialStep, setTutorialStep] = useState<1 | 2 | 3 | 4>(1);
+  const [tutorialStep, setTutorialStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+
+  const reportLoadingProgress = useCallback((progress: number) => {
+    const nextProgress = Math.min(1, Math.max(0, progress));
+    loadingProgressTargetRef.current = Math.max(
+      loadingProgressTargetRef.current,
+      nextProgress,
+    );
+    if (nextProgress >= 1) setLoadingProgress(1);
+  }, []);
+
+  useEffect(() => {
+    let frame: number | null = null;
+    const animateProgress = () => {
+      setLoadingProgress((current) => {
+        const target = loadingProgressTargetRef.current;
+        const distance = target - current;
+        if (Math.abs(distance) < 0.001) return target;
+        // Keep the progress visibly continuous even when many bundled assets
+        // finish in the same native/web event loop turn.
+        return current + Math.sign(distance) * Math.max(0.0015, Math.abs(distance) * 0.06);
+      });
+      frame = requestAnimationFrame(animateProgress);
+    };
+    frame = requestAnimationFrame(animateProgress);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, []);
 
   useEffect(() => {
     diagnosticLog('game-screen-mounted', {
@@ -4329,11 +5672,12 @@ export default function GameScreen() {
     };
   }, []);
 
-  const saveGameProgress = useCallback(() => {
+  const saveGameProgress = useCallback((allowShop = false) => {
     const game = gameRef.current;
     if (
       !game.initialized
-      || game.status !== 'PLAYING'
+      || !initialLoadingTapHandledRef.current
+      || (game.status !== 'PLAYING' && (!allowShop || game.status !== 'SHOP'))
       || game.level === TUTORIAL_SECTOR
     ) {
       return;
@@ -4362,6 +5706,14 @@ export default function GameScreen() {
         if (__DEV__) console.warn('Unable to save last played sector', error);
       });
   }, []);
+  const clearLastPlayedSector = useCallback(() => {
+    lastPlayedSectorRef.current = 0;
+    setResumeSector(0);
+    void AsyncStorage.removeItem(LAST_PLAYED_SECTOR_STORAGE_KEY)
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to clear last played sector', error);
+      });
+  }, []);
   const pickupChimePlayer = useAudioPlayer(pickupChimeSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
@@ -4379,6 +5731,14 @@ export default function GameScreen() {
     keepAudioSessionActive: true,
   });
   const sevenFireShotPlayer = useAudioPlayer(sevenFireShotSource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
+  const dcaEngineChargePlayer = useAudioPlayer(dcaEngineChargeSource, {
+    downloadFirst: true,
+    keepAudioSessionActive: true,
+  });
+  const dcaShockwavePlayer = useAudioPlayer(dcaShockwaveSource, {
     downloadFirst: true,
     keepAudioSessionActive: true,
   });
@@ -4446,6 +5806,9 @@ export default function GameScreen() {
         if (!next) {
           bannerAnimatingRef.current = false;
           setBanner(null);
+          const afterBannerQueue = afterBannerQueueRef.current;
+          afterBannerQueueRef.current = null;
+          afterBannerQueue?.();
           return;
         }
 
@@ -4476,6 +5839,9 @@ export default function GameScreen() {
       if (!next) {
         bannerAnimatingRef.current = false;
         setBanner(null);
+        const afterBannerQueue = afterBannerQueueRef.current;
+        afterBannerQueueRef.current = null;
+        afterBannerQueue?.();
         return;
       }
 
@@ -4519,14 +5885,20 @@ export default function GameScreen() {
 
   const revealGameAfterInitialLoad = useCallback((nextBanner: Banner) => {
     if (initialLoadingRevealStartedRef.current) return;
+    if (!loadingArtworkReadyRef.current) {
+      pendingInitialRevealRef.current = nextBanner;
+      reportLoadingProgress(Math.min(loadingProgressTargetRef.current, 0.02));
+      diagnosticLog('loading-waiting-for-cover');
+      return;
+    }
     if (Platform.OS !== 'web' && !skiaReadyRef.current) {
       pendingNativeRevealRef.current = nextBanner;
-      setLoadingProgress(0.98);
+      reportLoadingProgress(0.98);
       diagnosticLog('native-loading-waiting-for-skia');
       return;
     }
     initialLoadingRevealStartedRef.current = true;
-    setLoadingProgress(1);
+    reportLoadingProgress(1);
     if (Platform.OS !== 'web') {
       initialLoadingBannerRef.current = nextBanner;
       setIsInitialLoadingReady(true);
@@ -4535,7 +5907,7 @@ export default function GameScreen() {
     }
     initialLoadingBannerRef.current = nextBanner;
     setIsInitialLoadingReady(true);
-  }, [enqueueBanner]);
+  }, [reportLoadingProgress]);
 
   useEffect(() => {
     if (Platform.OS === 'web' || !skiaReady || !pendingNativeRevealRef.current) return;
@@ -4544,36 +5916,30 @@ export default function GameScreen() {
     revealGameAfterInitialLoad(nextBanner);
   }, [revealGameAfterInitialLoad, skiaReady]);
 
-  const handleInitialLoadingTap = useCallback(() => {
-    if (
-      !isLoadingScreenVisible
-      || !isInitialLoadingReady
-      || initialLoadingTapHandledRef.current
-    ) {
-      return;
+  useEffect(() => {
+    if (!isLoadingArtworkReady || !pendingInitialRevealRef.current) return;
+    const nextBanner = pendingInitialRevealRef.current;
+    pendingInitialRevealRef.current = null;
+    revealGameAfterInitialLoad(nextBanner);
+  }, [isLoadingArtworkReady, revealGameAfterInitialLoad]);
+
+  const handleLoadingArtworkLoad = useCallback(() => {
+    if (loadingArtworkReadyRef.current) return;
+    setIsLoadingArtworkReady(true);
+    reportLoadingProgress(0.02);
+    const markArtworkVisible = () => {
+      loadingArtworkReadyRef.current = true;
+      diagnosticLog('loading-cover-visible');
+    };
+    // onLoad means the bitmap is decoded, but the first React Native/Web
+    // paint can still be one frame behind. Give the cover two frames before
+    // allowing the rest of the preload to begin.
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(markArtworkVisible));
+    } else {
+      setTimeout(markArtworkVisible, 32);
     }
-    initialLoadingTapHandledRef.current = true;
-    audioUnlockedRef.current = true;
-    loadingBannerTranslateX.stopAnimation();
-    Animated.timing(loadingBannerTranslateX, {
-      toValue: Math.max(sizeRef.current.width, 360) + 180,
-      duration: 330,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (!finished) return;
-      setIsLoadingScreenVisible(false);
-      setIsInitialLoadingReady(false);
-      const nextBanner = initialLoadingBannerRef.current;
-      initialLoadingBannerRef.current = null;
-      if (nextBanner) enqueueBanner(nextBanner);
-    });
-  }, [
-    enqueueBanner,
-    isInitialLoadingReady,
-    isLoadingScreenVisible,
-    loadingBannerTranslateX,
-  ]);
+  }, [reportLoadingProgress]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4597,6 +5963,125 @@ export default function GameScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    AsyncStorage.getItem(PLAYER_PSEUDO_STORAGE_KEY)
+      .then((storedPseudo) => {
+        if (cancelled) return;
+        const normalizedPseudo = normalizePseudo(storedPseudo ?? '');
+        setPlayerPseudo(normalizedPseudo);
+        setPseudoDraft(normalizedPseudo);
+      })
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to load player pseudo', error);
+      })
+      .finally(() => {
+        if (!cancelled) setIsPlayerPseudoHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadLeaderboard = useCallback(async () => {
+    if (!LEADERBOARD_API_URL) {
+      setLeaderboardStatus('error');
+      setLeaderboardMessage('CLASSEMENT EN LIGNE EN ATTENTE DE CONFIGURATION');
+      return;
+    }
+    setLeaderboardStatus('loading');
+    setLeaderboardMessage('');
+    try {
+      const response = await fetch(`${LEADERBOARD_API_URL}/leaderboard?limit=${LEADERBOARD_LIMIT}`);
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(`leaderboard-http-${response.status}`);
+      }
+      setLeaderboardEntries(leaderboardEntriesFromPayload(payload));
+      setLeaderboardStatus('ready');
+    } catch (error: unknown) {
+      setLeaderboardStatus('error');
+      setLeaderboardMessage('CLASSEMENT TEMPORAIREMENT INDISPONIBLE');
+      if (__DEV__) console.warn('Unable to load leaderboard', error);
+    }
+  }, []);
+
+  const submitLeaderboardScore = useCallback(async (rawPseudo: string) => {
+    const score = Math.max(0, Math.floor(gameOverScore ?? hud.score));
+    const normalizedPseudo = normalizePseudo(rawPseudo);
+    const submissionKey = `${gameOverSectorRef.current ?? 0}:${score}`;
+    leaderboardSubmitAttemptRef.current = submissionKey;
+    if (normalizedPseudo.length < 3 || normalizedPseudo.length > 8) {
+      setLeaderboardStatus('error');
+      setLeaderboardMessage('LE PSEUDO DOIT CONTENIR 3 À 8 CARACTÈRES');
+      return;
+    }
+    if (!LEADERBOARD_API_URL) {
+      setLeaderboardStatus('error');
+      setLeaderboardMessage('CLASSEMENT EN LIGNE EN ATTENTE DE CONFIGURATION');
+      return;
+    }
+    setLeaderboardStatus('submitting');
+    setLeaderboardMessage('');
+    try {
+      const response = await fetch(`${LEADERBOARD_API_URL}/scores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pseudo: normalizedPseudo,
+          score,
+          sector: gameOverSectorRef.current ?? 0,
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(`score-http-${response.status}`);
+      }
+      await AsyncStorage.setItem(PLAYER_PSEUDO_STORAGE_KEY, normalizedPseudo);
+      setPlayerPseudo(normalizedPseudo);
+      setPseudoDraft(normalizedPseudo);
+      setLeaderboardEntries(leaderboardEntriesFromPayload(payload));
+      setLeaderboardStatus('submitted');
+      setLeaderboardMessage('SCORE ENREGISTRÉ');
+    } catch (error: unknown) {
+      setLeaderboardStatus('error');
+      setLeaderboardMessage('ENVOI IMPOSSIBLE — RÉESSAYE DANS UN INSTANT');
+      if (__DEV__) console.warn('Unable to submit leaderboard score', error);
+    }
+  }, [gameOverScore, hud.score]);
+
+  useEffect(() => {
+    if (gameOverSector === null) return undefined;
+    setGameOverStage('DEATH');
+    const timer = setTimeout(() => {
+      setGameOverStage('LEADERBOARD');
+      void loadLeaderboard();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [gameOverSector, loadLeaderboard]);
+
+  useEffect(() => {
+    if (
+      gameOverSector === null
+      || gameOverStage !== 'LEADERBOARD'
+      || !isPlayerPseudoHydrated
+      || !playerPseudo
+      || gameOverScore === null
+    ) {
+      return;
+    }
+    const submissionKey = `${gameOverSector}:${gameOverScore}`;
+    if (leaderboardSubmitAttemptRef.current === submissionKey) return;
+    void submitLeaderboardScore(playerPseudo);
+  }, [
+    gameOverScore,
+    gameOverSector,
+    gameOverStage,
+    isPlayerPseudoHydrated,
+    playerPseudo,
+    submitLeaderboardScore,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
     AsyncStorage.getItem(GAME_SAVE_STORAGE_KEY)
       .then((storedGame) => {
         if (cancelled || !storedGame) return;
@@ -4615,7 +6100,10 @@ export default function GameScreen() {
         if (__DEV__) console.warn('Unable to load saved game progress', error);
       })
       .finally(() => {
-        if (!cancelled) savedGameHydratedRef.current = true;
+        if (!cancelled) {
+          savedGameHydratedRef.current = true;
+          setIsSavedGameStorageReady(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -4636,12 +6124,23 @@ export default function GameScreen() {
         if (__DEV__) console.warn('Unable to load last played sector', error);
       })
       .finally(() => {
-        if (!cancelled) lastPlayedSectorHydratedRef.current = true;
+        if (!cancelled) {
+          lastPlayedSectorHydratedRef.current = true;
+          setIsLastPlayedSectorStorageReady(true);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isSavedGameStorageReady || !isLastPlayedSectorStorageReady) return;
+    setResumeSector(Math.max(
+      lastPlayedSectorRef.current,
+      savedGameRef.current?.level ?? 0,
+    ));
+  }, [isLastPlayedSectorStorageReady, isSavedGameStorageReady]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -4663,6 +6162,8 @@ export default function GameScreen() {
     sectorTransitionVictoryPlayer.volume = 0.9;
     sevenFireShotPlayer.muted = false;
     sevenFireShotPlayer.volume = 0.55;
+    dcaShockwavePlayer.muted = false;
+    dcaShockwavePlayer.volume = 0.88;
     audioSessionReadyRef.current = setAudioModeAsync({
       allowsRecording: false,
       playsInSilentMode: true,
@@ -4680,6 +6181,7 @@ export default function GameScreen() {
     sectorTransitionVictoryPlayer,
     shieldLossExplosionPlayer,
     sevenFireShotPlayer,
+    dcaShockwavePlayer,
   ]);
 
   const playPickupChime = useCallback(() => {
@@ -4714,6 +6216,56 @@ export default function GameScreen() {
     });
   }, [sevenFireShotPlayer]);
 
+  const playDcaShockwave = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    void audioSessionReadyRef.current.then(async () => {
+      dcaShockwavePlayer.muted = false;
+      dcaShockwavePlayer.volume = 0.88;
+      try {
+        await dcaShockwavePlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      dcaShockwavePlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play DCA shockwave', error);
+    });
+  }, [dcaShockwavePlayer]);
+
+  const playDcaEngineCharge = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    void audioSessionReadyRef.current.then(async () => {
+      dcaEngineChargePlayer.muted = false;
+      dcaEngineChargePlayer.volume = 0.48;
+      try {
+        await dcaEngineChargePlayer.seekTo(0);
+      } catch {
+        // A freshly loaded native player is already positioned at the start.
+      }
+      dcaEngineChargePlayer.play();
+    }).catch((error: unknown) => {
+      if (__DEV__) console.warn('Unable to play DCA engine charge', error);
+    });
+  }, [dcaEngineChargePlayer]);
+
+  const triggerDcaHaptic = useCallback((phase: 'LAUNCH' | 'IMPACT') => {
+    if (Platform.OS === 'web') return;
+    const notificationType = phase === 'LAUNCH'
+      ? Haptics.NotificationFeedbackType.Warning
+      : Haptics.NotificationFeedbackType.Success;
+    const impactStyle = phase === 'LAUNCH'
+      ? Haptics.ImpactFeedbackStyle.Heavy
+      : Haptics.ImpactFeedbackStyle.Medium;
+    void (async () => {
+      try {
+        await Haptics.notificationAsync(notificationType);
+        await Haptics.impactAsync(impactStyle);
+      } catch (error: unknown) {
+        if (__DEV__) console.warn('Unable to trigger DCA haptic', error);
+      }
+    })();
+  }, []);
+
   const loadWebImageAsset = useCallback((assetModule: any) => {
     const resolvedAsset = (RNImage as any).resolveAssetSource?.(assetModule);
     const uri = String(resolvedAsset?.uri ?? assetModule?.uri ?? assetModule);
@@ -4747,57 +6299,67 @@ export default function GameScreen() {
   const loadNativeImageAsset = useCallback((assetModule: any) => {
     if (Platform.OS === 'web') return Promise.resolve();
     const resolvedAsset = (RNImage as any).resolveAssetSource?.(assetModule);
-    const uri = String(resolvedAsset?.uri ?? assetModule?.uri ?? assetModule);
-    const prefetch = typeof (RNImage as any).prefetch === 'function'
-      ? (RNImage as any).prefetch(uri).catch(() => false)
-      : Promise.resolve(false);
-    const dimensions = new Promise<void>((resolve) => {
-      RNImage.getSize(
-        uri,
-        () => resolve(),
-        // Expo Go Android can reject getSize for a bundled dev-server asset
-        // even though RNImage can still decode it when rendered. This is a
-        // cache warmup hint, not a reason to surface an unhandled error.
-        () => resolve(),
-      );
+    const fallbackUri = String(resolvedAsset?.uri ?? assetModule?.uri ?? assetModule);
+    const asset = Asset.fromModule(assetModule);
+    const load = asset.downloadAsync().then(() => {
+      const uri = asset.localUri ?? asset.uri ?? fallbackUri;
+      return new Promise<void>((resolve) => {
+        RNImage.getSize(
+          uri,
+          () => resolve(),
+          // A bundled Expo asset can be drawable even when getSize rejects.
+          // Asset.downloadAsync remains the authoritative cache warmup.
+          () => resolve(),
+        );
+      });
     });
-    // Prefetch warms the native cache but is not a readiness signal: on some
-    // Expo Go Android sessions it never settles for a bundled local asset.
-    // The size callback is the readiness check used by the launch gate.
-    void prefetch;
-    const load = Promise.all([prefetch, dimensions]).then(() => undefined);
     // A native asset callback can remain pending indefinitely in Expo Go when
     // Android has a stale local image request. Do not hold the launch gate
-    // forever; Skia's own image loader continues independently.
+    // forever; the Skia preloader still provides the decoded-sprite gate.
     const timeout = new Promise<void>((resolve) => {
       setTimeout(resolve, NATIVE_ASSET_PRELOAD_TIMEOUT_MS);
     });
     return Promise.race([load, timeout]);
   }, []);
 
-  const preloadAllGameAssets = useCallback(() => {
+  const preloadAllGameAssets = useCallback((onProgress?: (progress: number) => void) => {
     if (!allGameAssetsPromiseRef.current) {
       const imageModules = [
         ...Object.values(spriteFrames).flat(),
         cuttingSpriteSource,
         diamondSource,
         playerSource,
+        launchBaseSource,
         playerMissileSource,
+        ...dcaDirectionSources,
+        loadingCoverSource,
         cockpitInteriorSource,
+        repairVendorSource,
+        aegisShieldShopSource,
         shipSmokeSpriteSource,
         coreReactorSpriteSource,
         sevenFireOrbSource,
         diamondSpriteSource,
         speedBoostSource,
         spiderWebSource,
+        ...Object.values(LEVEL_BACKGROUND_SOURCES),
       ];
       const uniqueAssetModules = Array.from(new Set(imageModules));
-      allGameAssetsPromiseRef.current = Promise.allSettled(
-        uniqueAssetModules.map((assetModule) => {
-          if (Platform.OS === 'web') return loadWebImageAsset(assetModule);
-          return loadNativeImageAsset(assetModule);
-        }),
-      ).then((results) => {
+      let completed = 0;
+      const total = Math.max(1, uniqueAssetModules.length);
+      onProgress?.(0.04);
+      allGameAssetsPromiseRef.current = Promise.allSettled(uniqueAssetModules.map(async (assetModule) => {
+        try {
+          if (Platform.OS === 'web') {
+            await loadWebImageAsset(assetModule);
+          } else {
+            await loadNativeImageAsset(assetModule);
+          }
+        } finally {
+          completed += 1;
+          onProgress?.(0.04 + (completed / total) * 0.9);
+        }
+      })).then((results) => {
         const failedCount = results.filter((result) => result.status === 'rejected').length;
         diagnosticLog('game-assets-preloaded', {
           requestedCount: uniqueAssetModules.length,
@@ -4819,7 +6381,14 @@ export default function GameScreen() {
       // Warm the native bitmap cache before the sector becomes playable.
       // Image.prefetch/getSize are used here because the active Android
       // backdrop is a native Image, not a lazily decoded SVG/Skia image.
-      const promise = loadNativeImageAsset(source);
+      // The initial preload already downloads every sector background. Reuse
+      // that promise on tile navigation instead of asking Android to run
+      // another getSize round-trip for the next ten backgrounds.
+      const cachedAllAssetsPromise = allGameAssetsPromiseRef.current;
+      const promise = (cachedAllAssetsPromise ?? loadNativeImageAsset(source))
+        .then(() => {
+          sectorBackgroundImageRefs.current[normalizedLevel] = true;
+        });
       sectorBackgroundLoadPromisesRef.current[normalizedLevel] = promise;
       return promise;
     }
@@ -4857,16 +6426,61 @@ export default function GameScreen() {
   ) => {
     const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
     onProgress?.(0.08);
-    await preloadAllGameAssets();
-    onProgress?.(0.76);
+    await preloadAllGameAssets(onProgress);
+    onProgress?.(0.95);
     await preloadBackgroundWindow(normalizedLevel, INITIAL_BACKGROUND_PRELOAD_COUNT);
-    onProgress?.(0.94);
+    onProgress?.(0.98);
     diagnosticLog('sector-assets-ready', { level: normalizedLevel });
   }, [
     loadWebBackground,
     preloadAllGameAssets,
     preloadBackgroundWindow,
   ]);
+
+  const startInitialAssetPreload = useCallback((level: number) => {
+    if (initialAssetPreloadStartedRef.current) return;
+    initialAssetPreloadStartedRef.current = true;
+    const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
+    reportLoadingProgress(0.02);
+    void preloadSectorForBanner(normalizedLevel, reportLoadingProgress).then(() => {
+      if (gameRef.current.initialized) {
+        revealGameAfterInitialLoad({
+          kind: normalizedLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
+          tutorialStep: normalizedLevel === TUTORIAL_SECTOR ? 1 : undefined,
+          level: gameRef.current.level,
+        });
+        void preloadBackgroundWindow(
+          normalizedLevel === TUTORIAL_SECTOR ? 1 : normalizedLevel,
+        );
+      }
+    });
+  }, [
+    preloadBackgroundWindow,
+    preloadSectorForBanner,
+    reportLoadingProgress,
+    revealGameAfterInitialLoad,
+  ]);
+
+  useEffect(() => {
+    if (!isLoadingArtworkReady || pendingInitialAssetPreloadLevelRef.current === null) {
+      return undefined;
+    }
+    let cancelled = false;
+    const waitForCoverPaint = () => {
+      if (cancelled) return;
+      if (loadingArtworkReadyRef.current) {
+        const level = pendingInitialAssetPreloadLevelRef.current;
+        pendingInitialAssetPreloadLevelRef.current = null;
+        if (level !== null) startInitialAssetPreload(level);
+        return;
+      }
+      requestAnimationFrame(waitForCoverPaint);
+    };
+    waitForCoverPaint();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoadingArtworkReady, startInitialAssetPreload]);
 
   const releaseSectorBackground = useCallback((level: number, nextLevel: number) => {
     const normalizedLevel = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
@@ -4985,6 +6599,7 @@ export default function GameScreen() {
     preserveStats = false,
     resetBoard = false,
     levelOverride?: number,
+    resetLaunchBase = false,
   ) => {
     const g = gameRef.current;
     const { width, height } = sizeRef.current;
@@ -4997,6 +6612,19 @@ export default function GameScreen() {
       : 0;
     const previousSpeedBoostUntil = preserveStats && !resetBoard
       ? (g.speedBoostUntil ?? 0)
+      : 0;
+    const preserveLaunchBaseState = preserveStats && !resetBoard && !resetLaunchBase;
+    const previousLaunchBaseDismissed = preserveLaunchBaseState
+      ? Boolean(g.launchBaseDismissed)
+      : false;
+    const previousLaunchBaseFadeProgress = preserveLaunchBaseState
+      ? clamp(g.launchBaseFadeProgress ?? 0, 0, 1)
+      : 0;
+    const previousSpeedBoostCharges = preserveStats
+      ? Math.max(0, Math.floor(g.speedBoostCharges ?? 0))
+      : STARTING_SPEED_BOOST_CHARGES;
+    const previousDiamondsCollected = preserveStats
+      ? Math.max(0, g.diamondsCollected)
       : 0;
     const previousLevel = levelOverride ?? (preserveStats ? g.level : 1);
     const previousClaimedPolygons = preserveStats && !resetBoard
@@ -5016,6 +6644,9 @@ export default function GameScreen() {
       ? g.speedBoosts.map((speedBoost) => ({ ...speedBoost }))
       : createSpeedBoosts(width, height, width / COLS, previousLevel);
     const previousEnemies = preserveStats && !resetBoard ? g.enemies : [];
+    const previousDcas = preserveStats && !resetBoard && !isBossSector(previousLevel)
+      ? g.dcas.map((dca) => ({ ...dca }))
+      : [];
     const preserveBombLayout = preserveStats && !resetBoard;
     const previousBombs = preserveBombLayout
       ? g.bombs.map((bomb) => ({ ...bomb }))
@@ -5038,6 +6669,7 @@ export default function GameScreen() {
       tutorialEnemyCaptureProgressBannerShownRef.current = false;
       tutorialEnemyDestroyedRef.current = false;
       tutorialEnemyDestructionCompletionBannerShownRef.current = false;
+      tutorialBoostActivatedRef.current = false;
       tutorialStepRef.current = 1;
       setTutorialStep(1);
       setTutorialSwipeCounts({ ...EMPTY_TUTORIAL_SWIPE_COUNTS });
@@ -5049,6 +6681,18 @@ export default function GameScreen() {
     const rows = Math.max(18, Math.floor(height / cell));
     const totalPlayableArea = Math.max(1, (bounds.right - bounds.left) * (bounds.bottom - bounds.top));
     const enemies = createEnemies(width, height, cell, previousLevel);
+    if (__DEV__ && isBossSector(previousLevel)) {
+      diagnosticLog('boss-roster', {
+        level: previousLevel,
+        enemies: enemies.map((enemy) => ({
+          kind: enemy.kind,
+          isBoss: enemy.isBoss === true,
+          bossTier: enemy.bossTier ?? null,
+          isSuperBoss: isSuperBossEnemy(enemy),
+          renderScale: isSuperBossEnemy(enemy) ? BOSS_RENDER_SCALE : ENEMY_RENDER_SCALE,
+        })),
+      });
+    }
     preserveDestroyedEnemies(
       enemies,
       previousEnemies.filter((enemy) => !enemy.isMini && enemy.splitLevel === undefined),
@@ -5119,8 +6763,10 @@ export default function GameScreen() {
       trail: [],
       protectedTrails: previousProtectedTrails,
       enemies,
+      dcas: previousDcas,
       diamonds: previousDiamonds,
       speedBoosts: previousSpeedBoosts,
+      speedBoostCharges: previousSpeedBoostCharges,
       bombs,
       projectiles: [],
       missiles: [],
@@ -5145,6 +6791,7 @@ export default function GameScreen() {
       capturedArea: previousCapturedArea,
       totalPlayableArea,
       pendingCaptureArea: 0,
+      diamondsCollected: previousDiamondsCollected,
       level: previousLevel,
       frame: 0,
       trailScoreAccumulator: 0,
@@ -5153,6 +6800,8 @@ export default function GameScreen() {
       respawnAt: 0,
       invincibleUntil: previousInvincibleUntil,
       speedBoostUntil: previousSpeedBoostUntil,
+      launchBaseDismissed: previousLaunchBaseDismissed,
+      launchBaseFadeProgress: previousLaunchBaseFadeProgress,
     };
     diagnosticLog('game-reset', {
       level: previousLevel,
@@ -5166,6 +6815,8 @@ export default function GameScreen() {
       score: previousScore,
       bestScore: bestScoreRef.current,
       shields: previousShields,
+      diamonds: previousDiamondsCollected,
+      speedBoostCharges: previousSpeedBoostCharges,
       capture: preserveStats && !resetBoard
         ? Math.min(
           LEVEL_CAPTURE_TARGET,
@@ -5197,7 +6848,13 @@ export default function GameScreen() {
     }
 
     gameOverSectorRef.current = null;
+    leaderboardSubmitAttemptRef.current = null;
     setGameOverSector(null);
+    setGameOverScore(null);
+    setGameOverBestScore(null);
+    setGameOverStage('DEATH');
+    setLeaderboardStatus('idle');
+    setLeaderboardMessage('');
     bannerSequenceRef.current += 1;
     bannerQueueRef.current = [];
     if (nativeBannerTimerRef.current) {
@@ -5231,7 +6888,6 @@ export default function GameScreen() {
       const initialLevel = savedGame?.level
         ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
       resetGame(false, false, initialLevel);
-      savedGameRef.current = null;
       if (!gameRef.current.initialized) return;
       diagnosticLog('native-start-fallback', { level: initialLevel });
       revealGameAfterInitialLoad({
@@ -5299,6 +6955,18 @@ export default function GameScreen() {
     game.level = Math.round(clamp(saved.level, 1, MAX_LEVEL));
     rememberLastPlayedSector(game.level);
     game.player = scalePoint(saved.player);
+    game.launchBaseDismissed = typeof saved.launchBaseDismissed === 'boolean'
+      ? saved.launchBaseDismissed
+      : pointInsidePerimeter(game.player, currentBounds);
+    game.launchBaseFadeProgress = game.launchBaseDismissed
+      ? clamp(
+        typeof saved.launchBaseFadeProgress === 'number'
+          ? saved.launchBaseFadeProgress
+          : 1,
+        0,
+        1,
+      )
+      : 0;
     game.inputDir = { ...saved.inputDir };
     game.facingDir = { ...saved.facingDir };
     game.hasMoveCommand = saved.hasMoveCommand;
@@ -5314,6 +6982,12 @@ export default function GameScreen() {
       targetY: enemy.targetY * scaleY,
       lastSafeX: enemy.lastSafeX === undefined ? undefined : enemy.lastSafeX * scaleX,
       lastSafeY: enemy.lastSafeY === undefined ? undefined : enemy.lastSafeY * scaleY,
+    }));
+    const legacySaved = saved as PersistedGame & { dca?: Dca | null };
+    game.dcas = (saved.dcas ?? (legacySaved.dca ? [legacySaved.dca] : [])).map((dca) => ({
+      ...dca,
+      x: dca.x * scaleX,
+      y: dca.y * scaleY,
     }));
     game.diamonds = saved.diamonds.map((diamond) => ({
       ...diamond,
@@ -5366,6 +7040,8 @@ export default function GameScreen() {
     game.totalPlayableArea = totalPlayableArea;
     game.capturedArea = totalPlayableArea * savedAreaRatio;
     game.pendingCaptureArea = totalPlayableArea * savedPendingAreaRatio;
+    game.diamondsCollected = Math.max(0, saved.diamondsCollected ?? 0);
+    game.speedBoostCharges = Math.max(0, Math.floor(saved.speedBoostCharges ?? 0));
     game.trailScoreAccumulator = Math.max(0, saved.trailScoreAccumulator * scaleX);
     game.frame = 0;
     game.particles = [];
@@ -5383,6 +7059,8 @@ export default function GameScreen() {
       score: game.score,
       bestScore: bestScoreRef.current,
       shields: game.shields,
+      diamonds: game.diamondsCollected,
+      speedBoostCharges: game.speedBoostCharges,
       capture: Math.min(
         LEVEL_CAPTURE_TARGET,
         Math.floor(clamp(game.capturedArea / game.totalPlayableArea, 0, 1) * 100),
@@ -5392,6 +7070,80 @@ export default function GameScreen() {
       feedback: '',
     });
   }, [rememberLastPlayedSector, resetGame]);
+
+  const handleInitialLoadingChoice = useCallback((
+    choice: 'NEW_GAME' | 'RESUME',
+  ) => {
+    if (
+      !isLoadingScreenVisible
+      || !isInitialLoadingReady
+      || !isSavedGameStorageReady
+      || !isLastPlayedSectorStorageReady
+      || initialLoadingTapHandledRef.current
+      || (choice === 'RESUME' && resumeSector < 1)
+    ) {
+      return;
+    }
+
+    initialLoadingTapHandledRef.current = true;
+    audioUnlockedRef.current = true;
+
+    let nextBanner: Banner;
+    if (choice === 'NEW_GAME') {
+      savedGameRef.current = null;
+      clearSavedGameProgress();
+      clearLastPlayedSector();
+      resetGame(false, false, TUTORIAL_SECTOR);
+      nextBanner = {
+        kind: 'TUTORIAL',
+        tutorialStep: 1,
+        level: TUTORIAL_SECTOR,
+      };
+    } else {
+      // “Reprendre” means restarting the highest reached sector cleanly,
+      // rather than dropping the player back into a mid-cut save snapshot.
+      savedGameRef.current = null;
+      clearSavedGameProgress();
+      resetGame(false, false, resumeSector);
+      nextBanner = {
+        kind: 'SECTOR_START',
+        level: resumeSector,
+      };
+    }
+
+    const game = gameRef.current;
+    if (Platform.OS !== 'web' && game.initialized) {
+      const initialSnapshot = snapshotFromGame(game);
+      nativeSnapshotRef.current = initialSnapshot;
+      setNativeSnapshot(initialSnapshot);
+    }
+    initialLoadingBannerRef.current = nextBanner;
+    loadingBannerTranslateX.stopAnimation();
+    Animated.timing(loadingBannerTranslateX, {
+      toValue: Math.max(sizeRef.current.width, 360) + 180,
+      duration: 330,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) return;
+      setIsLoadingScreenVisible(false);
+      setIsInitialLoadingReady(false);
+      const banner = initialLoadingBannerRef.current;
+      initialLoadingBannerRef.current = null;
+      if (banner) enqueueBanner(banner);
+    });
+  }, [
+    clearLastPlayedSector,
+    clearSavedGameProgress,
+    enqueueBanner,
+    isInitialLoadingReady,
+    isLastPlayedSectorStorageReady,
+    isLoadingScreenVisible,
+    isSavedGameStorageReady,
+    loadingBannerTranslateX,
+    resetGame,
+    resumeSector,
+  ]);
 
   const beginTutorialCaptureStep = useCallback(() => {
     const game = gameRef.current;
@@ -5408,6 +7160,25 @@ export default function GameScreen() {
     enqueueBanner({
       kind: 'TUTORIAL',
       tutorialStep: 2,
+    });
+  }, [enqueueBanner, resetGame]);
+
+  const beginTutorialBoostStep = useCallback(() => {
+    const game = gameRef.current;
+    if (game.level !== TUTORIAL_SECTOR) return;
+    resetGame(false, false, TUTORIAL_SECTOR);
+    tutorialBoostActivatedRef.current = false;
+    tutorialStepRef.current = 3;
+    tutorialCompletionBannerShownRef.current = true;
+    tutorialCaptureCompletionBannerShownRef.current = true;
+    tutorialEnemyCaptureCompletionBannerShownRef.current = false;
+    tutorialEnemyCaptureProgressBannerShownRef.current = false;
+    tutorialEnemyDestroyedRef.current = false;
+    tutorialEnemyDestructionCompletionBannerShownRef.current = false;
+    setTutorialStep(3);
+    enqueueBanner({
+      kind: 'TUTORIAL',
+      tutorialStep: 3,
     });
   }, [enqueueBanner, resetGame]);
 
@@ -5451,16 +7222,16 @@ export default function GameScreen() {
       }];
     }
     tutorialGame.missiles.length = 0;
-    tutorialStepRef.current = 3;
+    tutorialStepRef.current = 4;
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureCompletionBannerShownRef.current = false;
     tutorialEnemyCaptureProgressBannerShownRef.current = false;
     tutorialEnemyDestructionCompletionBannerShownRef.current = false;
-    setTutorialStep(3);
+    setTutorialStep(4);
     enqueueBanner({
       kind: 'TUTORIAL',
-      tutorialStep: 3,
+      tutorialStep: 4,
     });
   }, [enqueueBanner, resetGame]);
 
@@ -5503,30 +7274,34 @@ export default function GameScreen() {
       }];
     }
     tutorialGame.missiles.length = 0;
-    tutorialStepRef.current = 4;
+    tutorialStepRef.current = 5;
     tutorialCompletionBannerShownRef.current = true;
     tutorialCaptureCompletionBannerShownRef.current = true;
     tutorialEnemyCaptureCompletionBannerShownRef.current = true;
     tutorialEnemyDestroyedRef.current = false;
     tutorialEnemyDestructionCompletionBannerShownRef.current = false;
-    setTutorialStep(4);
+    setTutorialStep(5);
     enqueueBanner({
       kind: 'TUTORIAL',
-      tutorialStep: 4,
+      tutorialStep: 5,
     });
   }, [enqueueBanner, resetGame]);
 
-  const restartTutorialStep = useCallback((step: 1 | 2 | 3 | 4) => {
+  const restartTutorialStep = useCallback((step: 1 | 2 | 3 | 4 | 5) => {
     if (gameRef.current.level !== TUTORIAL_SECTOR) return;
     if (step === 2) {
       beginTutorialCaptureStep();
       return;
     }
     if (step === 3) {
-      beginTutorialEnemyStep();
+      beginTutorialBoostStep();
       return;
     }
     if (step === 4) {
+      beginTutorialEnemyStep();
+      return;
+    }
+    if (step === 5) {
       beginTutorialDestructionStep();
       return;
     }
@@ -5536,12 +7311,278 @@ export default function GameScreen() {
       tutorialStep: 1,
     });
   }, [
+    beginTutorialBoostStep,
     beginTutorialCaptureStep,
     beginTutorialDestructionStep,
     beginTutorialEnemyStep,
     enqueueBanner,
     resetGame,
   ]);
+
+  const continueAfterShop = useCallback(() => {
+    const g = gameRef.current;
+    const nextLevel = shopNextLevelRef.current;
+    const previousLevel = shopPreviousLevelRef.current ?? g.level;
+    shopNextLevelRef.current = null;
+    shopPreviousLevelRef.current = null;
+    setIsShopOpen(false);
+    setIsDiamondPurchaseOpen(false);
+    setDiamondPurchaseNotice('');
+    setShopNotice('');
+
+    if (nextLevel === null) {
+      if (g.status === 'SHOP') g.status = 'PLAYING';
+      return;
+    }
+
+    g.status = 'SECTOR_TRANSITION';
+    void preloadSectorForBanner(nextLevel).then(() => {
+      const transitionGame = gameRef.current;
+      if (transitionGame.status !== 'SECTOR_TRANSITION') return;
+      transitionGame.level = nextLevel;
+      releaseSectorBackground(previousLevel, nextLevel);
+      resetGame(true, true);
+      enqueueBanner({
+        kind: 'SECTOR_START',
+        level: nextLevel,
+      });
+    });
+  }, [
+    enqueueBanner,
+    preloadSectorForBanner,
+    releaseSectorBackground,
+    resetGame,
+  ]);
+
+  const openShop = useCallback(() => {
+    const g = gameRef.current;
+    if (!g.initialized || (g.status !== 'PLAYING' && g.status !== 'SECTOR_TRANSITION')) {
+      diagnosticLog('shop-open-blocked', {
+        initialized: g.initialized,
+        status: g.status,
+      });
+      return;
+    }
+    g.status = 'SHOP';
+    setIsDiamondPurchaseOpen(false);
+    setDiamondPurchaseNotice('');
+    setShopNotice('');
+    setIsShopOpen(true);
+  }, []);
+
+  const openDiamondPurchase = useCallback(() => {
+    const g = gameRef.current;
+    if (
+      !isShopOpen
+      || (g.status !== 'SHOP' && g.status !== 'SECTOR_TRANSITION')
+    ) return;
+    setDiamondPurchaseNotice('');
+    setIsDiamondPurchaseOpen(true);
+  }, [isShopOpen]);
+
+  const closeDiamondPurchase = useCallback(() => {
+    setIsDiamondPurchaseOpen(false);
+    setDiamondPurchaseNotice('');
+  }, []);
+
+  const handleShopPurchase = useCallback((item: ShopItem) => {
+    const g = gameRef.current;
+    if (!isShopOpen || (g.status !== 'SHOP' && g.status !== 'SECTOR_TRANSITION')) return;
+    if (item.id === 'DRONE') return;
+    if (g.diamondsCollected < item.cost) {
+      setShopNotice('RÉSERVE INSUFFISANTE — CAPTURE PLUS D’ÉCLATS.');
+      return;
+    }
+    if (item.id === 'SHIELD' && g.shields >= MAX_SHIELDS) {
+      setShopNotice('COQUE AU MAXIMUM — 5 BOUCLIERS INSTALLÉS.');
+      return;
+    }
+
+    g.diamondsCollected -= item.cost;
+    if (item.id === 'SHIELD') {
+      g.shields = Math.min(MAX_SHIELDS, g.shields + 1);
+      setShopNotice('PLAQUE DE COQUE INSTALLÉE — BOUCLIER +1.');
+    } else if (item.id === 'PULSE') {
+      g.speedBoostCharges += 1;
+      setShopNotice('CHARGE AJOUTÉE — DOUBLE TAP POUR ACTIVER LE BOOST.');
+    }
+    setHud((current) => ({
+      ...current,
+      shields: g.shields,
+      diamonds: g.diamondsCollected,
+      speedBoostCharges: g.speedBoostCharges,
+    }));
+    saveGameProgress(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [isShopOpen, saveGameProgress]);
+
+  const handleDiamondPurchase = useCallback(async (offer: ShardOffer) => {
+    const g = gameRef.current;
+    if (
+      !isDiamondPurchaseOpen
+      || !isShopOpen
+      || (g.status !== 'SHOP' && g.status !== 'SECTOR_TRANSITION')
+    ) return;
+
+    const purchasePackage = shardPurchases.packages.find(
+      (candidate) => candidate.productIdentifier === shardProductIdentifierFor(offer.shards),
+    );
+    if (!purchasePackage) {
+      setDiamondPurchaseNotice(
+        shardPurchases.error
+          ? 'OFFRES INDISPONIBLES — RÉESSAIE PLUS TARD.'
+          : 'OFFRES REVENUECAT NON CONFIGURÉES — AUCUN DÉBIT N’A ÉTÉ EFFECTUÉ.',
+      );
+      return;
+    }
+
+    try {
+      await shardPurchases.purchase(purchasePackage.package);
+    } catch {
+      setDiamondPurchaseNotice('ACHAT ANNULÉ — TA RÉSERVE N’A PAS ÉTÉ MODIFIÉE.');
+      return;
+    }
+
+    g.diamondsCollected += offer.shards;
+    setHud((current) => ({
+      ...current,
+      diamonds: g.diamondsCollected,
+    }));
+    setDiamondPurchaseNotice(
+      `RÉSERVE CHARGÉE — +${offer.shards} ÉCLATS AJOUTÉS.`,
+    );
+    saveGameProgress(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [
+    isDiamondPurchaseOpen,
+    isShopOpen,
+    saveGameProgress,
+    shardPurchases,
+  ]);
+
+  const shopItems = useMemo<ShopItem[]>(() => ([
+    {
+      id: 'SHIELD',
+      eyebrow: 'RENFORT DE COQUE',
+      title: 'PLAQUE AEGIS',
+      description: 'Ajoute un bouclier permanent au drone (1 vie).',
+      cost: SHOP_SHIELD_COST,
+      accent: '#dfff6b',
+      available: hud.diamonds >= SHOP_SHIELD_COST && hud.shields < MAX_SHIELDS,
+      disabledLabel: hud.shields >= MAX_SHIELDS ? 'MAXIMUM ATTEINT' : 'ÉCLATS MANQUANTS',
+    },
+    {
+      id: 'PULSE',
+      eyebrow: 'PROPULSION / BOOST TEMPORAIRE',
+      title: 'SURCHARGE IONIQUE',
+      description: `Double tap • ${SPEED_BOOST_DURATION_SECONDS} secondes.`,
+      cost: SHOP_PULSE_COST,
+      accent: '#00f3ff',
+      available: hud.diamonds >= SHOP_PULSE_COST,
+      disabledLabel: 'ÉCLATS MANQUANTS',
+      ownedCount: hud.speedBoostCharges,
+    },
+    {
+      id: 'DRONE',
+      eyebrow: 'CELLULE DE COMBAT',
+      title: 'PROTOCOLE APEX',
+      description: 'Un nouveau drone plus puissant est en préparation.',
+      cost: 0,
+      accent: '#ff47ca',
+      available: false,
+      disabledLabel: 'DESIGN EN ATTENTE',
+    },
+  ]), [hud.diamonds, hud.shields, hud.speedBoostCharges]);
+
+  const activatePlayerSpecial = useCallback(() => {
+    const g = gameRef.current;
+    const charges = Math.max(0, Math.floor(g.speedBoostCharges ?? 0));
+    const tutorialStep = g.level === TUTORIAL_SECTOR ? tutorialStepRef.current : null;
+    const tutorialBoostLocked = (
+      tutorialStep !== null
+      && tutorialStep < 3
+    );
+    if (
+      !g.initialized
+      || g.status !== 'PLAYING'
+      || charges <= 0
+      || tutorialBoostLocked
+      || (tutorialStep === 3 && tutorialBoostActivatedRef.current)
+      || isBossSector(g.level)
+    ) return;
+
+    const now = Date.now();
+    g.speedBoostCharges = charges - 1;
+    g.speedBoostUntil = Math.max(now, g.speedBoostUntil) + SPEED_BOOST_DURATION_MS;
+    setHud((current) => ({
+      ...current,
+      speedBoostCharges: g.speedBoostCharges,
+    }));
+    enqueueBanner({ kind: 'SPEED_BOOST' });
+    if (
+      tutorialStep === 3
+      && !tutorialBoostActivatedRef.current
+    ) {
+      tutorialBoostActivatedRef.current = true;
+    }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [enqueueBanner]);
+
+  const handleArenaTouchStart = useCallback((event: any) => {
+    if (arenaTouchActiveRef.current) return;
+    arenaTouchActiveRef.current = true;
+    arenaTouchIdentifierRef.current = arenaTouchIdentifier(event);
+    arenaTouchStartRef.current = arenaTouchPoint(event);
+    arenaTouchMovedRef.current = false;
+    arenaSwipeDirectionRef.current = null;
+    arenaPanResponderActiveRef.current = false;
+  }, []);
+
+  const handleArenaTouchEnd = useCallback((event: any) => {
+    const nativeEvent = event.nativeEvent ?? {};
+    const identifier = arenaTouchIdentifier(event);
+    const isPrimaryTouch = (
+      arenaTouchIdentifierRef.current === null
+      || identifier === null
+      || identifier === arenaTouchIdentifierRef.current
+    );
+    const touchCount = Array.isArray(nativeEvent.touches) ? nativeEvent.touches.length : 0;
+    if (!isPrimaryTouch) {
+      if (touchCount === 0) {
+        arenaTouchActiveRef.current = false;
+        arenaTouchIdentifierRef.current = null;
+      }
+      return;
+    }
+
+    if (arenaTouchMovedRef.current) {
+      arenaTouchMovedRef.current = false;
+      lastArenaTapRef.current = null;
+      if (!arenaPanResponderActiveRef.current) {
+        arenaSwipeDirectionRef.current = null;
+      }
+      arenaTouchActiveRef.current = false;
+      arenaTouchIdentifierRef.current = null;
+      return;
+    }
+    const g = gameRef.current;
+    if (!g.initialized || g.status !== 'PLAYING' || isShopOpen || isLoadingScreenVisible) {
+      arenaTouchActiveRef.current = false;
+      arenaTouchIdentifierRef.current = null;
+      return;
+    }
+
+    const point = arenaTouchPoint(event);
+    const now = Date.now();
+    const previousTap = lastArenaTapRef.current;
+    const isDoubleTap = previousTap !== null
+      && now - previousTap.at <= 320
+      && Math.hypot(point.x - previousTap.x, point.y - previousTap.y) <= 56;
+    lastArenaTapRef.current = isDoubleTap ? null : { at: now, x: point.x, y: point.y };
+    arenaTouchActiveRef.current = false;
+    arenaTouchIdentifierRef.current = null;
+    if (isDoubleTap) activatePlayerSpecial();
+  }, [activatePlayerSpecial, isLoadingScreenVisible, isShopOpen]);
 
   const registerTutorialSwipe = useCallback((direction: Direction) => {
     const game = gameRef.current;
@@ -5582,6 +7623,82 @@ export default function GameScreen() {
     }
   }, [beginTutorialCaptureStep, enqueueBanner]);
 
+  const applySwipeDirection = useCallback((dx: number, dy: number) => {
+    const g = gameRef.current;
+    if (
+      !g.initialized
+      || g.status !== 'PLAYING'
+      || Math.hypot(dx, dy) < SWIPE_ACTIVATION_DISTANCE
+    ) {
+      return;
+    }
+
+    const direction = cardinalDirection(dx, dy);
+    const lockedDirection = arenaSwipeDirectionRef.current;
+    if (
+      lockedDirection !== null
+      && (lockedDirection.x !== direction.x || lockedDirection.y !== direction.y)
+    ) {
+      return;
+    }
+    if (lockedDirection === null) {
+      arenaSwipeDirectionRef.current = direction;
+    }
+    if (g.level === TUTORIAL_SECTOR) {
+      const tutorialDirection: TutorialDirection = direction.x > 0
+        ? 'right'
+        : direction.x < 0
+          ? 'left'
+          : direction.y > 0
+            ? 'down'
+            : 'up';
+      if (tutorialSwipeGestureDirectionRef.current !== tutorialDirection) {
+        tutorialSwipeGestureDirectionRef.current = tutorialDirection;
+        registerTutorialSwipe(direction);
+      }
+    }
+
+    g.inputDir = direction;
+    g.hasMoveCommand = true;
+    // A new cardinal swipe can redirect an active cut at 90 degrees.
+    // Releasing still leaves the drone travelling until it reaches safety.
+    if (g.trail.length > 0) {
+      g.cutDir = direction;
+      g.cutCoordinate = direction.x !== 0
+        ? g.player.y
+        : g.player.x;
+    }
+  }, [registerTutorialSwipe]);
+
+  const handleArenaTouchMove = useCallback((event: any) => {
+    const nativeEvent = event.nativeEvent ?? {};
+    const identifier = arenaTouchIdentifier(event);
+    const touchCount = Array.isArray(nativeEvent.touches) ? nativeEvent.touches.length : 1;
+    if (
+      !arenaTouchActiveRef.current
+      || (
+        arenaTouchIdentifierRef.current !== null
+        && identifier !== null
+        && identifier !== arenaTouchIdentifierRef.current
+      )
+      || touchCount > 1
+    ) {
+      return;
+    }
+    const point = arenaTouchPoint(event);
+    const start = arenaTouchStartRef.current;
+    const dx = point.x - start.x;
+    const dy = point.y - start.y;
+    if (Math.hypot(dx, dy) >= SWIPE_ACTIVATION_DISTANCE) {
+      arenaTouchMovedRef.current = true;
+      lastArenaTapRef.current = null;
+      // Use the raw View touch stream as soon as it has enough movement.
+      // Fast Android swipes can end before PanResponder receives its first
+      // onPanResponderMove callback.
+      applySwipeDirection(dx, dy);
+    }
+  }, [applySwipeDirection]);
+
   const teleportToSector = useCallback((sector: number) => {
     const g = gameRef.current;
     if (!g.initialized) return;
@@ -5613,6 +7730,27 @@ export default function GameScreen() {
     resetGame,
   ]);
 
+  const skipTutorial = useCallback(() => {
+    const g = gameRef.current;
+    if (!g.initialized || g.level !== TUTORIAL_SECTOR) return;
+    const previousLevel = g.level;
+    const nextLevel = Math.max(1, lastPlayedSectorRef.current);
+    rememberLastPlayedSector(nextLevel);
+    g.status = 'SECTOR_TRANSITION';
+    g.level = nextLevel;
+    releaseSectorBackground(previousLevel, nextLevel);
+    resetGame(true, true);
+    enqueueBanner({
+      kind: 'SECTOR_START',
+      level: nextLevel,
+    });
+  }, [
+    enqueueBanner,
+    releaseSectorBackground,
+    rememberLastPlayedSector,
+    resetGame,
+  ]);
+
   const handleArenaLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width <= 0 || height <= 0) return;
@@ -5636,7 +7774,6 @@ export default function GameScreen() {
       const initialLevel = savedGame?.level
         ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
       resetGame(false, false, initialLevel);
-      savedGameRef.current = null;
       if (gameRef.current.initialized) {
         const initialSnapshot = snapshotFromGame(gameRef.current);
         nativeSnapshotRef.current = initialSnapshot;
@@ -5646,6 +7783,11 @@ export default function GameScreen() {
           width: Math.round(width),
           height: Math.round(height),
         });
+        pendingInitialAssetPreloadLevelRef.current = initialLevel;
+        if (loadingArtworkReadyRef.current) {
+          pendingInitialAssetPreloadLevelRef.current = null;
+          startInitialAssetPreload(initialLevel);
+        }
         revealGameAfterInitialLoad({
           kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
           tutorialStep: initialLevel === TUTORIAL_SECTOR ? 1 : undefined,
@@ -5656,13 +7798,24 @@ export default function GameScreen() {
         );
       }
     }
-  }, [preloadBackgroundWindow, resetGame, revealGameAfterInitialLoad]);
+  }, [
+    preloadBackgroundWindow,
+    resetGame,
+    revealGameAfterInitialLoad,
+    startInitialAssetPreload,
+  ]);
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      // Let HUD Pressables receive taps. The responder only takes ownership
+      // once a touch has moved far enough to be a gameplay swipe.
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) => (
+        gesture.numberActiveTouches <= 1
+        && Math.hypot(gesture.dx, gesture.dy) >= SWIPE_ACTIVATION_DISTANCE
+      ),
       onPanResponderGrant: () => {
+        arenaPanResponderActiveRef.current = true;
         audioUnlockedRef.current = true;
         if (gameOverSectorRef.current !== null) {
           resumeFromGameOverRef.current();
@@ -5671,40 +7824,24 @@ export default function GameScreen() {
         tutorialSwipeGestureDirectionRef.current = null;
       },
       onPanResponderMove: (_, gesture) => {
-        const g = gameRef.current;
-        if (g.status !== 'PLAYING' || Math.hypot(gesture.dx, gesture.dy) < 10) return;
-        const direction = cardinalDirection(gesture.dx, gesture.dy);
-        if (g.level === TUTORIAL_SECTOR) {
-          const tutorialDirection: TutorialDirection = direction.x > 0
-            ? 'right'
-            : direction.x < 0
-              ? 'left'
-              : direction.y > 0
-                ? 'down'
-                : 'up';
-          if (tutorialSwipeGestureDirectionRef.current !== tutorialDirection) {
-            tutorialSwipeGestureDirectionRef.current = tutorialDirection;
-            registerTutorialSwipe(direction);
-          }
-        }
-        g.inputDir = direction;
-        g.hasMoveCommand = true;
-        // A new cardinal swipe can redirect an active cut at 90 degrees.
-        // Releasing still leaves the drone travelling until it reaches safety.
-        if (g.trail.length > 0) {
-          g.cutDir = direction;
-          g.cutCoordinate = direction.x !== 0
-            ? g.player.y
-            : g.player.x;
-        }
+        if (gesture.numberActiveTouches > 1) return;
+        lastArenaTapRef.current = null;
+        applySwipeDirection(gesture.dx, gesture.dy);
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (_, gesture) => {
+        // Keep very short/fast swipes reliable even if no move callback was
+        // delivered after the responder grant.
+        applySwipeDirection(gesture.dx, gesture.dy);
         tutorialSwipeGestureDirectionRef.current = null;
+        arenaPanResponderActiveRef.current = false;
+        arenaSwipeDirectionRef.current = null;
         // Keep the selected direction latched. This lets a short inward
         // swipe cross the outer safe band and enter the empty playfield.
       },
       onPanResponderTerminate: () => {
         tutorialSwipeGestureDirectionRef.current = null;
+        arenaPanResponderActiveRef.current = false;
+        arenaSwipeDirectionRef.current = null;
         // Keep the selected direction latched for the same safe-band entry.
       },
       onPanResponderTerminationRequest: () => false,
@@ -5760,6 +7897,67 @@ export default function GameScreen() {
     const appendParticle = (g: Game, particle: Particle) => {
       g.particles.push(particle);
       if (g.particles.length > MAX_PARTICLES) g.particles.shift();
+    };
+
+    const appendShockwaveParticles = (g: Game, dca: Dca) => {
+      if (g.frame % 2 !== 0 || (dca.shockwaveRemaining ?? 0) <= 0) return;
+      const shockwave = dcaShockwaveGeometry(
+        dca,
+        perimeterBounds(g.width, g.height, g.cell),
+      );
+      const lineX = shockwave.right.x - shockwave.left.x;
+      const lineY = shockwave.right.y - shockwave.left.y;
+      const lineLength = Math.hypot(lineX, lineY) || 1;
+      const tangentX = lineX / lineLength;
+      const tangentY = lineY / lineLength;
+      const angle = dcaDirectionAngle(dca.beamDirection ?? dca.direction ?? 0);
+      const forwardX = Math.cos(angle);
+      const forwardY = Math.sin(angle);
+      const colors = ['#a8f5ff', '#35e6ff', '#00bfff'] as const;
+      for (let index = 0; index < 4; index += 1) {
+        const along = Math.random();
+        const trailDistance = 5 + Math.random() * 16;
+        const originX = shockwave.left.x + lineX * along - forwardX * trailDistance;
+        const originY = shockwave.left.y + lineY * along - forwardY * trailDistance;
+        const sideVelocity = (Math.random() - 0.5) * 70;
+        const forwardVelocity = -42 + Math.random() * 52;
+        appendParticle(g, {
+          x: originX,
+          y: originY,
+          vx: tangentX * sideVelocity + forwardX * forwardVelocity,
+          vy: tangentY * sideVelocity + forwardY * forwardVelocity,
+          life: 0.2 + Math.random() * 0.24,
+          size: 1.2 + Math.random() * 2.8,
+          color: colors[(g.frame + index) % colors.length],
+          streak: true,
+        });
+      }
+    };
+
+    const checkDcaShockwaveContact = (g: Game, now: number) => {
+      if (g.status !== 'PLAYING') return;
+      const bounds = perimeterBounds(g.width, g.height, g.cell);
+      // Outside the blue arena is a safe zone. Do not let the visible edge of
+      // a clipped shockwave hit a drone that has already left the frame.
+      if (!pointInsidePerimeter(g.player, bounds)) return;
+      const collisionRadius = playerBodyRadius(g.cell) + g.cell * 0.14;
+      for (const dca of g.dcas) {
+        if (
+          dcaIsDestroyed(dca)
+          || (dca.beamRemaining ?? 0) <= 0
+          || (dca.shockwaveRemaining ?? 0) <= 0
+        ) {
+          continue;
+        }
+        const shockwave = dcaShockwaveGeometry(dca, bounds);
+        if (
+          distanceToSegment(g.player, shockwave.left, shockwave.right)
+          <= collisionRadius
+        ) {
+          explode(g, now);
+          return;
+        }
+      }
     };
 
     const appendTorchParticles = (g: Game) => {
@@ -6121,10 +8319,14 @@ export default function GameScreen() {
         { x: 0.28, y: 0.7 },
         { x: 0.72, y: 0.7 },
       ];
-      const gridSeeds = Array.from({ length: 9 }, (_, row) => (
-        Array.from({ length: 9 }, (_, column) => ({
-          x: (column + 0.5) / 9,
-          y: (row + 0.5) / 9,
+      // The tutorial can have a narrow remaining free region after the
+      // 80% capture target. Use a dense deterministic scan so a captured
+      // enemy is always returned to that dark surface instead of staying
+      // permanently marked as destroyed.
+      const gridSeeds = Array.from({ length: 17 }, (_, row) => (
+        Array.from({ length: 17 }, (_, column) => ({
+          x: (column + 0.5) / 17,
+          y: (row + 0.5) / 17,
         }))
       )).flat();
       const candidates = [...preferredSeeds, ...gridSeeds].map((seed) => ({
@@ -6186,10 +8388,11 @@ export default function GameScreen() {
       const separation = g.cell * 0.72;
       const childTemplate = {
         ...enemy,
-        isMini: childIsMiniShip,
+        isMini: enemy.isSuperBoss ? false : childIsMiniShip,
         splitLevel: 1,
-        isBoss: false,
-        bossTier: undefined,
+        isBoss: enemy.isSuperBoss ? true : false,
+        isSuperBoss: false,
+        bossTier: enemy.isSuperBoss ? enemy.bossTier : undefined,
         respawnAt: 0,
         blockedTime: 0,
         edgeTurnTimer: 0,
@@ -6242,16 +8445,16 @@ export default function GameScreen() {
         && !enemy.isMini
         && !(
           g.level === TUTORIAL_SECTOR
-          && tutorialStepRef.current === 4
+          && tutorialStepRef.current === 5
         );
       const suppressTutorialEnemyBanner = (
         g.level === TUTORIAL_SECTOR
-        && tutorialStepRef.current === 3
+        && tutorialStepRef.current >= 4
         && fromCapture
       );
       const suppressTutorialDestructionBanner = (
         g.level === TUTORIAL_SECTOR
-        && tutorialStepRef.current === 4
+        && tutorialStepRef.current === 5
         && fromMissile
       );
       const suppressTutorialCompletionBanner = (
@@ -6297,7 +8500,7 @@ export default function GameScreen() {
       enemy.vy = 0;
       const respawnTutorialEnemyAfterCapture = (
         g.level === TUTORIAL_SECTOR
-        && tutorialStepRef.current === 4
+        && tutorialStepRef.current === 5
         && fromCapture
       );
       if (respawnTutorialEnemyAfterCapture) {
@@ -6348,12 +8551,41 @@ export default function GameScreen() {
       }
     };
 
+    const burstDca = (g: Game, dca: Dca) => {
+      if (dcaIsDestroyed(dca)) return;
+      const colors = ['#ffffff', '#00f3ff', '#ff2bb5', '#b8ff4a', '#ffb02e'];
+      for (let index = 0; index < 56; index += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 55 + Math.random() * 285;
+        const life = 0.6 + Math.random() * 0.9;
+        appendParticle(g, {
+          x: dca.x,
+          y: dca.y,
+          vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 65,
+          vy: Math.sin(angle) * speed + (Math.random() - 0.5) * 65,
+          life,
+          size: 0.5 + Math.random() * 1.85,
+          color: colors[index % colors.length],
+        });
+      }
+      dca.destroyed = true;
+      dca.opacity = 0;
+      g.score += DCA_SCORE;
+      enqueueBanner({ kind: 'DCA', points: DCA_SCORE });
+      if (
+        g.enemies.every((candidate) => enemyIsDestroyed(candidate))
+        && g.dcas.every((candidate) => dcaIsDestroyed(candidate))
+      ) {
+        enqueueBanner({ kind: 'CLEAN' });
+      }
+    };
+
     const launchPlayerMissiles = (g: Game) => {
-      if (g.level === TUTORIAL_SECTOR && tutorialStepRef.current <= 3) {
+      if (g.level === TUTORIAL_SECTOR && tutorialStepRef.current <= 4) {
         g.missiles.length = 0;
         return;
       }
-      if (!sectorHasLiveTargets(g.enemies, g.bombs)) {
+      if (!sectorHasLiveTargets(g.enemies, g.bombs, g.dcas)) {
         g.missiles.length = 0;
         return;
       }
@@ -6377,15 +8609,19 @@ export default function GameScreen() {
         let hitTarget = false;
         for (const enemy of g.enemies) {
           if (enemyIsDestroyed(enemy) || enemy.respawnAt > now) continue;
-          const touched = enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y).some(({ center, radius }) => (
-            distanceToSegment(center, from, to) <= radius + missile.radius
-          ));
+          const touched = enemyCollisionTouchesSegment(
+            enemy,
+            g.cell,
+            from,
+            to,
+            missile.radius,
+          );
           if (touched) {
             burstEnemy(g, enemy, now, true);
             hitTarget = true;
             if (
               g.level === TUTORIAL_SECTOR
-              && tutorialStepRef.current === 4
+              && tutorialStepRef.current === 5
               && !tutorialEnemyDestroyedRef.current
             ) {
               tutorialEnemyDestroyedRef.current = true;
@@ -6399,19 +8635,29 @@ export default function GameScreen() {
                 tutorialEnemyDestructionCompletionBannerShownRef.current = true;
                 enqueueBanner({
                   kind: 'TUTORIAL',
-                  tutorialStep: 4,
+                  tutorialStep: 5,
                   tutorialCompleted: true,
                   onComplete: () => teleportToSector(1),
                 });
               } else {
                 enqueueBanner({
                   kind: 'TUTORIAL',
-                  tutorialStep: 4,
+                  tutorialStep: 5,
                   tutorialPrompt: 'SECURE_AREA',
                 });
               }
             }
             break;
+          }
+        }
+        if (!hitTarget) {
+          const dca = g.dcas.find((candidate) => (
+            !dcaIsDestroyed(candidate)
+            && dcaTouchesSegment(candidate, g.cell, from, to, missile.radius)
+          ));
+          if (dca) {
+            burstDca(g, dca);
+            hitTarget = true;
           }
         }
         if (!hitTarget) {
@@ -6755,8 +9001,8 @@ export default function GameScreen() {
               ? (g.trail.length > 0 ? 0.42 : 0.68)
               : 0;
             const predictedPlayer = {
-              x: clamp(g.player.x + playerDirection.x * playerSpeedFor(g, now) * predictionTime, minX, maxX),
-              y: clamp(g.player.y + playerDirection.y * playerSpeedFor(g, now) * predictionTime, minY, maxY),
+              x: clamp(g.player.x + playerDirection.x * playerSpeedFor(g, now, tutorialStepRef.current) * predictionTime, minX, maxX),
+              y: clamp(g.player.y + playerDirection.y * playerSpeedFor(g, now, tutorialStepRef.current) * predictionTime, minY, maxY),
             };
             const planningCenter = isDragon ? predictedPlayer : g.player;
             const playerAngle = Math.atan2(planningCenter.y - enemy.y, planningCenter.x - enemy.x);
@@ -6854,6 +9100,23 @@ export default function GameScreen() {
         const previousEnemyY = enemy.y;
         const nextX = enemy.x + enemy.vx * dt;
         const nextY = enemy.y + enemy.vy * dt;
+        // A protected boundary is a solid wall, not a lethal weapon. Only
+        // destroy an enemy when its center has actually entered a claimed
+        // surface; touching the boundary from the free side must bounce.
+        const enteredClaimedSurface = (
+          pointInsideClaimedSurface(
+            { x: enemy.x, y: enemy.y },
+            g.claimedPolygons,
+          )
+          || pointInsideClaimedSurface(
+            { x: nextX, y: nextY },
+            g.claimedPolygons,
+          )
+        );
+        if (enteredClaimedSurface) {
+          burstEnemy(g, enemy, now, false, true);
+          return;
+        }
         const canMoveFull = enemyCanMoveAt(nextX, nextY)
           && !enemySweepTouchesProtectedTrail(enemy.x, enemy.y, nextX, nextY);
         const canMoveX = enemyCanMoveAt(nextX, enemy.y)
@@ -6991,10 +9254,13 @@ export default function GameScreen() {
         const nearDroneY = Math.abs(enemy.y - g.player.y) <= 100;
         const touchesDrone = nearDroneX
           && nearDroneY
-          && enemyCollisionCircles(enemy, g.cell, enemy.x, enemy.y).some(({ center, radius }) => (
-            Math.hypot(center.x - g.player.x, center.y - g.player.y)
-              <= radius + playerBodyRadius(g.cell)
-          ));
+          && enemyCollisionTouchesSegment(
+            enemy,
+            g.cell,
+            g.player,
+            g.player,
+            playerBodyRadius(g.cell),
+          );
         if (droneIsActive && touchesDrone) {
           if (!playerIsProtected(g, now)) {
             explode(g, now);
@@ -7019,8 +9285,8 @@ export default function GameScreen() {
                 ? g.facingDir
                 : ZERO;
           const droneVelocity = {
-              x: droneDirection.x * playerSpeedFor(g, now),
-              y: droneDirection.y * playerSpeedFor(g, now),
+              x: droneDirection.x * playerSpeedFor(g, now, tutorialStepRef.current),
+              y: droneDirection.y * playerSpeedFor(g, now, tutorialStepRef.current),
           };
           const offsetX = g.player.x - enemy.x;
           const offsetY = g.player.y - enemy.y;
@@ -7144,7 +9410,134 @@ export default function GameScreen() {
       g.invincibleUntil ??= 0;
       g.speedBoosts ??= [];
       g.speedBoostUntil ??= 0;
+      g.launchBaseDismissed ??= false;
+      g.launchBaseFadeProgress ??= 0;
+      g.dcas ??= [];
+      const dcaMaxConcurrentAttacks = dcaMaxLiveCountForLevel(g.level);
+      let dcaAttacksInProgress = g.dcas.filter((dca) => (
+        !dcaIsDestroyed(dca)
+        && (
+          (dca.beamRemaining ?? 0) > 0
+          || (dca.beamChargeRemaining ?? 0) > 0
+        )
+      )).length;
+      g.dcas.forEach((dca) => {
+        if (dcaIsDestroyed(dca)) return;
+        dca.beamCooldown ??= DCA_BEAM_INTERVAL_SECONDS;
+        dca.beamChargeRemaining ??= 0;
+        dca.beamChargeElapsed ??= 0;
+        dca.beamRemaining ??= 0;
+        dca.beamElapsed ??= dca.beamRemaining > 0
+          ? DCA_BEAM_DURATION_SECONDS - dca.beamRemaining
+          : 0;
+        dca.beamDirection ??= dca.direction ?? 0;
+        dca.shockwaveRemaining ??= 0;
+        dca.shockwaveElapsed ??= 0;
+        const wasBeamActive = dca.beamRemaining > 0;
+        const wasBeamCharging = dca.beamChargeRemaining > 0;
+        if (wasBeamActive) {
+          dca.beamRemaining = Math.max(0, dca.beamRemaining - dt);
+          dca.beamElapsed = clamp(
+            dca.beamElapsed + dt,
+            0,
+            DCA_BEAM_DURATION_SECONDS,
+          );
+        } else if (wasBeamCharging) {
+          dca.beamChargeRemaining = Math.max(0, dca.beamChargeRemaining - dt);
+          dca.beamChargeElapsed = clamp(
+            dca.beamChargeElapsed + dt,
+            0,
+            DCA_CHARGE_DURATION_SECONDS,
+          );
+          if (dca.beamChargeRemaining <= 0) {
+            dca.beamRemaining = DCA_BEAM_DURATION_SECONDS;
+            dca.beamElapsed = 0;
+            dca.beamCooldown = DCA_BEAM_INTERVAL_SECONDS;
+            dca.shockwaveRemaining = 0;
+            dca.shockwaveElapsed = 0;
+          }
+        } else {
+          dca.beamCooldown = Math.max(0, dca.beamCooldown - dt);
+        }
+        if (
+          wasBeamActive
+          && dca.beamRemaining > 0
+          && (dca.shockwaveRemaining ?? 0) <= 0
+          && dca.beamElapsed >= DCA_SHOCKWAVE_DELAY_SECONDS
+        ) {
+          dca.shockwaveRemaining = DCA_SHOCKWAVE_DURATION_SECONDS;
+          dca.shockwaveElapsed = 0;
+          playDcaShockwave();
+          triggerDcaHaptic('LAUNCH');
+        }
+        const shockwaveWasActive = (dca.shockwaveRemaining ?? 0) > 0;
+        if (shockwaveWasActive) {
+          appendShockwaveParticles(g, dca);
+          dca.shockwaveRemaining = Math.max(0, dca.shockwaveRemaining - dt);
+          dca.shockwaveElapsed = clamp(
+            (dca.shockwaveElapsed ?? 0) + dt,
+            0,
+            DCA_SHOCKWAVE_DURATION_SECONDS,
+          );
+        }
+        dca.revealProgress = clamp(
+          dca.revealProgress + (dt * 1000) / DCA_REVEAL_DURATION_MS,
+          0,
+          1,
+        );
+        const easedReveal = 1 - (1 - dca.revealProgress) ** 3;
+        dca.opacity = easedReveal;
+        if (!wasBeamActive && !wasBeamCharging) {
+          dca.direction = dcaDirectionIndexForAngle(
+            Math.atan2(g.player.y - dca.y, g.player.x - dca.x),
+          );
+        }
+        if (
+          !wasBeamActive
+          && !wasBeamCharging
+          && dca.beamRemaining <= 0
+          && dca.beamCooldown <= 0
+          && dcaAttacksInProgress < dcaMaxConcurrentAttacks
+        ) {
+          dca.beamDirection = dca.direction ?? 0;
+          dca.beamChargeRemaining = DCA_CHARGE_DURATION_SECONDS;
+          dca.beamChargeElapsed = 0;
+          dcaAttacksInProgress += 1;
+          playDcaEngineCharge();
+        }
+      });
+      checkDcaShockwaveContact(g, now);
+      const launchBounds = perimeterBounds(g.width, g.height, g.cell);
+      const launchPoint = {
+        x: launchBounds.left + g.cell,
+        y: launchBounds.top - g.cell * PLAYER_RADIUS_CELLS,
+      };
+      const hasLeftLaunchBase = Math.hypot(
+        g.player.x - launchPoint.x,
+        g.player.y - launchPoint.y,
+      ) > g.cell * LAUNCH_BASE_DEPARTURE_DISTANCE_CELLS;
+      if (!g.launchBaseDismissed && (hasLeftLaunchBase || g.trail.length > 0)) {
+        g.launchBaseDismissed = true;
+        g.launchBaseFadeProgress = 0;
+      }
+      if (g.launchBaseDismissed) {
+        g.launchBaseFadeProgress = clamp(
+          g.launchBaseFadeProgress + dt / LAUNCH_BASE_FADE_DURATION_SECONDS,
+          0,
+          1,
+        );
+      }
       if (g.speedBoostUntil <= now) g.speedBoostUntil = 0;
+      if (
+        g.status === 'PLAYING'
+        && g.level === TUTORIAL_SECTOR
+        && tutorialStepRef.current === 3
+        && tutorialBoostActivatedRef.current
+        && g.speedBoostUntil === 0
+      ) {
+        beginTutorialEnemyStep();
+        return;
+      }
       let activeParticleCount = 0;
       for (let index = 0; index < g.particles.length; index += 1) {
         const particle = g.particles[index];
@@ -7178,7 +9571,15 @@ export default function GameScreen() {
               MAX_LEVEL,
             ));
             gameOverSectorRef.current = resumeLevel;
+            const finalScore = Math.max(0, Math.floor(g.score));
             setGameOverSector(resumeLevel);
+            setGameOverScore(finalScore);
+            setGameOverBestScore(Math.max(bestScoreRef.current, finalScore));
+            leaderboardSubmitAttemptRef.current = null;
+            setGameOverStage('DEATH');
+            setLeaderboardEntries([]);
+            setLeaderboardStatus('idle');
+            setLeaderboardMessage('');
             g.status = 'GAME_OVER';
             g.inputDir = ZERO;
             g.hasMoveCommand = false;
@@ -7186,7 +9587,7 @@ export default function GameScreen() {
           } else if (tutorialStepToRestart) {
             restartTutorialStep(tutorialStepToRestart);
           } else {
-            resetGame(true);
+            resetGame(true, false, undefined, true);
           }
         }
         return;
@@ -7194,7 +9595,7 @@ export default function GameScreen() {
 
       if (g.status === 'GAME_OVER') return;
 
-      if (g.status === 'SECTOR_TRANSITION') return;
+      if (g.status === 'SECTOR_TRANSITION' || g.status === 'SHOP') return;
 
       if (g.fillQueue.length > 0) {
         const unitsPerFrame = Math.max(5, Math.min(22, Math.ceil(g.fillQueue.length / 26)));
@@ -7216,6 +9617,22 @@ export default function GameScreen() {
           let diamondCaptured = false;
           if (completedPolygons.length > 0) {
             g.claimedPolygons.push(...completedPolygons);
+            if (
+              g.level >= 5
+              && dcaCanSpawn(g.level, g.dcas)
+              && Math.random() < DCA_SPAWN_CHANCE
+            ) {
+              const dca = dcaForCapture(g.claimedPolygons, g.cell, g.dcas);
+              if (dca) g.dcas.push(dca);
+              diagnosticLog('dca-placement', {
+                level: g.level,
+                polygonCount: g.claimedPolygons.length,
+                placed: Boolean(dca),
+                activeCount: dcaActiveCount(g.dcas),
+                effectiveCap: dcaEffectiveCap(g.level, g.dcas),
+                spawnChance: DCA_SPAWN_CHANCE,
+              });
+            }
             // buildOrthogonalCaptureRegions computed this exact area when the
             // trail closed. Commit the cached value instead of recalculating
             // the whole claimed surface from inside the animation loop.
@@ -7240,9 +9657,9 @@ export default function GameScreen() {
               }
               diamond.collected = true;
               g.score += DIAMOND_SCORE;
+              g.diamondsCollected += 1;
               diamondCaptured = true;
               playDiamondCapture();
-              enqueueBanner({ kind: 'DIAMOND', points: DIAMOND_SCORE });
               for (let particleIndex = 0; particleIndex < 36; particleIndex += 1) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 35 + Math.random() * 180;
@@ -7287,7 +9704,7 @@ export default function GameScreen() {
             }
             const tutorialStepThreeTargetReached = (
               g.level === TUTORIAL_SECTOR
-              && tutorialStepRef.current === 3
+              && tutorialStepRef.current === 4
               && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
             );
             if (
@@ -7299,14 +9716,14 @@ export default function GameScreen() {
               g.hasMoveCommand = false;
               enqueueBanner({
                 kind: 'TUTORIAL',
-                tutorialStep: 3,
+                tutorialStep: 4,
                 tutorialCompleted: true,
                 onComplete: beginTutorialDestructionStep,
               });
             } else if (
               capturedEnemies.length > 0
               && g.level === TUTORIAL_SECTOR
-              && tutorialStepRef.current === 3
+              && tutorialStepRef.current === 4
               && !tutorialEnemyCaptureProgressBannerShownRef.current
             ) {
               tutorialEnemyCaptureProgressBannerShownRef.current = true;
@@ -7314,13 +9731,13 @@ export default function GameScreen() {
               g.hasMoveCommand = false;
               enqueueBanner({
                 kind: 'TUTORIAL',
-                tutorialStep: 3,
+                tutorialStep: 4,
                 tutorialPrompt: 'SECURE_AREA',
               });
             }
             if (
               g.level === TUTORIAL_SECTOR
-              && tutorialStepRef.current === 4
+              && tutorialStepRef.current === 5
               && tutorialEnemyDestroyedRef.current
               && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
               && !tutorialEnemyDestructionCompletionBannerShownRef.current
@@ -7330,7 +9747,7 @@ export default function GameScreen() {
               g.hasMoveCommand = false;
               enqueueBanner({
                 kind: 'TUTORIAL',
-                tutorialStep: 4,
+                tutorialStep: 5,
                 tutorialCompleted: true,
                 onComplete: () => teleportToSector(1),
               });
@@ -7349,16 +9766,16 @@ export default function GameScreen() {
                 kind: 'TUTORIAL',
                 tutorialStep: 2,
                 tutorialCompleted: true,
-                onComplete: beginTutorialEnemyStep,
+                onComplete: beginTutorialBoostStep,
               });
             }
             if (
               g.level !== TUTORIAL_SECTOR
-              && g.level < MAX_LEVEL
+              && (g.level < MAX_LEVEL || isBossSector(g.level))
               && g.capturedArea / g.totalPlayableArea >= LEVEL_CAPTURE_TARGET / 100
               && bossObjectiveComplete(g.level, g.enemies)
             ) {
-              const nextLevel = Math.min(MAX_LEVEL, g.level + 1);
+              const nextLevel = g.level < MAX_LEVEL ? g.level + 1 : null;
               g.status = 'SECTOR_TRANSITION';
               g.inputDir = ZERO;
               g.cutDir = ZERO;
@@ -7367,30 +9784,52 @@ export default function GameScreen() {
               g.fillCursor = 0;
               g.pendingCapturePolygons = [];
               g.pendingCaptureArea = 0;
-            const previousLevel = g.level;
-            void preloadSectorForBanner(nextLevel).then(() => {
-              const transitionGame = gameRef.current;
-              if (transitionGame.status !== 'SECTOR_TRANSITION') return;
-              enqueueBanner({
-                kind: 'SECTOR',
-                level: nextLevel,
-                onComplete: () => {
+              const previousLevel = g.level;
+              if (isBossSector(g.level)) {
+                shopNextLevelRef.current = nextLevel;
+                shopPreviousLevelRef.current = previousLevel;
+                setShopNotice('BOSS NEUTRALISÉ — CHOISIS TON PROCHAIN RENFORT.');
+                const openBossShopAfterBanners = () => {
                   const completedTransitionGame = gameRef.current;
                   if (completedTransitionGame.status !== 'SECTOR_TRANSITION') return;
-                  completedTransitionGame.level = nextLevel;
-                  releaseSectorBackground(previousLevel, nextLevel);
-                  enqueueBanner({
-                    kind: 'SECTOR_START',
-                    level: nextLevel,
-                  });
-                  resetGame(true, true);
-                },
+                  completedTransitionGame.status = 'SHOP';
+                  setIsShopOpen(true);
+                };
+                afterBannerQueueRef.current = openBossShopAfterBanners;
+                if (
+                  !bannerAnimatingRef.current
+                  && bannerQueueRef.current.length === 0
+                ) {
+                  afterBannerQueueRef.current = null;
+                  openBossShopAfterBanners();
+                }
+                playSectorTransition();
+                return;
+              }
+              if (nextLevel === null) return;
+              void preloadSectorForBanner(nextLevel).then(() => {
+                const transitionGame = gameRef.current;
+                if (transitionGame.status !== 'SECTOR_TRANSITION') return;
+                enqueueBanner({
+                  kind: 'SECTOR',
+                  level: nextLevel,
+                  onComplete: () => {
+                    const completedTransitionGame = gameRef.current;
+                    if (completedTransitionGame.status !== 'SECTOR_TRANSITION') return;
+                    completedTransitionGame.level = nextLevel;
+                    releaseSectorBackground(previousLevel, nextLevel);
+                    enqueueBanner({
+                      kind: 'SECTOR_START',
+                      level: nextLevel,
+                    });
+                    resetGame(true, true);
+                  },
+                });
               });
-            });
               playSectorTransition();
               return;
             }
-            if (sectorHasLiveTargets(g.enemies, g.bombs)) {
+            if (sectorHasLiveTargets(g.enemies, g.bombs, g.dcas)) {
               launchPlayerMissiles(g);
             } else {
               g.missiles.length = 0;
@@ -7421,7 +9860,7 @@ export default function GameScreen() {
             : ZERO;
       if (direction.x !== 0 || direction.y !== 0) g.facingDir = direction;
       collectSpeedBoostsAlongSegment(g, g.player, g.player, now);
-      const baseSpeed = playerSpeedFor(g, now);
+      const baseSpeed = playerSpeedFor(g, now, tutorialStepRef.current);
       const baseDistance = baseSpeed * dt;
       if (direction.x !== 0 || direction.y !== 0) {
         const steps = Math.max(1, Math.ceil(baseDistance));
@@ -7504,6 +9943,28 @@ export default function GameScreen() {
           next.x = clamp(next.x, movementOuterBounds.left, movementOuterBounds.right);
           next.y = clamp(next.y, movementOuterBounds.top, movementOuterBounds.bottom);
           g.player = next;
+          if (!g.launchBaseDismissed && Math.hypot(
+            g.player.x - launchPoint.x,
+            g.player.y - launchPoint.y,
+          ) > g.cell * LAUNCH_BASE_DEPARTURE_DISTANCE_CELLS) {
+            g.launchBaseDismissed = true;
+            g.launchBaseFadeProgress = 0;
+          }
+           const movementHitEnemy = g.enemies.some((enemy) => (
+             !enemyIsDestroyed(enemy)
+             && enemy.respawnAt <= now
+             && enemyCollisionTouchesSegment(
+               enemy,
+               g.cell,
+               previous,
+               g.player,
+               playerBodyRadius(g.cell),
+             )
+           ));
+           if (movementHitEnemy && !playerIsProtected(g, now)) {
+             explode(g, now);
+             break;
+           }
             collectSpeedBoostsAlongSegment(g, previous, g.player, now);
            const movementHitBomb = g.bombs.some((bomb) => (
              !bomb.destroyed && bombTouchesSegment(bomb, g.cell, previous, g.player)
@@ -7630,6 +10091,14 @@ export default function GameScreen() {
         context.fillRect(0, 0, g.width, g.height);
       }
 
+      const shockwaveFlashOpacity = dcaShockwaveFlashOpacity(g.dcas);
+      if (shockwaveFlashOpacity > 0) {
+        context.globalCompositeOperation = 'source-over';
+        context.globalAlpha = shockwaveFlashOpacity;
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, g.width, g.height);
+      }
+
        context.globalCompositeOperation = 'source-over';
         context.globalAlpha = INITIAL_MAP_OPACITY;
        context.fillStyle = ZONE_COLOR;
@@ -7667,6 +10136,31 @@ export default function GameScreen() {
         bounds.bottom - bounds.top,
       );
       context.shadowBlur = 0;
+
+        g.dcas.forEach((dca) => {
+          if (dcaIsDestroyed(dca)) return;
+          const dcaModule = dcaDirectionSources[dcaDirectionIndex(dca)];
+          const resolvedDca = (RNImage as any).resolveAssetSource?.(dcaModule);
+          const dcaUri = String(resolvedDca?.uri ?? dcaModule);
+          const dcaImage = webAssetImageRefs.current[dcaUri];
+          if (dcaImage) {
+            const dcaSize = dcaVisualSize(g.cell);
+            const revealScale = dcaRevealScale(dca);
+            context.save();
+            context.globalCompositeOperation = 'source-over';
+            context.globalAlpha = clamp(dca.opacity, 0, 1) * 0.98;
+            context.translate(dca.x, dca.y);
+            context.scale(revealScale, revealScale);
+            context.drawImage(
+              dcaImage,
+              -dcaSize.width / 2,
+              -dcaSize.height / 2,
+              dcaSize.width,
+              dcaSize.height,
+            );
+            context.restore();
+          }
+        });
 
        if (g.protectedTrails.length > 0 || g.trail.length > 1) {
         context.strokeStyle = '#ff5500';
@@ -7854,7 +10348,8 @@ export default function GameScreen() {
           });
         const diamondImage = diamondSpriteImageRef.current;
         if (diamondImage) {
-         const pickupSize = pickupVisualSize(g.cell);
+          const pickupSize = pickupVisualSize(g.cell);
+          const diamondSize = pickupSize * DIAMOND_RENDER_SCALE;
           const diamondFrame = Math.floor(g.frame / DIAMOND_SPRITE_FRAME_DURATION)
             % DIAMOND_SPRITE_FRAME_COUNT;
          g.diamonds.forEach((diamond) => {
@@ -7867,16 +10362,16 @@ export default function GameScreen() {
             context.globalCompositeOperation = 'source-over';
             context.shadowColor = 'transparent';
             context.shadowBlur = 0;
-            context.drawImage(
+             context.drawImage(
               diamondImage,
               diamondFrame * DIAMOND_SPRITE_FRAME_SIZE,
               0,
               DIAMOND_SPRITE_FRAME_SIZE,
               DIAMOND_SPRITE_FRAME_SIZE,
-              -pickupSize / 2,
-              -pickupSize / 2,
-              pickupSize,
-              pickupSize,
+               -diamondSize / 2,
+               -diamondSize / 2,
+               diamondSize,
+               diamondSize,
             );
            context.restore();
          });
@@ -7974,7 +10469,7 @@ export default function GameScreen() {
         const frame = enemyFrameIndex(enemy);
         const image = spriteImagesRef.current[`${enemy.kind}:${frame}`];
         if (!image) return;
-         const size = enemyRenderSize(enemy.kind, g.cell, enemy.isMini);
+         const size = enemyRenderSizeForEnemy(enemy, g.cell);
         const motion = enemyAnimationTransform(enemy, g.cell);
         context.save();
         context.translate(enemy.x, enemy.y + motion.offsetY);
@@ -7984,6 +10479,65 @@ export default function GameScreen() {
         drawEnemySpriteWithGlow(context, image, size, enemyGlowColor(enemy.kind));
         context.restore();
       });
+       g.dcas.forEach((dca) => {
+         if (dcaIsDestroyed(dca) || (dca.beamRemaining ?? 0) <= 0) return;
+         const opacity = dcaBeamOpacity(dca);
+         if (opacity <= 0) return;
+         const geometry = dcaBeamGeometry(dca, g.cell, bounds);
+         context.save();
+         context.globalCompositeOperation = 'source-over';
+          context.globalAlpha = opacity * dcaBeamFillOpacity(dca);
+         context.fillStyle = '#ffffff';
+         const fillPolygon = (points: Point[]) => {
+           context.beginPath();
+           context.moveTo(points[0].x, points[0].y);
+           points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+           context.closePath();
+           context.fill();
+         };
+         fillPolygon(geometry.zone);
+         context.restore();
+       });
+        g.dcas.forEach((dca) => {
+           if (
+             dcaIsDestroyed(dca)
+             || (dca.beamRemaining ?? 0) <= 0
+             || (dca.shockwaveRemaining ?? 0) <= 0
+           ) return;
+          const shockwave = dcaShockwaveGeometry(dca, bounds);
+          const intensity = dcaShockwaveIntensity(shockwave.progress);
+          context.save();
+          context.globalCompositeOperation = 'lighter';
+          context.lineCap = 'round';
+          context.beginPath();
+          context.moveTo(shockwave.left.x, shockwave.left.y);
+          context.lineTo(shockwave.right.x, shockwave.right.y);
+           context.strokeStyle = '#35e6ff';
+          context.globalAlpha = 0.18 * intensity;
+           context.shadowColor = '#35e6ff';
+          context.shadowBlur = g.cell * 0.32;
+          context.lineWidth = g.cell * 0.28;
+          context.stroke();
+          context.beginPath();
+          context.moveTo(shockwave.left.x, shockwave.left.y);
+          context.lineTo(shockwave.right.x, shockwave.right.y);
+           context.strokeStyle = '#00bfff';
+          context.globalAlpha = 0.48 * intensity;
+           context.shadowColor = '#00bfff';
+          context.shadowBlur = g.cell * 0.2;
+          context.lineWidth = g.cell * 0.13;
+          context.stroke();
+          context.beginPath();
+          context.moveTo(shockwave.left.x, shockwave.left.y);
+          context.lineTo(shockwave.right.x, shockwave.right.y);
+           context.strokeStyle = '#a8f5ff';
+          context.globalAlpha = 0.98 * intensity;
+           context.shadowColor = '#a8f5ff';
+          context.shadowBlur = g.cell * 0.1;
+          context.lineWidth = Math.max(3, g.cell * 0.045);
+          context.stroke();
+          context.restore();
+        });
       context.shadowBlur = 0;
 
       const invincibilityRemaining = Math.max(0, g.invincibleUntil - now);
@@ -8113,20 +10667,20 @@ export default function GameScreen() {
         && sizeRef.current.width > 0
         && savedGameHydratedRef.current
         && lastPlayedSectorHydratedRef.current
+        && loadingArtworkReadyRef.current
         && !initialSectorPreparationStartedRef.current
       ) {
         initialSectorPreparationStartedRef.current = true;
         const savedGame = savedGameRef.current;
         const initialLevel = savedGame?.level
           ?? (lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : TUTORIAL_SECTOR);
-        setLoadingProgress(0.03);
-        void preloadSectorForBanner(initialLevel, setLoadingProgress).then(() => {
+        reportLoadingProgress(0.02);
+        void preloadSectorForBanner(initialLevel, reportLoadingProgress).then(() => {
           if (cancelled || gameRef.current.initialized) return;
           // The loading screen is the launch gate. Once the player taps it,
           // always begin at the start of the remembered sector rather than
           // dropping them into a mid-cut snapshot from the previous session.
           resetGame(false, false, initialLevel);
-          savedGameRef.current = null;
           if (gameRef.current.initialized) {
             revealGameAfterInitialLoad({
               kind: initialLevel === TUTORIAL_SECTOR ? 'TUTORIAL' : 'SECTOR_START',
@@ -8184,7 +10738,30 @@ export default function GameScreen() {
             || previousStaticSnapshot.cell !== g.cell
             || previousStaticSnapshot.rows !== g.rows
             || previousStaticSnapshot.level !== g.level;
-          if (staticLayerChanged) {
+          const previousDcas = previousStaticSnapshot?.dcas ?? [];
+          const dcaLayerChanged = !previousStaticSnapshot
+            || previousDcas.length !== g.dcas.length
+            || g.dcas.some((dca, index) => {
+              const previousDca = previousDcas[index];
+              return !previousDca
+                || previousDca.x !== dca.x
+                || previousDca.y !== dca.y
+                || previousDca.opacity !== dca.opacity
+                || previousDca.revealProgress !== dca.revealProgress
+                || previousDca.direction !== dca.direction
+                || previousDca.beamRemaining !== dca.beamRemaining
+                || previousDca.beamElapsed !== dca.beamElapsed
+                || previousDca.beamDirection !== dca.beamDirection
+                || previousDca.shockwaveRemaining !== dca.shockwaveRemaining
+                || previousDca.shockwaveElapsed !== dca.shockwaveElapsed
+                || previousDca.destroyed !== dca.destroyed;
+            });
+          const launchBaseLayerChanged = !previousStaticSnapshot
+            || previousStaticSnapshot.launchBaseDismissed !== g.launchBaseDismissed
+            || Math.abs(
+              previousStaticSnapshot.launchBaseFadeProgress - g.launchBaseFadeProgress,
+            ) > 0.004;
+          if (staticLayerChanged || launchBaseLayerChanged || dcaLayerChanged) {
             const currentDirection = g.trail.length > 0 ? g.cutDir : g.facingDir;
             const staticSnapshot: Snapshot = {
               width: g.width,
@@ -8196,8 +10773,11 @@ export default function GameScreen() {
               trail: g.trail,
               protectedTrails: g.protectedTrails,
               player: { ...g.player },
+              launchBaseDismissed: g.launchBaseDismissed,
+              launchBaseFadeProgress: g.launchBaseFadeProgress,
               direction: currentDirection,
               enemies: g.enemies.map((enemy) => ({ ...enemy })),
+              dcas: g.dcas.map((dca) => ({ ...dca })),
               diamonds: g.diamonds.map((diamond) => ({ ...diamond })),
               speedBoosts: g.speedBoosts.map((speedBoost) => ({ ...speedBoost })),
               bombs: g.bombs.map((bomb) => ({ ...bomb })),
@@ -8257,6 +10837,8 @@ export default function GameScreen() {
             score: g.score,
             bestScore: bestScoreRef.current,
             shields: Math.max(0, g.shields),
+            diamonds: g.diamondsCollected,
+            speedBoostCharges: Math.max(0, Math.floor(g.speedBoostCharges ?? 0)),
             capture: Math.min(
               LEVEL_CAPTURE_TARGET,
               Math.floor(clamp(
@@ -8278,6 +10860,8 @@ export default function GameScreen() {
             current.score === nextHud.score
               && current.bestScore === nextHud.bestScore
               && current.shields === nextHud.shields
+              && current.diamonds === nextHud.diamonds
+              && current.speedBoostCharges === nextHud.speedBoostCharges
               && current.capture === nextHud.capture
               && current.level === nextHud.level
               && current.mode === nextHud.mode
@@ -8331,19 +10915,23 @@ export default function GameScreen() {
   }, [
     enqueueBanner,
     clearSavedGameProgress,
+    playDcaEngineCharge,
+    playDcaShockwave,
     playDiamondCapture,
     playPickupChime,
     playSevenFireShot,
     playSectorTransition,
     playShieldLossExplosion,
+    triggerDcaHaptic,
     preloadBackgroundWindow,
     preloadSectorForBanner,
     revealGameAfterInitialLoad,
+    reportLoadingProgress,
     resetGame,
+    beginTutorialBoostStep,
     beginTutorialDestructionStep,
     beginTutorialEnemyStep,
     restartTutorialStep,
-    restoreSavedGame,
     saveGameProgress,
     teleportToSector,
   ]);
@@ -8477,6 +11065,7 @@ export default function GameScreen() {
   };
 
   const zoneProgress = clamp(hud.capture / LEVEL_CAPTURE_TARGET, 0, 1);
+  const bossSector = isBossSector(hud.level);
   const zoneGlow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const glowLoop = Animated.loop(
@@ -8498,16 +11087,13 @@ export default function GameScreen() {
     glowLoop.start();
     return () => glowLoop.stop();
   }, [zoneGlow]);
-  const shieldSegments = Array.from({ length: 3 });
+  const shieldSegments = Array.from({ length: MAX_SHIELDS });
   const hudTopPadding = Platform.OS === 'android'
     ? Math.max(12, insets.top - 36)
     : Math.max(insets.top, 12);
 
   return (
     <View style={styles.container}>
-      {Platform.OS !== 'web' && (
-        <NativeSkiaAssetPreloader onReady={handleSkiaReady} />
-      )}
       <View style={styles.cockpitHeader} pointerEvents="none">
         <RNImage
           source={cockpitInteriorSource}
@@ -8525,6 +11111,17 @@ export default function GameScreen() {
         style={styles.arena}
         onLayout={handleArenaLayout}
         testID="game-arena"
+        onTouchStart={handleArenaTouchStart}
+        onTouchMove={handleArenaTouchMove}
+        onTouchEnd={handleArenaTouchEnd}
+        onTouchCancel={() => {
+          arenaTouchMovedRef.current = false;
+          arenaSwipeDirectionRef.current = null;
+          arenaPanResponderActiveRef.current = false;
+          arenaTouchActiveRef.current = false;
+          arenaTouchIdentifierRef.current = null;
+          lastArenaTapRef.current = null;
+        }}
         {...panResponder.panHandlers}
       >
         {Platform.OS === 'web'
@@ -8585,7 +11182,7 @@ export default function GameScreen() {
                 {banner.kind === 'RECORD'
                   ? 'NOUVEAU RECORD !'
                   : banner.kind === 'DIAMOND'
-                    ? 'BONUS DIAMANT CAPTURÉ'
+                    ? 'BONUS ÉCLAT CAPTURÉ'
                     : banner.kind === 'BOMB'
                       ? 'BOMBE NEUTRALISÉE'
                     : banner.kind === 'SPEED_BOOST'
@@ -8595,29 +11192,35 @@ export default function GameScreen() {
                       : banner.kind === 'SECTOR'
                         ? 'SECTEUR SÉCURISÉ À 80%'
                         : banner.kind === 'TUTORIAL'
-                          ? banner.tutorialStep === 4
+                          ? banner.tutorialStep === 5
                             ? banner.tutorialCompleted
                               ? 'OBJECTIF ATTEINT !'
                               : banner.tutorialPrompt === 'SECURE_AREA'
                                 ? 'ZONE À SÉCURISER'
-                                : 'TUTORIEL 4/4'
-                            : banner.tutorialStep === 3
+                                : 'TUTORIEL 5/5'
+                            : banner.tutorialStep === 4
                               ? banner.tutorialCompleted
                                 ? 'OBJECTIF ATTEINT !'
                                 : banner.tutorialPrompt === 'SECURE_AREA'
                                   ? 'ZONE À SÉCURISER'
-                                  : 'TUTORIEL 3/4'
-                              : banner.tutorialStep === 2
+                                  : 'TUTORIEL 4/5'
+                              : banner.tutorialStep === 3
                                 ? banner.tutorialCompleted
                                   ? 'OBJECTIF ATTEINT !'
-                                  : 'TUTORIEL 2/4'
-                            : banner.tutorialCompleted
-                              ? 'DIRIGER LE DRONE 1/4'
-                              : 'TUTORIEL 1/4'
+                                  : 'TUTORIEL 3/5'
+                                : banner.tutorialStep === 2
+                                  ? banner.tutorialCompleted
+                                    ? 'OBJECTIF ATTEINT !'
+                                    : 'TUTORIEL 2/5'
+                                  : banner.tutorialCompleted
+                                    ? 'DIRIGER LE DRONE 1/5'
+                                    : 'TUTORIEL 1/5'
                         : banner.kind === 'SECTOR_START'
                           ? `SECTEUR ${(banner.level ?? 1).toString().padStart(2, '0')}`
                         : banner.kind === 'BOSS'
                           ? 'ALERTE BOSS'
+                        : banner.kind === 'DCA'
+                          ? 'DCA NEUTRALISÉ'
                         : banner.kind === 'BOSS_SPLIT'
                           ? 'BOSS FRACTURÉ'
                         : banner.kind === 'SPLIT'
@@ -8642,25 +11245,29 @@ export default function GameScreen() {
                       : banner.kind === 'BOMB'
                         ? `+${banner.points ?? BOMB_SCORE} POINTS`
                     : banner.kind === 'SPEED_BOOST'
-                      ? 'VITESSE +100%  •  5 SECONDES'
+                      ? `VITESSE +100%  •  ${SPEED_BOOST_DURATION_SECONDS} SECONDES`
                       : banner.kind === 'SHIELD'
                         ? 'INVINCIBILITÉ  •  10 SECONDES'
                       : banner.kind === 'SECTOR'
                         ? 'PASSAGE SECTEUR SUIVANT'
                       : banner.kind === 'TUTORIAL'
-                        ? banner.tutorialStep === 4
+                        ? banner.tutorialStep === 5
                           ? banner.tutorialCompleted
                             ? '✓ ENNEMI DÉTRUIT'
                             : banner.tutorialPrompt === 'SECURE_AREA'
                               ? 'SÉCURISE 80% DE LA ZONE'
                               : 'FERME UNE ZONE VIDE POUR TIRER'
-                          : banner.tutorialStep === 3
+                          : banner.tutorialStep === 4
                             ? banner.tutorialCompleted
                               ? '✓ ENNEMI CAPTURÉ'
                               : banner.tutorialPrompt === 'SECURE_AREA'
                                 ? 'SÉCURISE 80% DE LA ZONE'
                                 : 'CAPTURE LE VAISSEAU ENNEMI'
-                            : banner.tutorialStep === 2
+                            : banner.tutorialStep === 3
+                              ? banner.tutorialCompleted
+                                ? '✓ SURCHARGE ACTIVÉE'
+                                : 'DOUBLE TAP POUR ACTIVER LA SURCHARGE'
+                              : banner.tutorialStep === 2
                               ? banner.tutorialCompleted
                                 ? '✓ ZONE SÉCURISÉE À 80%'
                                 : 'SÉCURISE 80% DE LA ZONE'
@@ -8669,6 +11276,8 @@ export default function GameScreen() {
                             : 'DIRIGE LE DRONE AVEC DES SWIPES'
                       : banner.kind === 'BOSS'
                         ? `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`
+                      : banner.kind === 'DCA'
+                        ? `+${banner.points ?? DCA_SCORE} POINTS  •  INSTALLATION DCA`
                       : banner.kind === 'BOSS_SPLIT'
                         ? `+${banner.points ?? ENEMY_SCORE.SHIP} POINTS  •  ${ENEMY_DEPLOYED_BANNER_LABELS[banner.enemyKind ?? 'SHIP']}`
                       : banner.kind === 'SPLIT'
@@ -8693,13 +11302,43 @@ export default function GameScreen() {
         />
       )}
 
-      <View style={[styles.hud, { paddingTop: hudTopPadding }]} pointerEvents="none">
+      <View
+        style={[styles.hud, { paddingTop: hudTopPadding }]}
+        pointerEvents="box-none"
+        collapsable={false}
+      >
         <View style={styles.hudSignalRail}>
-          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.cyan }]} />
-          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.lime }]} />
-          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.amber }]} />
-          <View style={[styles.signalDot, { backgroundColor: HUD_COLORS.magenta }]} />
-          <Text style={styles.signalLabel}>REACTOR / FLIGHT SYSTEMS</Text>
+          <Text
+            style={[
+              styles.signalLabel,
+              styles.speedBoostSignalLabel,
+              bossSector && styles.speedBoostSignalLabelDisabled,
+            ]}
+          >
+            {bossSector ? 'SURCHARGE IONIQUE · INACTIVE' : 'SURCHARGE IONIQUE'}
+          </Text>
+          <View
+            style={[
+              styles.specialChargeSquares,
+              bossSector && styles.specialChargeSquaresDisabled,
+            ]}
+            accessibilityLabel={
+              bossSector
+                ? `${hud.speedBoostCharges} charges conservées, surcharge ionique indisponible dans les secteurs boss`
+                : `${hud.speedBoostCharges} charges de surcharge ionique disponibles`
+            }
+          >
+            {Array.from({ length: Math.max(0, hud.speedBoostCharges) }).map((_, index) => (
+              <View
+                key={`special-charge-${index}`}
+                style={[
+                  styles.specialChargeSquare,
+                  bossSector && styles.specialChargeSquareDisabled,
+                  { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber, HUD_COLORS.magenta][index % 4] },
+                ]}
+              />
+            ))}
+          </View>
           <Text style={styles.signalLabel}>SECTEUR {hud.level.toString().padStart(2, '0')}</Text>
         </View>
 
@@ -8742,7 +11381,7 @@ export default function GameScreen() {
 
           <View style={[styles.hudCard, styles.scoreCard]}>
             <Text style={[styles.cardLabel, { color: HUD_COLORS.warmWhite }]}>SCORE</Text>
-            <Text style={[styles.scoreValue, { color: HUD_COLORS.warmWhite }]}>
+            <Text style={[styles.scoreValue, { color: HUD_COLORS.lime }]}>
               {hud.score.toString().padStart(6, '0')}
             </Text>
             <Text style={[styles.cardMeta, styles.scoreMeta, { color: HUD_COLORS.amber }]}>
@@ -8753,7 +11392,6 @@ export default function GameScreen() {
           <View style={[styles.hudCardStack, styles.shieldStack]}>
             <View style={[styles.hudCard, styles.shieldCard]}>
               <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
-              <Text style={[styles.shieldValue, { color: HUD_COLORS.lime }]}>{hud.shields}</Text>
               <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
                 {shieldSegments.map((_, index) => (
                   <View
@@ -8761,15 +11399,30 @@ export default function GameScreen() {
                     style={[
                       styles.shieldSegment,
                       index < hud.shields
-                        ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber][index] }
+                         ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber, HUD_COLORS.magenta, HUD_COLORS.warmWhite][index] }
                         : styles.shieldSegmentInactive,
                     ]}
                   />
                 ))}
               </View>
-              <Text style={[styles.cardMeta, { color: HUD_COLORS.lime }]}>ARMOR LOCK</Text>
+              <View style={styles.shieldDiamondDivider} />
+              <Text style={[styles.cardLabel, { color: HUD_COLORS.cyan }]}>ÉCLATS</Text>
+              <Text style={[styles.diamondValue, { color: HUD_COLORS.cyan }]}>{hud.diamonds}</Text>
             </View>
-            <View style={[styles.hudCard, styles.utilityCard, styles.shopCard]}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.hudCard,
+                styles.utilityCard,
+                styles.shopCard,
+                pressed && styles.shopCardPressed,
+              ]}
+              onPress={openShop}
+              hitSlop={8}
+              pointerEvents="auto"
+              accessibilityRole="button"
+              accessibilityLabel="Ouvrir la boutique"
+              testID="open-shop"
+            >
               <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole boutique">
                 <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
                 <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
@@ -8778,11 +11431,11 @@ export default function GameScreen() {
                 <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.lime} strokeWidth="1" />
               </Svg>
               <Text style={[styles.utilityLabel, { color: HUD_COLORS.lime }]}>BOUTIQUE</Text>
-            </View>
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.zoneModule}>
+        <View style={styles.zoneModule} pointerEvents="none">
           <View style={[styles.hudCard, styles.zoneCard]}>
             <Text style={[styles.cardLabel, { color: HUD_COLORS.amber }]}>ZONE SÉCURISÉE</Text>
             <View style={styles.zoneValueRow}>
@@ -8790,40 +11443,73 @@ export default function GameScreen() {
               <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
               <Text style={[styles.zoneFps, { color: HUD_COLORS.lime }]}>{fps} FPS</Text>
             </View>
-            <View style={styles.zoneProgressRail}>
-                <Animated.View
-                  style={[
-                    styles.zoneProgressFill,
-                    {
-                      width: `${zoneProgress * 100}%`,
-                      opacity: zoneGlow.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.92, 1],
-                      }),
-                    },
-                  ]}
-                />
+            <NeonProgressBar
+              progress={zoneProgress}
+              shimmerDuration={500}
+              shimmerDelay={3000}
+              trackStyle={[
+                styles.zoneProgressRail,
+                {
+                  opacity: zoneGlow.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.92, 1],
+                  }),
+                },
+              ]}
+              fillStyle={styles.zoneProgressFill}
+            >
               <View style={styles.zoneProgressTicks}>
                 {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
               </View>
-            </View>
+            </NeonProgressBar>
           </View>
         </View>
 
         {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
 
+      <ShopOverlay
+        visible={isShopOpen}
+        score={hud.score}
+        bestScore={hud.bestScore}
+        shards={hud.diamonds}
+        currentShields={hud.shields}
+        maxShields={MAX_SHIELDS}
+        vendorSource={repairVendorSource}
+        aegisSource={aegisShieldShopSource}
+        speedBoostSource={speedBoostSource}
+        items={shopItems}
+        notice={shopNotice}
+        onBuy={handleShopPurchase}
+        onOpenShardPurchase={openDiamondPurchase}
+        onClose={continueAfterShop}
+      />
+
+      <DiamondPurchaseOverlay
+        visible={isDiamondPurchaseOpen}
+        shards={hud.diamonds}
+        vendorSource={repairVendorSource}
+        purchaseNotice={diamondPurchaseNotice}
+        prices={Object.fromEntries(
+          shardPurchases.packages.map((purchasePackage) => {
+            const offer = purchasePackage.productIdentifier.match(/fragments_shards_(\d+)/);
+            return offer ? [Number(offer[1]), purchasePackage.priceString] : [];
+          }).filter((entry): entry is [number, string] => entry.length === 2),
+        )}
+        isPurchasing={shardPurchases.isPurchasing}
+        onPurchase={handleDiamondPurchase}
+        onClose={closeDiamondPurchase}
+      />
+
       <DebugSectorSelector
         currentSector={hud.level}
         tutorialStep={tutorialStep}
         onSelect={teleportToSector}
-        onSkipTutorial={() => teleportToSector(
-          lastPlayedSectorRef.current > 0 ? lastPlayedSectorRef.current : 1,
-        )}
+        onSkipTutorial={skipTutorial}
         bottomInset={Math.max(insets.bottom, 6) + 18}
       />
 
-      {gameOverSector !== null && (
+      {gameOverSector !== null && gameOverStage === 'DEATH' && (
         <Pressable
           style={styles.gameOverOverlay}
           onPress={resumeFromGameOver}
@@ -8835,12 +11521,35 @@ export default function GameScreen() {
             <View style={styles.gameOverRule} />
             <Text style={styles.gameOverTitle}>GAME OVER</Text>
             <Text style={styles.gameOverSubtitle}>BOUCLIERS ÉPUISÉS</Text>
-            <Text style={styles.gameOverSector}>
-              SECTEUR {gameOverSector.toString().padStart(2, '0')} CONSERVÉ
+            <Text style={styles.gameOverScore}>
+              SCORE {String(gameOverScore ?? hud.score).padStart(6, '0')}
             </Text>
-            <Text style={styles.gameOverPrompt}>TOUCHER POUR REPRENDRE</Text>
+            <Text style={styles.gameOverBestScore}>
+              MEILLEUR SCORE : {String(gameOverBestScore ?? hud.bestScore).padStart(6, '0')}
+            </Text>
+            <Text style={styles.gameOverPrompt}>CLASSEMENT DANS 3 SECONDES</Text>
           </View>
         </Pressable>
+      )}
+
+      {gameOverSector !== null && gameOverStage === 'LEADERBOARD' && (
+        <LeaderboardOverlay
+          score={gameOverScore ?? hud.score}
+          bestScore={gameOverBestScore ?? hud.bestScore}
+          entries={leaderboardEntries}
+          pseudoDraft={pseudoDraft}
+          playerPseudo={playerPseudo}
+          status={leaderboardStatus}
+          message={leaderboardMessage}
+          onPseudoChange={(value) => setPseudoDraft(normalizePseudo(value))}
+          onSubmit={() => {
+            void submitLeaderboardScore(pseudoDraft);
+          }}
+          onRetry={() => {
+            void submitLeaderboardScore(playerPseudo || pseudoDraft);
+          }}
+          onResume={resumeFromGameOver}
+        />
       )}
 
       {Platform.OS !== 'web' && isLoadingScreenVisible && !skiaReady && (
@@ -8853,36 +11562,141 @@ export default function GameScreen() {
           pointerEvents="auto"
           testID="initial-loading-screen"
         >
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={handleInitialLoadingTap}
-            disabled={!isInitialLoadingReady}
-            accessibilityRole="button"
-            accessibilityLabel="Démarrer Fragments"
-            testID="initial-loading-start"
+          <Animated.View
+            style={[
+              styles.loadingArtworkFrame,
+              { transform: [{ translateX: loadingBannerTranslateX }] },
+            ]}
+            accessibilityLabel="Chargement"
+            pointerEvents="box-none"
           >
-            <Animated.View
+            <RNImage
+              source={loadingCoverSource}
+              style={styles.loadingArtworkBackdrop}
+              resizeMode="cover"
+              blurRadius={18}
+            />
+            <RNImage
+              source={loadingCoverSource}
               style={[
-                styles.loadingArtworkFrame,
-                { transform: [{ translateX: loadingBannerTranslateX }] },
+                styles.loadingArtwork,
+                {
+                  width: viewportWidth,
+                  height: viewportWidth * 1376 / 768,
+                },
               ]}
-              accessibilityLabel="Chargement"
-              pointerEvents="none"
+              resizeMode="contain"
+              onLoad={handleLoadingArtworkLoad}
+              accessibilityLabel="Illustration Fragments"
+            />
+            <View style={styles.loadingArtworkShade} pointerEvents="none" />
+            <View
+              style={[
+                styles.loadingOverlay,
+                {
+                  left: loadingSideInset,
+                  right: loadingSideInset,
+                  bottom: loadingBottomInset,
+                },
+              ]}
+              pointerEvents="box-none"
             >
-              <RNImage
-                source={loadingCoverSource}
-                style={styles.loadingArtwork}
-                resizeMode="cover"
-                accessibilityLabel="Illustration Fragments"
+              <Text style={styles.loadingProgressLabel}>
+                {isInitialLoadingReady
+                  ? 'SYSTÈMES PRÊTS'
+                  : `CHARGEMENT ${Math.round(loadingProgress * 100)} %`}
+              </Text>
+              <NeonProgressBar
+                progress={loadingProgress}
+                shimmerDuration={1040}
+                shimmerDelay={3000}
+                laserShimmer
+                fillGradient
+                trackStyle={[
+                  styles.loadingProgressTrack,
+                  {
+                    height: clamp(viewportWidth * 0.022, 8, 10),
+                    borderRadius: clamp(viewportWidth * 0.012, 4, 6),
+                  },
+                ]}
+                fillStyle={styles.loadingProgressFill}
               />
-              <View style={styles.loadingArtworkShade} />
-              <View style={styles.loadingOverlay}>
-                {isInitialLoadingReady && (
-                  <Text style={styles.loadingBannerSubtitle}>TOUCHER POUR COMMENCER À JOUER</Text>
+              <View
+                style={[
+                  styles.initialChoiceRow,
+                  { gap: loadingControlGap, opacity: isInitialLoadingReady ? 1 : 0 },
+                ]}
+                pointerEvents={isInitialLoadingReady ? 'auto' : 'none'}
+              >
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.initialChoiceButton,
+                    styles.initialChoiceButtonPrimary,
+                    {
+                      minHeight: loadingButtonHeight,
+                      paddingHorizontal: loadingButtonPadding,
+                    },
+                    pressed && styles.initialChoiceButtonPressed,
+                  ]}
+                  onPress={() => handleInitialLoadingChoice('NEW_GAME')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Nouvelle partie, commencer par le tutoriel"
+                  testID="initial-loading-new-game"
+                >
+                  <Text
+                    style={[
+                      styles.initialChoiceButtonTitle,
+                      { fontSize: loadingButtonTitleSize },
+                    ]}
+                  >
+                    NOUVELLE PARTIE
+                  </Text>
+                  <Text
+                    style={[
+                      styles.initialChoiceButtonSubtitle,
+                      { fontSize: loadingButtonSubtitleSize },
+                    ]}
+                  >
+                    COMMENCER PAR LE TUTORIEL
+                  </Text>
+                </Pressable>
+                {resumeSector > 0 && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.initialChoiceButton,
+                      styles.initialChoiceButtonResume,
+                      {
+                        minHeight: loadingButtonHeight,
+                        paddingHorizontal: loadingButtonPadding,
+                      },
+                      pressed && styles.initialChoiceButtonPressed,
+                    ]}
+                    onPress={() => handleInitialLoadingChoice('RESUME')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reprendre au secteur ${resumeSector}`}
+                    testID="initial-loading-resume"
+                  >
+                    <Text
+                      style={[
+                        styles.initialChoiceButtonTitle,
+                        { fontSize: loadingButtonTitleSize },
+                      ]}
+                    >
+                      REPRENDRE
+                    </Text>
+                    <Text
+                      style={[
+                        styles.initialChoiceButtonSubtitle,
+                        { fontSize: loadingButtonSubtitleSize },
+                      ]}
+                    >
+                      SECTEUR {resumeSector.toString().padStart(2, '0')}
+                    </Text>
+                  </Pressable>
                 )}
               </View>
-            </Animated.View>
-          </Pressable>
+            </View>
+          </Animated.View>
         </View>
       )}
     </View>
@@ -8897,13 +11711,22 @@ const nativeBannerCopy = (banner: Banner) => {
     };
   }
   if (banner.kind === 'DIAMOND') {
-    return { title: 'BONUS DIAMANT CAPTURÉ', subtitle: `+${banner.points ?? DIAMOND_SCORE} POINTS` };
+    return { title: 'BONUS ÉCLAT CAPTURÉ', subtitle: `+${banner.points ?? DIAMOND_SCORE} POINTS` };
   }
   if (banner.kind === 'BOMB') {
     return { title: 'BOMBE NEUTRALISÉE', subtitle: `+${banner.points ?? BOMB_SCORE} POINTS` };
   }
+  if (banner.kind === 'DCA') {
+    return {
+      title: 'DCA NEUTRALISÉ',
+      subtitle: `+${banner.points ?? DCA_SCORE} POINTS  •  INSTALLATION DCA`,
+    };
+  }
   if (banner.kind === 'SPEED_BOOST') {
-    return { title: 'BOOST DE VITESSE', subtitle: 'VITESSE +100%  •  5 SECONDES' };
+    return {
+      title: 'BOOST DE VITESSE',
+      subtitle: `VITESSE +100%  •  ${SPEED_BOOST_DURATION_SECONDS} SECONDES`,
+    };
   }
   if (banner.kind === 'SHIELD') {
     return { title: 'BOUCLIER ACTIVÉ', subtitle: 'INVINCIBILITÉ  •  10 SECONDES' };
@@ -8916,8 +11739,8 @@ const nativeBannerCopy = (banner: Banner) => {
   }
   if (banner.kind === 'BOSS') {
     return {
-      title: 'ALERTE BOSS',
-      subtitle: `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} BOSS`,
+      title: 'ALERTE SUPER BOSS',
+      subtitle: `SECTEUR ${(banner.level ?? 10).toString().padStart(2, '0')}  •  ${BOSS_KIND_LABELS[banner.bossKind ?? 'SHIP']} SUPER BOSS`,
     };
   }
   if (banner.kind === 'BOSS_SPLIT') {
@@ -8944,14 +11767,16 @@ const nativeBannerCopy = (banner: Banner) => {
     return {
       title: banner.tutorialCompleted
         ? 'OBJECTIF ATTEINT !'
-        : step > 1 && banner.tutorialPrompt === 'SECURE_AREA'
+        : step > 1 && step !== 3 && banner.tutorialPrompt === 'SECURE_AREA'
           ? 'ZONE À SÉCURISER'
-          : `TUTORIEL ${step}/4`,
-      subtitle: step === 4
+          : `TUTORIEL ${step}/5`,
+      subtitle: step === 5
         ? banner.tutorialCompleted ? '✓ ENNEMI DÉTRUIT' : 'FERME UNE ZONE VIDE POUR TIRER'
-        : step === 3
+        : step === 4
           ? banner.tutorialCompleted ? '✓ ENNEMI CAPTURÉ' : 'CAPTURE LE VAISSEAU ENNEMI'
-          : step === 2
+          : step === 3
+            ? banner.tutorialCompleted ? '✓ SURCHARGE ACTIVÉE' : 'DOUBLE TAP POUR ACTIVER LA SURCHARGE'
+            : step === 2
             ? banner.tutorialCompleted ? '✓ ZONE SÉCURISÉE À 80%' : 'SÉCURISE 80% DE LA ZONE'
             : banner.tutorialCompleted ? '✓ OBJECTIF VALIDÉ' : 'DIRIGE LE DRONE AVEC DES SWIPES',
     };
@@ -9045,10 +11870,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     overflow: 'hidden',
     backgroundColor: '#020208',
+    alignItems: 'flex-start',
   },
-  loadingArtwork: {
-    width: '100%',
-    height: '100%',
+  loadingArtwork: {},
+  loadingArtworkBackdrop: {
+    ...StyleSheet.absoluteFill,
+    opacity: 0.34,
   },
   loadingArtworkShade: {
     ...StyleSheet.absoluteFill,
@@ -9063,32 +11890,61 @@ const styles = StyleSheet.create({
   },
   loadingProgressTrack: {
     width: '100%',
-    height: 8,
+    height: 9,
     marginTop: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#ff1e38',
-    backgroundColor: 'rgba(10, 0, 10, 0.82)',
-    shadowColor: '#ff1e38',
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
+    borderRadius: 5,
+    borderColor: 'rgba(0, 243, 255, 0.68)',
+    backgroundColor: 'rgba(0, 20, 30, 0.86)',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
   loadingProgressFill: {
+    position: 'relative',
+    overflow: 'hidden',
     height: '100%',
-    backgroundColor: '#ff1e38',
-    shadowColor: '#ff5a64',
-    shadowOpacity: 1,
-    shadowRadius: 8,
+    borderRadius: 4,
+    backgroundColor: '#08d9e8',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.85,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
+  },
+  progressShimmer: {
+    position: 'absolute',
+    top: -3,
+    bottom: -3,
+    width: 26,
+    borderRadius: 13,
+    backgroundColor: 'transparent',
+    opacity: 0.96,
+    shadowColor: '#ffffff',
+    shadowOpacity: 1,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  progressShimmerCore: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  progressFillGradient: {
+    ...StyleSheet.absoluteFill,
+  },
+  progressLaserGradient: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 13,
   },
   loadingProgressLabel: {
     marginTop: 5,
-    color: '#ff5a64',
+    color: HUD_COLORS.cyan,
     fontFamily: 'Inter_700Bold',
     fontSize: 9,
     letterSpacing: 1.4,
-    textShadowColor: '#ff1e38',
+    textShadowColor: HUD_COLORS.cyan,
     textShadowRadius: 7,
     textAlign: 'center',
   },
@@ -9129,6 +11985,60 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
     letterSpacing: 1.6,
+    textAlign: 'center',
+  },
+  initialChoiceRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+  },
+  initialChoiceButton: {
+    flex: 1,
+    minHeight: 64,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(2, 7, 13, 0.94)',
+  },
+  initialChoiceButtonPrimary: {
+    borderColor: HUD_COLORS.cyan,
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.85,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  initialChoiceButtonResume: {
+    borderColor: HUD_COLORS.amber,
+    shadowColor: HUD_COLORS.amber,
+    shadowOpacity: 0.85,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  initialChoiceButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.98 }],
+  },
+  initialChoiceButtonTitle: {
+    color: HUD_COLORS.warmWhite,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.9,
+    textAlign: 'center',
+  },
+  initialChoiceButtonSubtitle: {
+    marginTop: 4,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    lineHeight: 10,
+    letterSpacing: 0.7,
     textAlign: 'center',
   },
   arena: {
@@ -9372,7 +12282,8 @@ const styles = StyleSheet.create({
     top: -17,
     left: 18,
     right: 18,
-    zIndex: 3,
+    zIndex: 30,
+    elevation: 30,
   },
   nativeArenaDynamicLayer: {
     position: 'absolute',
@@ -9386,10 +12297,32 @@ const styles = StyleSheet.create({
   hudSignalRail: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
     marginBottom: 7,
     paddingHorizontal: 6,
     transform: [{ translateY: 10 }],
+  },
+  specialChargeSquares: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginLeft: 2,
+  },
+  specialChargeSquaresDisabled: {
+    opacity: 0.5,
+  },
+  specialChargeSquare: {
+    width: 8,
+    height: 8,
+    borderRadius: 1,
+    shadowColor: '#ffffff',
+    shadowRadius: 5,
+    shadowOpacity: 0.8,
+  },
+  specialChargeSquareDisabled: {
+    backgroundColor: '#5b6170',
+    shadowOpacity: 0,
   },
   signalDot: {
     width: 5,
@@ -9406,6 +12339,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginLeft: 3,
   },
+  speedBoostSignalLabel: {
+    fontSize: 8,
+    letterSpacing: 1.05,
+    color: HUD_COLORS.lime,
+  },
+  speedBoostSignalLabelDisabled: {
+    color: '#6d7380',
+    textDecorationLine: 'line-through',
+    opacity: 0.78,
+  },
   hudDeck: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -9418,9 +12361,11 @@ const styles = StyleSheet.create({
   },
   sectorStack: {
     width: '26%',
+    transform: [{ translateX: -10 }],
   },
   shieldStack: {
     width: '29%',
+    transform: [{ translateX: 10 }],
   },
   hudCard: {
     borderWidth: 1,
@@ -9476,6 +12421,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18, 34, 8, 0.9)',
     transform: [{ translateY: 0 }, { rotate: '1deg' }],
   },
+  shopCardPressed: {
+    backgroundColor: 'rgba(72, 112, 22, 0.92)',
+    opacity: 0.88,
+  },
   utilityLabel: {
     fontFamily: 'Inter_700Bold',
     fontSize: 7,
@@ -9528,23 +12477,35 @@ const styles = StyleSheet.create({
     fontSize: 28,
     letterSpacing: 2,
     lineHeight: 32,
-    textShadowColor: HUD_COLORS.amber,
+    transform: [{ translateY: -4 }],
+    textShadowColor: HUD_COLORS.lime,
     textShadowRadius: 9,
     textShadowOffset: { width: 0, height: 0 },
-  },
-  shieldValue: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 24,
-    lineHeight: 27,
   },
   shieldSegments: {
     flexDirection: 'row',
     gap: 3,
-    marginTop: 1,
+    marginTop: 4,
     minHeight: 5,
   },
+  shieldDiamondDivider: {
+    width: '100%',
+    height: 1,
+    marginTop: 8,
+    marginBottom: 6,
+    backgroundColor: 'rgba(0, 243, 255, 0.48)',
+  },
+  diamondValue: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 19,
+    lineHeight: 22,
+    letterSpacing: 1,
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 7,
+    textShadowOffset: { width: 0, height: 0 },
+  },
   shieldSegment: {
-    width: 16,
+    width: 12,
     height: 5,
     borderRadius: 1,
     shadowColor: '#ffffff',
@@ -9592,20 +12553,26 @@ const styles = StyleSheet.create({
   },
   zoneProgressRail: {
     width: '100%',
-    height: 7,
+    height: 8,
     marginTop: 6,
     borderWidth: 1,
-    borderColor: '#667085',
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(0, 243, 255, 0.68)',
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 20, 30, 0.86)',
     overflow: 'hidden',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
   },
   zoneProgressFill: {
+    position: 'relative',
+    overflow: 'hidden',
     height: '100%',
-    backgroundColor: HUD_COLORS.cyan,
+    borderRadius: 3,
+    backgroundColor: '#08d9e8',
     shadowColor: HUD_COLORS.cyan,
     shadowOpacity: 1,
-    shadowRadius: 7,
+    shadowRadius: 8,
   },
   zoneProgressTicks: {
     ...StyleSheet.absoluteFill,
@@ -9768,13 +12735,25 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     textAlign: 'center',
   },
-  gameOverSector: {
+  gameOverScore: {
     marginTop: 10,
     color: '#00f3ff',
     fontFamily: 'Inter_700Bold',
-    fontSize: 15,
-    lineHeight: 20,
-    letterSpacing: 1.3,
+    fontSize: 23,
+    lineHeight: 28,
+    letterSpacing: 2.2,
+    textAlign: 'center',
+    textShadowColor: '#00f3ff',
+    textShadowRadius: 10,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  gameOverBestScore: {
+    marginTop: 3,
+    color: '#ffcc66',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    lineHeight: 13,
+    letterSpacing: 1.1,
     textAlign: 'center',
   },
   gameOverPrompt: {
@@ -9785,6 +12764,253 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     letterSpacing: 1.3,
     textAlign: 'center',
+  },
+  leaderboardOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 91,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.84)',
+  },
+  leaderboardPanel: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '94%',
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 14,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: HUD_COLORS.cyan,
+    borderRadius: 4,
+    backgroundColor: 'rgba(5, 15, 25, 0.97)',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.75,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 18,
+  },
+  leaderboardRule: {
+    width: 96,
+    height: 3,
+    marginBottom: 12,
+    backgroundColor: HUD_COLORS.cyan,
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 1,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  leaderboardTitle: {
+    color: '#fff5cf',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 25,
+    lineHeight: 30,
+    letterSpacing: 3,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 13,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  leaderboardScore: {
+    marginTop: 7,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 20,
+    lineHeight: 25,
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  leaderboardBestScore: {
+    marginTop: 2,
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    lineHeight: 13,
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  pseudoEntryBlock: {
+    width: '100%',
+    marginTop: 13,
+    alignItems: 'center',
+  },
+  pseudoPrompt: {
+    color: '#fff5cf',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    lineHeight: 13,
+    letterSpacing: 1.15,
+    textAlign: 'center',
+  },
+  pseudoInput: {
+    width: '78%',
+    height: 42,
+    marginTop: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: HUD_COLORS.cyan,
+    borderRadius: 2,
+    color: '#ffffff',
+    backgroundColor: 'rgba(0, 243, 255, 0.08)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+    letterSpacing: 2.2,
+    textAlign: 'center',
+  },
+  leaderboardAction: {
+    minWidth: 190,
+    minHeight: 36,
+    marginTop: 9,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: HUD_COLORS.lime,
+    borderRadius: 2,
+    backgroundColor: 'rgba(184, 255, 74, 0.14)',
+  },
+  leaderboardActionDisabled: {
+    opacity: 0.55,
+  },
+  leaderboardActionText: {
+    color: HUD_COLORS.lime,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 1.1,
+  },
+  pseudoSavedBlock: {
+    minHeight: 58,
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pseudoSavedLabel: {
+    color: 'rgba(255, 245, 207, 0.56)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 1.3,
+  },
+  pseudoSavedValue: {
+    marginTop: 2,
+    color: HUD_COLORS.lime,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+    letterSpacing: 2,
+  },
+  leaderboardStatusText: {
+    marginTop: 5,
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+  leaderboardErrorText: {
+    marginTop: 7,
+    color: '#ff8a66',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 0.65,
+    textAlign: 'center',
+  },
+  leaderboardSmallAction: {
+    marginTop: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: HUD_COLORS.amber,
+  },
+  leaderboardSmallActionText: {
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 1,
+  },
+  leaderboardTableHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    marginTop: 12,
+    paddingVertical: 7,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(0, 243, 255, 0.34)',
+  },
+  leaderboardTableHeading: {
+    color: 'rgba(255, 245, 207, 0.56)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 1,
+  },
+  leaderboardRankColumn: {
+    width: 42,
+    textAlign: 'center',
+  },
+  leaderboardPseudoColumn: {
+    flex: 1,
+    textAlign: 'left',
+  },
+  leaderboardPointsColumn: {
+    width: 84,
+    textAlign: 'right',
+  },
+  leaderboardList: {
+    width: '100%',
+    maxHeight: 230,
+  },
+  leaderboardListContent: {
+    paddingBottom: 3,
+  },
+  leaderboardRow: {
+    width: '100%',
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+  },
+  leaderboardRank: {
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+  },
+  leaderboardPseudo: {
+    color: '#fff5cf',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  leaderboardPoints: {
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 0.6,
+  },
+  leaderboardEmpty: {
+    paddingVertical: 24,
+    color: 'rgba(255, 245, 207, 0.5)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  leaderboardResumeAction: {
+    width: '100%',
+    minHeight: 38,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 243, 255, 0.6)',
+    backgroundColor: 'rgba(0, 243, 255, 0.08)',
+  },
+  leaderboardResumeText: {
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 1.2,
   },
   enemyBanner: {
     borderColor: HUD_COLORS.lime,
@@ -11276,8 +14502,8 @@ const placeSpeedBoostsInOpenSurface = (
 };
 
 const diamondCountForLevel = (level: number) => {
-  if (isBossSector(level)) return 0;
-  return level <= 2 ? 0 : level <= 12 ? 1 : level <= 24 ? 2 : 1;
+  if (level === TUTORIAL_SECTOR || isBossSector(level)) return 0;
+  return 5 + ((level * 7) % 6);
 };
 
 const enemyFrameIndex = (enemy: Enemy) => Math.floor(enemy.phase * 7) % 6;
@@ -13009,6 +16235,8 @@ export default function GameScreen() {
     sectorTransitionVictoryPlayer.volume = 0.9;
     sevenFireShotPlayer.muted = false;
     sevenFireShotPlayer.volume = 0.55;
+    dcaEngineChargePlayer.muted = false;
+    dcaEngineChargePlayer.volume = 0.48;
     audioSessionReadyRef.current = setAudioModeAsync({
       allowsRecording: false,
       playsInSilentMode: true,
@@ -13026,6 +16254,7 @@ export default function GameScreen() {
     sectorTransitionVictoryPlayer,
     shieldLossExplosionPlayer,
     sevenFireShotPlayer,
+    dcaEngineChargePlayer,
   ]);
 
   const playPickupChime = useCallback(() => {
@@ -15713,7 +18942,7 @@ export default function GameScreen() {
                 {banner.kind === 'RECORD'
                   ? 'NOUVEAU RECORD !'
                   : banner.kind === 'DIAMOND'
-                    ? 'BONUS DIAMANT CAPTURÉ'
+                    ? 'BONUS ÉCLAT CAPTURÉ'
                     : banner.kind === 'BOMB'
                       ? 'BOMBE NEUTRALISÉE'
                     : banner.kind === 'SHIELD'
