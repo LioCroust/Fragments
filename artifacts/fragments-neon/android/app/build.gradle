@@ -4,6 +4,18 @@ apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def apkBuildNumber = (System.getenv("APK_BUILD_NUMBER") ?: "1").toInteger()
+def generatedBuildNumberFile = new File(projectRoot, "build-number.generated.ts")
+
+// Expo Constants reads the static app.json manifest during the JS bundle.
+// Generate a tiny source module from the same value Gradle uses for the APK
+// so the welcome screen always shows the native GitHub Actions run number.
+tasks.whenTaskAdded { task ->
+    if (task.name == "createBundleReleaseJsAndAssets") {
+        task.doFirst {
+            generatedBuildNumberFile.text = "// Generated for this Android release bundle.\nexport const RELEASE_BUILD_NUMBER = '1.0.${apkBuildNumber}';\n"
+        }
+    }
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
