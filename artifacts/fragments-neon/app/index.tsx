@@ -379,7 +379,10 @@ const backgroundSourceForLevel = (level: number) => (
 const APP_VERSION = __DEV__ ? '1.0.16' : RELEASE_BUILD_NUMBER;
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const PLAYER_PSEUDO_STORAGE_KEY = 'fragments-neon:player-pseudo';
-const LEADERBOARD_API_URL = String(process.env.EXPO_PUBLIC_LEADERBOARD_API_URL ?? '').replace(/\/+$/, '');
+const DEFAULT_LEADERBOARD_API_URL = 'https://fragments-leaderboard.cksl1970.workers.dev';
+const LEADERBOARD_API_URL = String(
+  process.env.EXPO_PUBLIC_LEADERBOARD_API_URL || DEFAULT_LEADERBOARD_API_URL,
+).replace(/\/+$/, '');
 const LEADERBOARD_LIMIT = 10;
 const GAME_SAVE_STORAGE_KEY = 'fragments-neon:game-progress:v1';
 const LAST_PLAYED_SECTOR_STORAGE_KEY = 'fragments-neon:last-played-sector:v1';
@@ -867,6 +870,7 @@ const leaderboardEntriesFromPayload = (payload: unknown): LeaderboardEntry[] => 
 type LeaderboardOverlayProps = {
   score: number;
   bestScore: number;
+  resumeSector: number;
   entries: LeaderboardEntry[];
   pseudoDraft: string;
   playerPseudo: string;
@@ -876,6 +880,7 @@ type LeaderboardOverlayProps = {
   onSubmit: () => void;
   onRetry: () => void;
   onResume: () => void;
+  onRestartSectorOne: () => void;
 };
 
 const LeaderboardTrophy = () => (
@@ -901,6 +906,7 @@ const LeaderboardTrophy = () => (
 const LeaderboardOverlay = ({
   score,
   bestScore,
+  resumeSector,
   entries,
   pseudoDraft,
   playerPseudo,
@@ -910,6 +916,7 @@ const LeaderboardOverlay = ({
   onSubmit,
   onRetry,
   onResume,
+  onRestartSectorOne,
 }: LeaderboardOverlayProps) => {
   const isSubmitting = status === 'submitting';
   return (
@@ -1026,10 +1033,21 @@ const LeaderboardOverlay = ({
           style={styles.leaderboardResumeAction}
           onPress={onResume}
           accessibilityRole="button"
-          accessibilityLabel="Reprendre la partie"
+          accessibilityLabel={`Reprendre au secteur ${resumeSector}`}
           testID="leaderboard-resume"
         >
-          <Text style={styles.leaderboardResumeText}>REPRENDRE AU SECTEUR</Text>
+          <Text style={styles.leaderboardResumeText}>
+            REPRENDRE SECTEUR {String(resumeSector).padStart(2, '0')}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.leaderboardRestartAction}
+          onPress={onRestartSectorOne}
+          accessibilityRole="button"
+          accessibilityLabel="Recommencer au secteur 1"
+          testID="leaderboard-restart-sector-one"
+        >
+          <Text style={styles.leaderboardRestartText}>RECOMMENCER SECTEUR 01</Text>
         </Pressable>
       </View>
     </View>
@@ -5665,8 +5683,9 @@ export default function GameScreen() {
   const bannerTranslateX = useRef(new Animated.Value(-520)).current;
   const nativeBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameOverSectorRef = useRef<number | null>(null);
+  const gameOverLeaderboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaderboardSubmitAttemptRef = useRef<string | null>(null);
-  const resumeFromGameOverRef = useRef<() => void>(() => undefined);
+  const openLeaderboardRef = useRef<() => void>(() => undefined);
   const initialLoadingRevealStartedRef = useRef(false);
   const initialLoadingTapHandledRef = useRef(false);
   const initialLoadingBannerRef = useRef<Banner | null>(null);
@@ -6109,6 +6128,18 @@ export default function GameScreen() {
     }
   }, []);
 
+  const openLeaderboard = useCallback(() => {
+    if (gameOverSectorRef.current === null) return;
+    if (gameOverLeaderboardTimerRef.current) {
+      clearTimeout(gameOverLeaderboardTimerRef.current);
+      gameOverLeaderboardTimerRef.current = null;
+    }
+    setGameOverStage('LEADERBOARD');
+    void loadLeaderboard();
+  }, [loadLeaderboard]);
+
+  openLeaderboardRef.current = openLeaderboard;
+
   const submitLeaderboardScore = useCallback(async (rawPseudo: string) => {
     const score = Math.max(0, Math.floor(gameOverScore ?? hud.score));
     const normalizedPseudo = normalizePseudo(rawPseudo);
@@ -6164,11 +6195,17 @@ export default function GameScreen() {
   useEffect(() => {
     if (gameOverSector === null) return undefined;
     setGameOverStage('DEATH');
-    const timer = setTimeout(() => {
+    gameOverLeaderboardTimerRef.current = setTimeout(() => {
+      gameOverLeaderboardTimerRef.current = null;
       setGameOverStage('LEADERBOARD');
       void loadLeaderboard();
     }, 3000);
-    return () => clearTimeout(timer);
+    return () => {
+      if (gameOverLeaderboardTimerRef.current) {
+        clearTimeout(gameOverLeaderboardTimerRef.current);
+        gameOverLeaderboardTimerRef.current = null;
+      }
+    };
   }, [gameOverSector, loadLeaderboard]);
 
   useEffect(() => {
@@ -6374,7 +6411,7 @@ export default function GameScreen() {
   }, [dcaEngineChargePlayer]);
 
   const triggerDcaHaptic = useCallback((phase: 'LAUNCH' | 'IMPACT') => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web' || gameRef.current.status !== 'PLAYING') return;
     const notificationType = phase === 'LAUNCH'
       ? Haptics.NotificationFeedbackType.Warning
       : Haptics.NotificationFeedbackType.Success;
@@ -6383,7 +6420,9 @@ export default function GameScreen() {
       : Haptics.ImpactFeedbackStyle.Medium;
     void (async () => {
       try {
+        if (gameRef.current.status !== 'PLAYING') return;
         await Haptics.notificationAsync(notificationType);
+        if (gameRef.current.status !== 'PLAYING') return;
         await Haptics.impactAsync(impactStyle);
       } catch (error: unknown) {
         if (__DEV__) console.warn('Unable to trigger DCA haptic', error);
@@ -6965,18 +7004,22 @@ export default function GameScreen() {
     }
   }, [enqueueBanner, rememberLastPlayedSector]);
 
-  const resumeFromGameOver = useCallback(() => {
+  const resumeFromGameOverAt = useCallback((requestedLevel: number) => {
     const game = gameRef.current;
-    const resumeLevel = gameOverSectorRef.current;
     if (
-      resumeLevel === null
+      gameOverSectorRef.current === null
       || !game.initialized
       || game.status !== 'GAME_OVER'
     ) {
       return;
     }
+    const resumeLevel = Math.round(clamp(requestedLevel, TUTORIAL_SECTOR, MAX_LEVEL));
 
     audioUnlockedRef.current = true;
+    if (gameOverLeaderboardTimerRef.current) {
+      clearTimeout(gameOverLeaderboardTimerRef.current);
+      gameOverLeaderboardTimerRef.current = null;
+    }
     gameOverSectorRef.current = null;
     leaderboardSubmitAttemptRef.current = null;
     setGameOverSector(null);
@@ -7001,7 +7044,14 @@ export default function GameScreen() {
     });
   }, [bannerTranslateX, enqueueBanner, resetGame]);
 
-  resumeFromGameOverRef.current = resumeFromGameOver;
+  const resumeFromGameOver = useCallback(() => {
+    const resumeLevel = gameOverSectorRef.current;
+    if (resumeLevel !== null) resumeFromGameOverAt(resumeLevel);
+  }, [resumeFromGameOverAt]);
+
+  const restartFromGameOverAtSectorOne = useCallback(() => {
+    resumeFromGameOverAt(TUTORIAL_SECTOR);
+  }, [resumeFromGameOverAt]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
@@ -7950,11 +8000,11 @@ export default function GameScreen() {
       ),
       onPanResponderGrant: () => {
         arenaPanResponderActiveRef.current = true;
-        audioUnlockedRef.current = true;
         if (gameOverSectorRef.current !== null) {
-          resumeFromGameOverRef.current();
+          openLeaderboardRef.current();
           return;
         }
+        audioUnlockedRef.current = true;
         tutorialSwipeGestureDirectionRef.current = null;
       },
       onPanResponderMove: (_, gesture) => {
@@ -11164,24 +11214,6 @@ export default function GameScreen() {
         pointerEvents="none"
         collapsable={false}
       >
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: -renderMargin,
-            top: -renderMargin,
-            width: expandedWidth,
-            height: renderMargin + arenaBounds.top,
-            overflow: 'hidden',
-          }}
-        >
-          <RNImage
-            source={backgroundSourceForLevel(snapshot.level)}
-            style={StyleSheet.absoluteFill}
-            resizeMode="stretch"
-            accessibilityLabel={`Prolongement du décor du secteur ${snapshot.level}`}
-          />
-        </View>
         {SKIA_DYNAMIC_RENDER_ENABLED && (
           <SkiaDynamicArena
             snapshot={snapshot}
@@ -11726,10 +11758,10 @@ export default function GameScreen() {
       {gameOverSector !== null && gameOverStage === 'DEATH' && (
         <Pressable
           style={styles.gameOverOverlay}
-          onPress={resumeFromGameOver}
+          onPress={openLeaderboard}
           accessibilityRole="button"
-          accessibilityLabel={`Reprendre au secteur ${gameOverSector}`}
-          testID="game-over-resume"
+          accessibilityLabel="Ouvrir le classement"
+          testID="game-over-leaderboard"
         >
           <View style={styles.gameOverPanel}>
             <View style={styles.gameOverRule} />
@@ -11750,6 +11782,7 @@ export default function GameScreen() {
         <LeaderboardOverlay
           score={gameOverScore ?? hud.score}
           bestScore={gameOverBestScore ?? hud.bestScore}
+          resumeSector={gameOverSector}
           entries={leaderboardEntries}
           pseudoDraft={pseudoDraft}
           playerPseudo={playerPseudo}
@@ -11763,6 +11796,7 @@ export default function GameScreen() {
              void submitLeaderboardScore(pseudoDraft || playerPseudo);
           }}
           onResume={resumeFromGameOver}
+          onRestartSectorOne={restartFromGameOverAtSectorOne}
         />
       )}
 
@@ -11999,7 +12033,9 @@ const nativeBannerCopy = (banner: Banner) => {
           ? 'ZONE À SÉCURISER'
           : `TUTORIEL ${step}/5`,
       subtitle: step === 5
-        ? banner.tutorialCompleted ? '✓ ENNEMI DÉTRUIT' : 'FERME UNE ZONE VIDE POUR TIRER'
+        ? banner.tutorialCompleted
+          ? '✓ ENNEMI DÉTRUIT  •  ZONE SÉCURISÉE À 80%'
+          : 'FERME UNE ZONE VIDE POUR TIRER'
         : step === 4
           ? banner.tutorialCompleted ? '✓ ENNEMI CAPTURÉ' : 'CAPTURE LE VAISSEAU ENNEMI'
           : step === 3
@@ -13361,6 +13397,22 @@ const styles = StyleSheet.create({
   },
   leaderboardResumeText: {
     color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 1.2,
+  },
+  leaderboardRestartAction: {
+    width: '100%',
+    minHeight: 38,
+    marginTop: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 176, 46, 0.7)',
+    backgroundColor: 'rgba(255, 176, 46, 0.08)',
+  },
+  leaderboardRestartText: {
+    color: HUD_COLORS.amber,
     fontFamily: 'Inter_700Bold',
     fontSize: 10,
     letterSpacing: 1.2,
