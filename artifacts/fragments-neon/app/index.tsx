@@ -22,6 +22,7 @@ import Svg, {
   G,
   Image as SvgImage,
   Line,
+  Path,
   Polygon,
   Polyline,
   Rect,
@@ -36,6 +37,7 @@ import {
   useImage as useSkiaImage,
 } from '@shopify/react-native-skia';
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer } from 'expo-audio';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Asset } from 'expo-asset';
@@ -55,6 +57,10 @@ const PERIMETER_HORIZONTAL_INSET_CELLS = 0.85;
 // Keep a little more cockpit breathing room above and below the playfield on
 // every sector, including the tutorial.
 const PERIMETER_VERTICAL_INSET_CELLS = 1.35;
+// The visible top edge sits 10 px lower than the nominal vertical inset.
+// All gameplay geometry reads this same offset through perimeterBounds so the
+// launch base, drone entry point, collisions, and capture calculations stay aligned.
+const PERIMETER_TOP_OFFSET_PX = 10;
 const PERIMETER_STROKE_WIDTH = 3;
 const PLAYER_RADIUS_CELLS = 0.82;
 const ZONE_COLOR = '#00f3ff';
@@ -63,13 +69,20 @@ const CAPTURED_ZONE_OPACITY = 0.15;
 const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
+const EXTERNAL_LIFE_LOSS_PER_SECOND = 0.01;
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
 const TUTORIAL_SECTOR = 0;
 const TUTORIAL_SWIPE_REPETITIONS = 2;
-// Keep the sector strip and tutorial controls available in the APK as well as
-// during development. They are part of the game's tutorial/navigation UI.
-const DEBUG_SECTOR_SELECTOR_ENABLED = true;
+// Expo Go and the web keep the sector shortcuts and performance readout for
+// testing. Android builds outside Expo Go report either Bare or Standalone
+// through expo-constants, so both represent the installed APK here.
+const IS_PACKAGED_ANDROID_APP = (
+  Platform.OS === 'android'
+  && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient
+);
+const DEBUG_SECTOR_SELECTOR_ENABLED = !IS_PACKAGED_ANDROID_APP;
+const FPS_READOUT_ENABLED = !IS_PACKAGED_ANDROID_APP;
 const SKIA_DYNAMIC_RENDER_ENABLED = true;
 const NATIVE_PICTURE_PUBLISH_INTERVAL_MS = 16;
 const NATIVE_GAME_LOOP_INTERVAL_MS = 1000 / 60;
@@ -359,6 +372,13 @@ const LEVEL_BACKGROUND_SOURCES: Record<number, any> = {
 const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
+// Release APKs use the native versionName, which is derived from the GitHub
+// Actions run number in android/app/build.gradle (1.0.16, 1.0.17, ...).
+// Keep the development label explicit because Expo web can serve a cached
+// manifest version independently from the static app.json file.
+const APP_VERSION = __DEV__
+  ? '1.0.16'
+  : String(Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '1.0.16');
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const PLAYER_PSEUDO_STORAGE_KEY = 'fragments-neon:player-pseudo';
 const LEADERBOARD_API_URL = String(process.env.EXPO_PUBLIC_LEADERBOARD_API_URL ?? '').replace(/\/+$/, '');
@@ -746,6 +766,7 @@ type Game = {
   mode: Mode;
   score: number;
   shields: number;
+  externalLife: number;
   capturedArea: number;
   totalPlayableArea: number;
   pendingCaptureArea: number;
@@ -788,6 +809,7 @@ type Hud = {
   score: number;
   bestScore: number;
   shields: number;
+  externalLife: number;
   diamonds: number;
   speedBoostCharges: number;
   capture: number;
@@ -800,6 +822,7 @@ type LeaderboardEntry = {
   rank: number;
   pseudo: string;
   score: number;
+  sector: number | null;
 };
 
 type LeaderboardStatus = 'idle' | 'loading' | 'ready' | 'submitting' | 'submitted' | 'error';
@@ -823,14 +846,18 @@ const leaderboardEntriesFromPayload = (payload: unknown): LeaderboardEntry[] => 
   return source
     .map((entry, index) => {
       if (!entry || typeof entry !== 'object') return null;
-      const item = entry as { pseudo?: unknown; score?: unknown };
+      const item = entry as { pseudo?: unknown; score?: unknown; sector?: unknown };
       const pseudo = normalizePseudo(String(item.pseudo ?? ''));
       const score = Number(item.score);
+      const sector = Number(item.sector);
       if (!pseudo || !Number.isFinite(score) || score < 0) return null;
       return {
         rank: index + 1,
         pseudo,
         score: Math.floor(score),
+        sector: Number.isSafeInteger(sector) && sector >= 0 && sector <= MAX_LEVEL
+          ? sector
+          : null,
       };
     })
     .filter((entry): entry is LeaderboardEntry => entry !== null)
@@ -853,6 +880,26 @@ type LeaderboardOverlayProps = {
   onResume: () => void;
 };
 
+const LeaderboardTrophy = () => (
+  <Svg width={26} height={26} viewBox="0 0 26 26" accessibilityLabel="Coupe en or">
+    <Path
+      d="M7 4h12l-1.8 7.2c-.5 2-1.8 3.3-4.2 4.1-2.4-.8-3.7-2.1-4.2-4.1L7 4Z"
+      fill={HUD_COLORS.amber}
+      stroke="#ffe08a"
+      strokeWidth="0.8"
+    />
+    <Path
+      d="M7 6H3.5c.2 3.9 1.8 6 5.2 6.4M19 6h3.5c-.2 3.9-1.8 6-5.2 6.4"
+      fill="none"
+      stroke={HUD_COLORS.amber}
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+    <Rect x="11.2" y="15" width="3.6" height="3.6" fill={HUD_COLORS.amber} />
+    <Rect x="8.2" y="18.6" width="9.6" height="2.2" rx="0.8" fill="#ffe08a" />
+  </Svg>
+);
+
 const LeaderboardOverlay = ({
   score,
   bestScore,
@@ -867,7 +914,6 @@ const LeaderboardOverlay = ({
   onResume,
 }: LeaderboardOverlayProps) => {
   const isSubmitting = status === 'submitting';
-  const needsPseudo = !playerPseudo;
   return (
     <View style={styles.leaderboardOverlay}>
       <View style={styles.leaderboardPanel}>
@@ -878,64 +924,56 @@ const LeaderboardOverlay = ({
           MEILLEUR SCORE : {String(bestScore).padStart(6, '0')}
         </Text>
 
-        {needsPseudo ? (
-          <View style={styles.pseudoEntryBlock}>
-            <Text style={styles.pseudoPrompt}>ENTRE TON PSEUDO POUR ÊTRE CLASSÉ</Text>
-            <TextInput
-              value={pseudoDraft}
-              onChangeText={onPseudoChange}
-              style={styles.pseudoInput}
-              maxLength={8}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              placeholder="3 À 8 CARACTÈRES"
-              placeholderTextColor="rgba(255, 245, 207, 0.38)"
-              selectionColor={HUD_COLORS.cyan}
-              returnKeyType="done"
-              onSubmitEditing={onSubmit}
-              accessibilityLabel="Pseudo du joueur"
-              testID="leaderboard-pseudo-input"
-            />
-            <Pressable
-              style={[styles.leaderboardAction, isSubmitting && styles.leaderboardActionDisabled]}
-              onPress={onSubmit}
-              disabled={isSubmitting}
-              accessibilityRole="button"
-              accessibilityLabel="Enregistrer le score"
-              testID="leaderboard-submit"
-            >
-              <Text style={styles.leaderboardActionText}>
-                {isSubmitting ? 'ENVOI…' : 'ENREGISTRER LE SCORE'}
-              </Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.pseudoSavedBlock}>
-            <Text style={styles.pseudoSavedLabel}>PSEUDO</Text>
-            <Text style={styles.pseudoSavedValue}>{playerPseudo}</Text>
-            <Text style={styles.leaderboardStatusText}>
-              {isSubmitting ? 'ENVOI DU SCORE…' : message || 'SCORE PRÊT À ÊTRE ENVOYÉ'}
+        <View style={styles.pseudoEntryBlock}>
+          <Text style={styles.pseudoPrompt}>
+            {playerPseudo ? 'PSEUDO DU CLASSEMENT — MODIFIABLE' : 'ENTRE TON PSEUDO POUR ÊTRE CLASSÉ'}
+          </Text>
+          <TextInput
+            value={pseudoDraft}
+            onChangeText={onPseudoChange}
+            style={styles.pseudoInput}
+            maxLength={8}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            placeholder="3 À 8 CARACTÈRES"
+            placeholderTextColor="rgba(255, 245, 207, 0.38)"
+            selectionColor={HUD_COLORS.cyan}
+            returnKeyType="done"
+            onSubmitEditing={onSubmit}
+            accessibilityLabel="Pseudo du joueur"
+            testID="leaderboard-pseudo-input"
+          />
+          <Pressable
+            style={[styles.leaderboardAction, isSubmitting && styles.leaderboardActionDisabled]}
+            onPress={onSubmit}
+            disabled={isSubmitting}
+            accessibilityRole="button"
+            accessibilityLabel="Enregistrer le score"
+            testID="leaderboard-submit"
+          >
+            <Text style={styles.leaderboardActionText}>
+              {isSubmitting ? 'ENVOI…' : 'ENREGISTRER LE SCORE'}
             </Text>
-            {status === 'error' ? (
-              <Pressable
-                style={styles.leaderboardSmallAction}
-                onPress={onRetry}
-                accessibilityRole="button"
-                accessibilityLabel="Réessayer l'envoi du score"
-              >
-                <Text style={styles.leaderboardSmallActionText}>RÉESSAYER</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        )}
-
-        {message && needsPseudo ? (
-          <Text style={styles.leaderboardErrorText}>{message}</Text>
-        ) : null}
+          </Pressable>
+          <Text style={styles.leaderboardStatusText}>
+            {isSubmitting ? 'ENVOI DU SCORE…' : message || 'SCORE PRÊT À ÊTRE ENVOYÉ'}
+          </Text>
+          {status === 'error' ? (
+            <Pressable
+              style={styles.leaderboardSmallAction}
+              onPress={onRetry}
+              accessibilityRole="button"
+              accessibilityLabel="Réessayer l'envoi du score"
+            >
+              <Text style={styles.leaderboardSmallActionText}>RÉESSAYER</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.leaderboardTableHeader}>
           <Text style={[styles.leaderboardTableHeading, styles.leaderboardRankColumn]}>#</Text>
           <Text style={[styles.leaderboardTableHeading, styles.leaderboardPseudoColumn]}>PSEUDO</Text>
+          <Text style={[styles.leaderboardTableHeading, styles.leaderboardSectorColumn]}>SECTEUR</Text>
           <Text style={[styles.leaderboardTableHeading, styles.leaderboardPointsColumn]}>SCORE</Text>
         </View>
         <ScrollView
@@ -945,14 +983,37 @@ const LeaderboardOverlay = ({
           nestedScrollEnabled
         >
           {entries.length > 0 ? entries.map((entry) => (
-            <View key={`${entry.rank}-${entry.pseudo}`} style={styles.leaderboardRow}>
+            <View
+              key={`${entry.rank}-${entry.pseudo}`}
+              style={[
+                styles.leaderboardRow,
+                entry.rank === 1 && styles.leaderboardChampionRow,
+              ]}
+            >
               <Text style={[styles.leaderboardRank, styles.leaderboardRankColumn]}>
                 {String(entry.rank).padStart(2, '0')}
               </Text>
-              <Text style={[styles.leaderboardPseudo, styles.leaderboardPseudoColumn]}>
-                {entry.pseudo}
+              <View style={[styles.leaderboardPseudoColumn, styles.leaderboardPseudoCell]}>
+                {entry.rank === 1 && <LeaderboardTrophy />}
+                <Text style={[
+                  styles.leaderboardPseudo,
+                  entry.rank === 1 && styles.leaderboardChampionPseudo,
+                ]}>
+                  {entry.pseudo}
+                </Text>
+              </View>
+              <Text style={[
+                styles.leaderboardSector,
+                styles.leaderboardSectorColumn,
+                entry.rank === 1 && styles.leaderboardChampionSector,
+              ]}>
+                {entry.sector === null ? '—' : String(entry.sector).padStart(2, '0')}
               </Text>
-              <Text style={[styles.leaderboardPoints, styles.leaderboardPointsColumn]}>
+              <Text style={[
+                styles.leaderboardPoints,
+                styles.leaderboardPointsColumn,
+                entry.rank === 1 && styles.leaderboardChampionPoints,
+              ]}>
                 {String(entry.score).padStart(6, '0')}
               </Text>
             </View>
@@ -1138,6 +1199,7 @@ const serializeGame = (game: Game, now: number): PersistedGame => ({
   mode: game.mode,
   score: game.score,
   shields: game.shields,
+  externalLife: game.externalLife,
   capturedArea: game.capturedArea,
   totalPlayableArea: game.totalPlayableArea,
   pendingCaptureArea: game.pendingCaptureArea,
@@ -1386,7 +1448,7 @@ const pointsToString = (points: Point[]) => points.map((point) => `${point.x},${
 
 const perimeterBounds = (width: number, height: number, cell: number) => ({
   left: cell * PERIMETER_HORIZONTAL_INSET_CELLS,
-  top: cell * PERIMETER_VERTICAL_INSET_CELLS,
+  top: cell * PERIMETER_VERTICAL_INSET_CELLS + PERIMETER_TOP_OFFSET_PX,
   right: width - cell * PERIMETER_HORIZONTAL_INSET_CELLS,
   bottom: height - cell * PERIMETER_VERTICAL_INSET_CELLS,
 });
@@ -1792,6 +1854,7 @@ const perimeterEntryContact = (
 const playerBodyRadius = (cell: number) => cell * 0.34;
 const playerSpriteSize = (cell: number) => ({ width: cell * 1.18, height: cell * 1.68 });
 const OUTER_STOP_GAP = 5;
+const OUTER_TOP_BAND_CELLS = 0.46;
 const LAUNCH_BASE_FADE_DURATION_SECONDS = 3.2;
 const LAUNCH_BASE_DEPARTURE_DISTANCE_CELLS = 0.18;
 
@@ -1824,12 +1887,11 @@ const playerOuterBounds = (
   const physicalTop = radius + OUTER_STOP_GAP;
   const physicalBottom = arenaHeight - radius - OUTER_STOP_GAP;
   return {
-    // The outer band is limited to the drone's own half-length. This keeps
-    // the nose/tail from reaching the HUD while retaining a real safe band
-    // outside the blue perimeter on every side.
+    // Keep a smaller top band so the drone stays visually close to the blue
+    // frame instead of climbing into the cockpit HUD.
     left: Math.max(physicalLeft, bounds.left - spriteSize.width * 0.5),
     right: Math.min(physicalRight, bounds.right + spriteSize.width * 0.5),
-    top: Math.max(physicalTop, bounds.top - spriteSize.height * 0.5),
+    top: Math.max(physicalTop, bounds.top - cell * OUTER_TOP_BAND_CELLS),
     bottom: Math.min(physicalBottom, bounds.bottom + spriteSize.height * 0.5),
   };
 };
@@ -5321,7 +5383,8 @@ const DebugSectorSelector = ({
   onSkipTutorial: () => void;
   bottomInset: number;
 }) => {
-  if (!DEBUG_SECTOR_SELECTOR_ENABLED) return null;
+  const showSectorShortcuts = DEBUG_SECTOR_SELECTOR_ENABLED;
+  if (!showSectorShortcuts && currentSector !== TUTORIAL_SECTOR) return null;
   const tutorialInstruction = (
     tutorialStep === 1
       ? 'SWIPES 4 DIRECTIONS'
@@ -5358,43 +5421,45 @@ const DebugSectorSelector = ({
           </View>
         </View>
       )}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.debugSectorContent}
-      >
-        {Array.from({ length: MAX_LEVEL + 1 }, (_, index) => {
-          const sector = index;
-          const selected = sector === currentSector;
-          return (
-            <Pressable
-              key={`debug-sector-${sector}`}
-              style={[
-                styles.debugSectorButton,
-                selected && styles.debugSectorButtonSelected,
-              ]}
-              onPress={() => onSelect(sector)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                sector === TUTORIAL_SECTOR
-                  ? 'Téléporter au tutoriel secteur 0'
-                  : `Téléporter au secteur ${sector}`
-              }
-              accessibilityState={{ selected }}
-              testID={`debug-sector-${sector}`}
-            >
-              <Text
+      {showSectorShortcuts && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.debugSectorContent}
+        >
+          {Array.from({ length: MAX_LEVEL + 1 }, (_, index) => {
+            const sector = index;
+            const selected = sector === currentSector;
+            return (
+              <Pressable
+                key={`debug-sector-${sector}`}
                 style={[
-                  styles.debugSectorButtonText,
-                  selected && styles.debugSectorButtonTextSelected,
+                  styles.debugSectorButton,
+                  selected && styles.debugSectorButtonSelected,
                 ]}
+                onPress={() => onSelect(sector)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  sector === TUTORIAL_SECTOR
+                    ? 'Téléporter au tutoriel secteur 0'
+                    : `Téléporter au secteur ${sector}`
+                }
+                accessibilityState={{ selected }}
+                testID={`debug-sector-${sector}`}
               >
-                {sector}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <Text
+                  style={[
+                    styles.debugSectorButtonText,
+                    selected && styles.debugSectorButtonTextSelected,
+                  ]}
+                >
+                  {sector}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 };
@@ -5491,6 +5556,7 @@ export default function GameScreen() {
     mode: 'SLOW',
     score: 0,
     shields: 3,
+    externalLife: 1,
     capturedArea: 0,
     totalPlayableArea: 1,
     pendingCaptureArea: 0,
@@ -5511,6 +5577,7 @@ export default function GameScreen() {
     score: 0,
     bestScore: 0,
     shields: 3,
+    externalLife: 1,
     diamonds: 0,
     speedBoostCharges: STARTING_SPEED_BOOST_CHARGES,
     capture: 0,
@@ -5744,10 +5811,40 @@ export default function GameScreen() {
   });
   const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
   const audioUnlockedRef = useRef(Platform.OS !== 'web');
+  const audioPlaybackTokenRef = useRef(0);
+
+  const stopGameplayAudio = useCallback(() => {
+    audioUnlockedRef.current = false;
+    audioPlaybackTokenRef.current += 1;
+    pickupChimePlayer.pause();
+    diamondCapturePlayer.pause();
+    shieldLossExplosionPlayer.pause();
+    sectorTransitionVictoryPlayer.pause();
+    sevenFireShotPlayer.pause();
+    dcaEngineChargePlayer.pause();
+    dcaShockwavePlayer.pause();
+    void pickupChimePlayer.seekTo(0).catch(() => undefined);
+    void diamondCapturePlayer.seekTo(0).catch(() => undefined);
+    void shieldLossExplosionPlayer.seekTo(0).catch(() => undefined);
+    void sectorTransitionVictoryPlayer.seekTo(0).catch(() => undefined);
+    void sevenFireShotPlayer.seekTo(0).catch(() => undefined);
+    void dcaEngineChargePlayer.seekTo(0).catch(() => undefined);
+    void dcaShockwavePlayer.seekTo(0).catch(() => undefined);
+  }, [
+    diamondCapturePlayer,
+    dcaEngineChargePlayer,
+    dcaShockwavePlayer,
+    pickupChimePlayer,
+    sectorTransitionVictoryPlayer,
+    sevenFireShotPlayer,
+    shieldLossExplosionPlayer,
+  ]);
 
   const playShieldLossExplosion = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       shieldLossExplosionPlayer.muted = false;
       shieldLossExplosionPlayer.volume = 0.92;
       try {
@@ -5755,6 +5852,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       shieldLossExplosionPlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play shield loss explosion', error);
@@ -5763,7 +5861,9 @@ export default function GameScreen() {
 
   const playSectorTransition = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       sectorTransitionVictoryPlayer.muted = false;
       sectorTransitionVictoryPlayer.volume = 0.9;
       try {
@@ -5771,6 +5871,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       sectorTransitionVictoryPlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play sector transition sound', error);
@@ -5779,7 +5880,9 @@ export default function GameScreen() {
 
   const playDiamondCapture = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       diamondCapturePlayer.muted = false;
       diamondCapturePlayer.volume = 0.88;
       try {
@@ -5787,6 +5890,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       diamondCapturePlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play diamond capture sound', error);
@@ -6035,12 +6139,20 @@ export default function GameScreen() {
       if (!response.ok) {
         throw new Error(`score-http-${response.status}`);
       }
+      const responseRecord = payload && typeof payload === 'object'
+        ? payload as { improved?: unknown }
+        : {};
+      const improved = responseRecord.improved !== false;
       await AsyncStorage.setItem(PLAYER_PSEUDO_STORAGE_KEY, normalizedPseudo);
       setPlayerPseudo(normalizedPseudo);
       setPseudoDraft(normalizedPseudo);
       setLeaderboardEntries(leaderboardEntriesFromPayload(payload));
       setLeaderboardStatus('submitted');
-      setLeaderboardMessage('SCORE ENREGISTRÉ');
+      setLeaderboardMessage(
+        improved
+          ? 'SCORE ENREGISTRÉ'
+          : 'PSEUDO ENREGISTRÉ — MEILLEUR SCORE CONSERVÉ',
+      );
     } catch (error: unknown) {
       setLeaderboardStatus('error');
       setLeaderboardMessage('ENVOI IMPOSSIBLE — RÉESSAYE DANS UN INSTANT');
@@ -6186,7 +6298,9 @@ export default function GameScreen() {
 
   const playPickupChime = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       pickupChimePlayer.muted = false;
       pickupChimePlayer.volume = 0.78;
       try {
@@ -6194,6 +6308,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       pickupChimePlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play pickup chime', error);
@@ -6202,7 +6317,9 @@ export default function GameScreen() {
 
   const playSevenFireShot = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       sevenFireShotPlayer.muted = false;
       sevenFireShotPlayer.volume = 0.55;
       try {
@@ -6210,6 +6327,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       sevenFireShotPlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play Seven fire shot', error);
@@ -6218,7 +6336,9 @@ export default function GameScreen() {
 
   const playDcaShockwave = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       dcaShockwavePlayer.muted = false;
       dcaShockwavePlayer.volume = 0.88;
       try {
@@ -6226,6 +6346,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       dcaShockwavePlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play DCA shockwave', error);
@@ -6234,7 +6355,9 @@ export default function GameScreen() {
 
   const playDcaEngineCharge = useCallback(() => {
     if (!audioUnlockedRef.current) return;
+    const playbackToken = audioPlaybackTokenRef.current;
     void audioSessionReadyRef.current.then(async () => {
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       dcaEngineChargePlayer.muted = false;
       dcaEngineChargePlayer.volume = 0.48;
       try {
@@ -6242,6 +6365,7 @@ export default function GameScreen() {
       } catch {
         // A freshly loaded native player is already positioned at the start.
       }
+      if (!audioUnlockedRef.current || playbackToken !== audioPlaybackTokenRef.current) return;
       dcaEngineChargePlayer.play();
     }).catch((error: unknown) => {
       if (__DEV__) console.warn('Unable to play DCA engine charge', error);
@@ -6607,7 +6731,9 @@ export default function GameScreen() {
 
     const previousScore = preserveStats ? g.score : 0;
     const previousShields = preserveStats ? g.shields : 3;
-    const previousInvincibleUntil = preserveStats && resetBoard
+    // A sector transition starts a fresh board. Temporary capture protection
+    // must not cross that boundary; same-sector layout resets may preserve it.
+    const previousInvincibleUntil = preserveStats && !resetBoard
       ? (g.invincibleUntil ?? 0)
       : 0;
     const previousSpeedBoostUntil = preserveStats && !resetBoard
@@ -6788,6 +6914,7 @@ export default function GameScreen() {
       mode: 'SLOW',
       score: previousScore,
       shields: previousShields,
+      externalLife: 1,
       capturedArea: previousCapturedArea,
       totalPlayableArea,
       pendingCaptureArea: 0,
@@ -6815,6 +6942,7 @@ export default function GameScreen() {
       score: previousScore,
       bestScore: bestScoreRef.current,
       shields: previousShields,
+      externalLife: 1,
       diamonds: previousDiamondsCollected,
       speedBoostCharges: previousSpeedBoostCharges,
       capture: preserveStats && !resetBoard
@@ -6847,6 +6975,7 @@ export default function GameScreen() {
       return;
     }
 
+    audioUnlockedRef.current = true;
     gameOverSectorRef.current = null;
     leaderboardSubmitAttemptRef.current = null;
     setGameOverSector(null);
@@ -7037,6 +7166,9 @@ export default function GameScreen() {
     game.mode = saved.mode;
     game.score = Math.max(0, saved.score);
     game.shields = Math.max(0, saved.shields);
+    game.externalLife = typeof saved.externalLife === 'number'
+      ? clamp(saved.externalLife, 0, 1)
+      : 1;
     game.totalPlayableArea = totalPlayableArea;
     game.capturedArea = totalPlayableArea * savedAreaRatio;
     game.pendingCaptureArea = totalPlayableArea * savedPendingAreaRatio;
@@ -7059,6 +7191,7 @@ export default function GameScreen() {
       score: game.score,
       bestScore: bestScoreRef.current,
       shields: game.shields,
+      externalLife: game.externalLife,
       diamonds: game.diamondsCollected,
       speedBoostCharges: game.speedBoostCharges,
       capture: Math.min(
@@ -7871,9 +8004,9 @@ export default function GameScreen() {
       }
     };
 
-    const explode = (g: Game, now: number) => {
+    const explode = (g: Game, now: number, ignoreProtection = false) => {
       if (g.status !== 'PLAYING') return;
-      if (playerIsProtected(g, now)) return;
+      if (!ignoreProtection && playerIsProtected(g, now)) return;
       for (let i = 0; i < 72; i += 1) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 300;
@@ -9408,6 +9541,7 @@ export default function GameScreen() {
       // Keep hot-reloaded sessions compatible with the new web state.
       g.spiderThreads ??= [];
       g.invincibleUntil ??= 0;
+      g.externalLife ??= 1;
       g.speedBoosts ??= [];
       g.speedBoostUntil ??= 0;
       g.launchBaseDismissed ??= false;
@@ -9572,6 +9706,7 @@ export default function GameScreen() {
             ));
             gameOverSectorRef.current = resumeLevel;
             const finalScore = Math.max(0, Math.floor(g.score));
+            stopGameplayAudio();
             setGameOverSector(resumeLevel);
             setGameOverScore(finalScore);
             setGameOverBestScore(Math.max(bestScoreRef.current, finalScore));
@@ -10035,6 +10170,19 @@ export default function GameScreen() {
         appendTorchParticles(g);
       }
 
+      const externalBounds = perimeterBounds(g.width, g.height, g.cell);
+      if (g.launchBaseDismissed && !pointInsidePerimeter(g.player, externalBounds)) {
+        g.externalLife = clamp(
+          g.externalLife - dt * EXTERNAL_LIFE_LOSS_PER_SECOND,
+          0,
+          1,
+        );
+        if (g.externalLife <= 0) {
+          explode(g, now, true);
+          return;
+        }
+      }
+
       movePlayerMissiles(g, dt, now);
       if (g.status !== 'PLAYING') {
         recordCollisionTime();
@@ -10100,13 +10248,14 @@ export default function GameScreen() {
       }
 
        context.globalCompositeOperation = 'source-over';
+        const bounds = perimeterBounds(g.width, g.height, g.cell);
         context.globalAlpha = INITIAL_MAP_OPACITY;
        context.fillStyle = ZONE_COLOR;
        context.fillRect(
-         g.cell * PERIMETER_HORIZONTAL_INSET_CELLS,
-         g.cell * PERIMETER_VERTICAL_INSET_CELLS,
-         g.width - g.cell * PERIMETER_HORIZONTAL_INSET_CELLS * 2,
-         g.height - g.cell * PERIMETER_VERTICAL_INSET_CELLS * 2,
+         bounds.left,
+         bounds.top,
+         bounds.right - bounds.left,
+         bounds.bottom - bounds.top,
        );
        context.globalAlpha = CAPTURED_ZONE_LAYER_OPACITY;
        context.fillStyle = ZONE_COLOR;
@@ -10122,8 +10271,6 @@ export default function GameScreen() {
        });
        context.fill();
        context.globalAlpha = 1;
-        const bounds = perimeterBounds(g.width, g.height, g.cell);
-
       context.globalCompositeOperation = 'lighter';
       context.strokeStyle = '#00f3ff';
       context.shadowColor = '#00f3ff';
@@ -10653,11 +10800,13 @@ export default function GameScreen() {
         lastNativeFrameAt = now;
         nativeImmediateFrames += 1;
       }
-      fpsWindowFrames += 1;
-      if (now - fpsWindowStart >= 500) {
-        setFps(Math.round(fpsWindowFrames * 1000 / (now - fpsWindowStart)));
-        fpsWindowFrames = 0;
-        fpsWindowStart = now;
+      if (FPS_READOUT_ENABLED) {
+        fpsWindowFrames += 1;
+        if (now - fpsWindowStart >= 500) {
+          setFps(Math.round(fpsWindowFrames * 1000 / (now - fpsWindowStart)));
+          fpsWindowFrames = 0;
+          fpsWindowStart = now;
+        }
       }
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
@@ -10837,6 +10986,7 @@ export default function GameScreen() {
             score: g.score,
             bestScore: bestScoreRef.current,
             shields: Math.max(0, g.shields),
+             externalLife: clamp(g.externalLife, 0, 1),
             diamonds: g.diamondsCollected,
             speedBoostCharges: Math.max(0, Math.floor(g.speedBoostCharges ?? 0)),
             capture: Math.min(
@@ -10860,6 +11010,7 @@ export default function GameScreen() {
             current.score === nextHud.score
               && current.bestScore === nextHud.bestScore
               && current.shields === nextHud.shields
+               && current.externalLife === nextHud.externalLife
               && current.diamonds === nextHud.diamonds
               && current.speedBoostCharges === nextHud.speedBoostCharges
               && current.capture === nextHud.capture
@@ -10922,6 +11073,7 @@ export default function GameScreen() {
     playSevenFireShot,
     playSectorTransition,
     playShieldLossExplosion,
+     stopGameplayAudio,
     triggerDcaHaptic,
     preloadBackgroundWindow,
     preloadSectorForBanner,
@@ -10950,10 +11102,11 @@ export default function GameScreen() {
         level: snapshot.level,
       });
     }
-    const frameLeft = snapshot.cell * PERIMETER_HORIZONTAL_INSET_CELLS;
-    const frameTop = snapshot.cell * PERIMETER_VERTICAL_INSET_CELLS;
-    const frameWidth = snapshot.width - frameLeft * 2;
-    const frameHeight = snapshot.height - frameTop * 2;
+    const frameBounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
+    const frameLeft = frameBounds.left;
+    const frameTop = frameBounds.top;
+    const frameWidth = frameBounds.right - frameBounds.left;
+    const frameHeight = frameBounds.bottom - frameBounds.top;
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <RNImage
@@ -10987,6 +11140,7 @@ export default function GameScreen() {
     const renderMargin = Math.max(snapshot.cell * 2.2, 28);
     const expandedWidth = snapshot.width + renderMargin * 2;
     const expandedHeight = snapshot.height + renderMargin * 2;
+    const arenaBounds = perimeterBounds(snapshot.width, snapshot.height, snapshot.cell);
     const liveShipCount = snapshot.enemies.filter((enemy) => (
       enemy.kind === 'SHIP'
       && !enemyIsDestroyed(enemy)
@@ -11009,6 +11163,24 @@ export default function GameScreen() {
         pointerEvents="none"
         collapsable={false}
       >
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: -renderMargin,
+            top: -renderMargin,
+            width: expandedWidth,
+            height: renderMargin + arenaBounds.top,
+            overflow: 'hidden',
+          }}
+        >
+          <RNImage
+            source={backgroundSourceForLevel(snapshot.level)}
+            style={StyleSheet.absoluteFill}
+            resizeMode="stretch"
+            accessibilityLabel={`Prolongement du décor du secteur ${snapshot.level}`}
+          />
+        </View>
         {SKIA_DYNAMIC_RENDER_ENABLED && (
           <SkiaDynamicArena
             snapshot={snapshot}
@@ -11065,6 +11237,12 @@ export default function GameScreen() {
   };
 
   const zoneProgress = clamp(hud.capture / LEVEL_CAPTURE_TARGET, 0, 1);
+  const externalLifeProgress = clamp(hud.externalLife, 0, 1);
+  const externalLifeColor = externalLifeProgress <= 0.25
+    ? '#ff3b30'
+    : externalLifeProgress <= 0.5
+      ? '#ff9f1a'
+      : HUD_COLORS.lime;
   const bossSector = isBossSector(hud.level);
   const zoneGlow = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -11437,31 +11615,66 @@ export default function GameScreen() {
 
         <View style={styles.zoneModule} pointerEvents="none">
           <View style={[styles.hudCard, styles.zoneCard]}>
-            <Text style={[styles.cardLabel, { color: HUD_COLORS.amber }]}>ZONE SÉCURISÉE</Text>
-            <View style={styles.zoneValueRow}>
-              <Text style={[styles.zoneValue, { color: HUD_COLORS.amber }]}>{hud.capture}</Text>
-              <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
-              <Text style={[styles.zoneFps, { color: HUD_COLORS.lime }]}>{fps} FPS</Text>
-            </View>
-            <NeonProgressBar
-              progress={zoneProgress}
-              shimmerDuration={500}
-              shimmerDelay={3000}
-              trackStyle={[
-                styles.zoneProgressRail,
-                {
-                  opacity: zoneGlow.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.92, 1],
-                  }),
-                },
-              ]}
-              fillStyle={styles.zoneProgressFill}
-            >
-              <View style={styles.zoneProgressTicks}>
-                {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
+            <View style={styles.zonePrimary}>
+              <Text style={[styles.cardLabel, { color: HUD_COLORS.amber }]}>ZONE SÉCURISÉE</Text>
+              <View style={styles.zoneValueRow}>
+                <Text style={[styles.zoneValue, { color: HUD_COLORS.amber }]}>{hud.capture}</Text>
+                <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
+                {FPS_READOUT_ENABLED && (
+                  <Text style={[styles.zoneFps, { color: HUD_COLORS.lime }]}>{fps} FPS</Text>
+                )}
               </View>
-            </NeonProgressBar>
+              <NeonProgressBar
+                progress={zoneProgress}
+                shimmerDuration={500}
+                shimmerDelay={3000}
+                trackStyle={[
+                  styles.zoneProgressRail,
+                  {
+                    opacity: zoneGlow.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.92, 1],
+                    }),
+                  },
+                ]}
+                fillStyle={styles.zoneProgressFill}
+              >
+                <View style={styles.zoneProgressTicks}>
+                  {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
+                </View>
+              </NeonProgressBar>
+            </View>
+             <View style={styles.zoneSecondary}>
+               <Text style={[styles.externalLifeLabel, { color: externalLifeColor }]}>
+                 AUTONOMIE HORS ZONE
+               </Text>
+               <NeonProgressBar
+                 progress={externalLifeProgress}
+                 shimmerDuration={500}
+                 shimmerDelay={3000}
+                 trackStyle={[
+                   styles.zoneProgressRail,
+                   styles.externalLifeRail,
+                   {
+                     borderColor: externalLifeColor,
+                     shadowColor: externalLifeColor,
+                   },
+                 ]}
+                 fillStyle={[
+                   styles.zoneProgressFill,
+                   {
+                     backgroundColor: externalLifeColor,
+                     shadowColor: externalLifeColor,
+                   },
+                 ]}
+               >
+                 <View style={styles.zoneProgressTicks}>
+                   {[0, 1, 2, 3, 4].map((tick) => (
+                     <View key={`external-life-tick-${tick}`} style={styles.zoneProgressTick} />
+                   ))}
+                 </View>
+               </NeonProgressBar>
+            </View>
           </View>
         </View>
 
@@ -11546,7 +11759,7 @@ export default function GameScreen() {
             void submitLeaderboardScore(pseudoDraft);
           }}
           onRetry={() => {
-            void submitLeaderboardScore(playerPseudo || pseudoDraft);
+             void submitLeaderboardScore(pseudoDraft || playerPseudo);
           }}
           onResume={resumeFromGameOver}
         />
@@ -11697,6 +11910,20 @@ export default function GameScreen() {
               </View>
             </View>
           </Animated.View>
+          <View
+            style={[
+              styles.releaseMeta,
+              {
+                top: Math.max(insets.top, 10) + 8,
+                left: loadingSideInset,
+                right: loadingSideInset,
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <Text style={styles.releaseVersion}>VERSION N° {APP_VERSION}</Text>
+            <Text style={styles.releaseCredit}>Code et Design : LioTheBoss</Text>
+          </View>
         </View>
       )}
     </View>
@@ -11880,6 +12107,33 @@ const styles = StyleSheet.create({
   loadingArtworkShade: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.16)',
+  },
+  releaseMeta: {
+    position: 'absolute',
+    zIndex: 5,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  releaseVersion: {
+    flexShrink: 1,
+    color: 'rgba(255, 245, 207, 0.78)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    letterSpacing: 1,
+    textShadowColor: '#000000',
+    textShadowRadius: 5,
+  },
+  releaseCredit: {
+    flexShrink: 1,
+    marginLeft: 12,
+    color: 'rgba(255, 245, 207, 0.68)',
+    fontFamily: 'Inter_400Regular',
+    fontSize: 8,
+    letterSpacing: 0.35,
+    textAlign: 'right',
+    textShadowColor: '#000000',
+    textShadowRadius: 5,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -12354,7 +12608,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginTop: 6,
-    minHeight: 101,
+    height: 84,
+    minHeight: 84,
   },
   hudCardStack: {
     alignItems: 'stretch',
@@ -12387,12 +12642,13 @@ const styles = StyleSheet.create({
   },
   scoreCard: {
     width: '44%',
-    minHeight: 92,
+    minHeight: 67,
     marginHorizontal: -5,
     zIndex: 2,
     borderColor: HUD_COLORS.amber,
     backgroundColor: 'rgba(10, 12, 20, 0.96)',
-    transform: [{ translateY: 8 }],
+    paddingVertical: 5,
+    transform: [{ translateY: 2 }],
   },
   shieldCard: {
     width: '100%',
@@ -12442,8 +12698,10 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   scoreMeta: {
-    marginTop: -4,
-    transform: [{ translateY: -6 }],
+    fontSize: 6,
+    letterSpacing: 0.55,
+    marginTop: 1,
+    transform: [{ translateY: -2 }],
   },
   bossSectorValue: {
     fontFamily: 'Inter_700Bold',
@@ -12520,23 +12778,79 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -1,
     zIndex: 3,
-    transform: [{ translateX: -7 }, { translateY: -63 }],
+    transform: [{ translateX: -7 }, { translateY: -17 }],
   },
   zoneCard: {
     width: '56%',
-    minHeight: 65,
+    minHeight: 93,
     borderColor: HUD_COLORS.amber,
     backgroundColor: HUD_COLORS.panelMuted,
-    transform: [{ translateY: -3 }],
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    overflow: 'hidden',
+    transform: [{ translateY: 0 }],
+  },
+  zonePrimary: {
+    width: '100%',
+    alignItems: 'center',
+    height: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  zoneSecondary: {
+    width: '100%',
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(255, 176, 46, 0.72)',
+    backgroundColor: 'rgba(255, 176, 46, 0.06)',
+  },
+  externalLifeLabel: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 0.9,
+    lineHeight: 8,
+    transform: [{ translateY: -2 }],
+  },
+  externalLifeRail: {
+    marginTop: 3,
+    transform: [{ translateY: -2 }],
+  },
+  zoneSecondaryLabel: {
+    color: 'rgba(255, 243, 214, 0.56)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    letterSpacing: 1.1,
+  },
+  zoneSecondaryValue: {
+    marginTop: 1,
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 15,
+    lineHeight: 17,
+    letterSpacing: 1.5,
+  },
+  zoneSecondaryStatus: {
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 1.1,
   },
   zoneValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    justifyContent: 'center',
+    width: '100%',
+    transform: [{ translateY: -2 }],
   },
   zoneValue: {
     fontFamily: 'Inter_700Bold',
-    fontSize: 28,
-    lineHeight: 31,
+    fontSize: 26,
+    lineHeight: 29,
     letterSpacing: 1,
   },
   zoneTarget: {
@@ -12552,7 +12866,8 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   zoneProgressRail: {
-    width: '100%',
+    width: '92%',
+    alignSelf: 'center',
     height: 8,
     marginTop: 6,
     borderWidth: 1,
@@ -12560,6 +12875,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: 'rgba(0, 20, 30, 0.86)',
     overflow: 'hidden',
+    transform: [{ translateY: -5 }],
     shadowColor: HUD_COLORS.cyan,
     shadowOpacity: 0.5,
     shadowRadius: 5,
@@ -12952,6 +13268,10 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'left',
   },
+  leaderboardSectorColumn: {
+    width: 62,
+    textAlign: 'center',
+  },
   leaderboardPointsColumn: {
     width: 84,
     textAlign: 'right',
@@ -12971,10 +13291,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.07)',
   },
+  leaderboardChampionRow: {
+    minHeight: 58,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255, 176, 46, 0.56)',
+    backgroundColor: 'rgba(255, 176, 46, 0.09)',
+  },
+  leaderboardPseudoCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   leaderboardRank: {
     color: HUD_COLORS.amber,
     fontFamily: 'Inter_700Bold',
     fontSize: 10,
+  },
+  leaderboardSector: {
+    color: 'rgba(255, 243, 214, 0.7)',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    letterSpacing: 0.7,
   },
   leaderboardPseudo: {
     color: '#fff5cf',
@@ -12982,11 +13320,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.2,
   },
+  leaderboardChampionPseudo: {
+    color: '#ffe08a',
+    fontSize: 16,
+    letterSpacing: 1.7,
+  },
+  leaderboardChampionSector: {
+    color: HUD_COLORS.amber,
+    fontSize: 11,
+  },
   leaderboardPoints: {
     color: HUD_COLORS.cyan,
     fontFamily: 'Inter_700Bold',
     fontSize: 10,
     letterSpacing: 0.6,
+  },
+  leaderboardChampionPoints: {
+    color: HUD_COLORS.lime,
+    fontSize: 14,
+    letterSpacing: 0.9,
   },
   leaderboardEmpty: {
     paddingVertical: 24,
@@ -18807,6 +19159,7 @@ export default function GameScreen() {
             score: g.score,
             bestScore: bestScoreRef.current,
             shields: Math.max(0, g.shields),
+             externalLife: clamp(g.externalLife, 0, 1),
             capture: Math.min(
               LEVEL_CAPTURE_TARGET,
               Math.floor(clamp(g.capturedArea / g.totalPlayableArea, 0, 1) * 100),
