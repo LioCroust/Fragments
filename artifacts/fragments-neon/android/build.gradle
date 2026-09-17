@@ -22,3 +22,19 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+// Temporary CI diagnostics: GitHub's connected API exposes annotations even
+// when it denies the detailed Actions log.
+gradle.buildFinished { result ->
+  if (result.failure != null) {
+    def output = new StringWriter()
+    result.failure.printStackTrace(new PrintWriter(output))
+    output.toString().readLines().take(160).each { line ->
+      def escaped = line
+        .replace('%', '%25')
+        .replace('\r', '%0D')
+        .replace('\n', '%0A')
+      println("::error title=Gradle failure::${escaped}")
+    }
+  }
+}
