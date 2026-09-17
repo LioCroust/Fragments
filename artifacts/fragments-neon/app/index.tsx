@@ -372,13 +372,18 @@ const LEVEL_BACKGROUND_SOURCES: Record<number, any> = {
 const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
-// Release APKs use the native versionName, which is derived from the GitHub
-// Actions run number in android/app/build.gradle (1.0.16, 1.0.17, ...).
-// Keep the development label explicit because Expo web can serve a cached
-// manifest version independently from the static app.json file.
+// Release APKs receive the GitHub Actions run number through the explicit
+// EXPO_PUBLIC_BUILD_NUMBER bundle variable. Native Expo Constants can still
+// expose the static app.json manifest, so they are only fallbacks here.
 const APP_VERSION = __DEV__
   ? '1.0.16'
-  : String(Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '1.0.16');
+  : String(
+    process.env.EXPO_PUBLIC_BUILD_NUMBER
+      ?? Constants.nativeBuildVersion
+      ?? Constants.nativeAppVersion
+      ?? Constants.expoConfig?.version
+      ?? '1.0.16',
+  );
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const PLAYER_PSEUDO_STORAGE_KEY = 'fragments-neon:player-pseudo';
 const LEADERBOARD_API_URL = String(process.env.EXPO_PUBLIC_LEADERBOARD_API_URL ?? '').replace(/\/+$/, '');
