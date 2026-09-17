@@ -74,6 +74,7 @@ const EXTERNAL_LIFE_LOSS_PER_SECOND = 0.01;
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
 const TUTORIAL_SECTOR = 0;
+const FIRST_PLAYABLE_SECTOR = 1;
 const TUTORIAL_SWIPE_REPETITIONS = 2;
 // Expo Go and the web keep the sector shortcuts and performance readout for
 // testing. Android builds outside Expo Go report either Bare or Standalone
@@ -869,7 +870,6 @@ const leaderboardEntriesFromPayload = (payload: unknown): LeaderboardEntry[] => 
 
 type LeaderboardOverlayProps = {
   score: number;
-  bestScore: number;
   resumeSector: number;
   entries: LeaderboardEntry[];
   pseudoDraft: string;
@@ -878,6 +878,7 @@ type LeaderboardOverlayProps = {
   message: string;
   onPseudoChange: (value: string) => void;
   onSubmit: () => void;
+  onSkipSubmit: () => void;
   onRetry: () => void;
   onResume: () => void;
   onRestartSectorOne: () => void;
@@ -905,7 +906,6 @@ const LeaderboardTrophy = () => (
 
 const LeaderboardOverlay = ({
   score,
-  bestScore,
   resumeSector,
   entries,
   pseudoDraft,
@@ -914,11 +914,15 @@ const LeaderboardOverlay = ({
   message,
   onPseudoChange,
   onSubmit,
+  onSkipSubmit,
   onRetry,
   onResume,
   onRestartSectorOne,
 }: LeaderboardOverlayProps) => {
   const isSubmitting = status === 'submitting';
+  const onlineBestScore = entries.length > 0
+    ? Math.max(...entries.map((entry) => entry.score))
+    : null;
   return (
     <View style={styles.leaderboardOverlay}>
       <View style={styles.leaderboardPanel}>
@@ -926,7 +930,9 @@ const LeaderboardOverlay = ({
         <Text style={styles.leaderboardTitle}>CLASSEMENT</Text>
         <Text style={styles.leaderboardScore}>SCORE {String(score).padStart(6, '0')}</Text>
         <Text style={styles.leaderboardBestScore}>
-          MEILLEUR SCORE : {String(bestScore).padStart(6, '0')}
+          MEILLEUR SCORE EN LIGNE : {onlineBestScore === null
+            ? '—'
+            : String(onlineBestScore).padStart(6, '0')}
         </Text>
 
         <View style={styles.pseudoEntryBlock}>
@@ -948,18 +954,30 @@ const LeaderboardOverlay = ({
             accessibilityLabel="Pseudo du joueur"
             testID="leaderboard-pseudo-input"
           />
-          <Pressable
-            style={[styles.leaderboardAction, isSubmitting && styles.leaderboardActionDisabled]}
-            onPress={onSubmit}
-            disabled={isSubmitting}
-            accessibilityRole="button"
-            accessibilityLabel="Enregistrer le score"
-            testID="leaderboard-submit"
-          >
-            <Text style={styles.leaderboardActionText}>
-              {isSubmitting ? 'ENVOI…' : 'ENREGISTRER LE SCORE'}
-            </Text>
-          </Pressable>
+          <View style={styles.leaderboardActionRow}>
+            <Pressable
+              style={[styles.leaderboardAction, isSubmitting && styles.leaderboardActionDisabled]}
+              onPress={onSubmit}
+              disabled={isSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Enregistrer le score"
+              testID="leaderboard-submit"
+            >
+              <Text style={styles.leaderboardActionText}>
+                {isSubmitting ? 'ENVOI…' : 'ENREGISTRER LE SCORE'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.leaderboardSkipAction}
+              onPress={onSkipSubmit}
+              disabled={isSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Ne pas enregistrer le score"
+              testID="leaderboard-skip-submit"
+            >
+              <Text style={styles.leaderboardSkipActionText}>NE PAS ENREGISTRER</Text>
+            </Pressable>
+          </View>
           <Text style={styles.leaderboardStatusText}>
             {isSubmitting ? 'ENVOI DU SCORE…' : message || 'SCORE PRÊT À ÊTRE ENVOYÉ'}
           </Text>
@@ -5410,7 +5428,7 @@ const DebugSectorSelector = ({
         ? 'DOUBLE TAP : SURCHARGE IONIQUE'
         : tutorialStep === 4
           ? 'CAPTURE LE VAISSEAU + 80%'
-          : 'TIRE SUR LE VAISSEAU'
+          : 'TIRE SUR LE VAISSEAU + 80%'
   );
   return (
     <View style={[styles.debugSectorSelector, { bottom: bottomInset }]}>
@@ -5617,7 +5635,6 @@ export default function GameScreen() {
   const [gameOverStage, setGameOverStage] = useState<GameOverStage>('DEATH');
   const [playerPseudo, setPlayerPseudo] = useState('');
   const [pseudoDraft, setPseudoDraft] = useState('');
-  const [isPlayerPseudoHydrated, setIsPlayerPseudoHydrated] = useState(false);
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [leaderboardStatus, setLeaderboardStatus] = useState<LeaderboardStatus>('idle');
   const [leaderboardMessage, setLeaderboardMessage] = useState('');
@@ -5684,7 +5701,6 @@ export default function GameScreen() {
   const nativeBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameOverSectorRef = useRef<number | null>(null);
   const gameOverLeaderboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const leaderboardSubmitAttemptRef = useRef<string | null>(null);
   const openLeaderboardRef = useRef<() => void>(() => undefined);
   const initialLoadingRevealStartedRef = useRef(false);
   const initialLoadingTapHandledRef = useRef(false);
@@ -6096,9 +6112,6 @@ export default function GameScreen() {
       })
       .catch((error: unknown) => {
         if (__DEV__) console.warn('Unable to load player pseudo', error);
-      })
-      .finally(() => {
-        if (!cancelled) setIsPlayerPseudoHydrated(true);
       });
     return () => {
       cancelled = true;
@@ -6143,8 +6156,6 @@ export default function GameScreen() {
   const submitLeaderboardScore = useCallback(async (rawPseudo: string) => {
     const score = Math.max(0, Math.floor(gameOverScore ?? hud.score));
     const normalizedPseudo = normalizePseudo(rawPseudo);
-    const submissionKey = `${gameOverSectorRef.current ?? 0}:${score}`;
-    leaderboardSubmitAttemptRef.current = submissionKey;
     if (normalizedPseudo.length < 3 || normalizedPseudo.length > 8) {
       setLeaderboardStatus('error');
       setLeaderboardMessage('LE PSEUDO DOIT CONTENIR 3 À 8 CARACTÈRES');
@@ -6207,28 +6218,6 @@ export default function GameScreen() {
       }
     };
   }, [gameOverSector, loadLeaderboard]);
-
-  useEffect(() => {
-    if (
-      gameOverSector === null
-      || gameOverStage !== 'LEADERBOARD'
-      || !isPlayerPseudoHydrated
-      || !playerPseudo
-      || gameOverScore === null
-    ) {
-      return;
-    }
-    const submissionKey = `${gameOverSector}:${gameOverScore}`;
-    if (leaderboardSubmitAttemptRef.current === submissionKey) return;
-    void submitLeaderboardScore(playerPseudo);
-  }, [
-    gameOverScore,
-    gameOverSector,
-    gameOverStage,
-    isPlayerPseudoHydrated,
-    playerPseudo,
-    submitLeaderboardScore,
-  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -7021,7 +7010,6 @@ export default function GameScreen() {
       gameOverLeaderboardTimerRef.current = null;
     }
     gameOverSectorRef.current = null;
-    leaderboardSubmitAttemptRef.current = null;
     setGameOverSector(null);
     setGameOverScore(null);
     setGameOverBestScore(null);
@@ -7050,7 +7038,7 @@ export default function GameScreen() {
   }, [resumeFromGameOverAt]);
 
   const restartFromGameOverAtSectorOne = useCallback(() => {
-    resumeFromGameOverAt(TUTORIAL_SECTOR);
+    resumeFromGameOverAt(FIRST_PLAYABLE_SECTOR);
   }, [resumeFromGameOverAt]);
 
   useEffect(() => {
@@ -9761,7 +9749,6 @@ export default function GameScreen() {
             setGameOverSector(resumeLevel);
             setGameOverScore(finalScore);
             setGameOverBestScore(Math.max(bestScoreRef.current, finalScore));
-            leaderboardSubmitAttemptRef.current = null;
             setGameOverStage('DEATH');
             setLeaderboardEntries([]);
             setLeaderboardStatus('idle');
@@ -11781,7 +11768,6 @@ export default function GameScreen() {
       {gameOverSector !== null && gameOverStage === 'LEADERBOARD' && (
         <LeaderboardOverlay
           score={gameOverScore ?? hud.score}
-          bestScore={gameOverBestScore ?? hud.bestScore}
           resumeSector={gameOverSector}
           entries={leaderboardEntries}
           pseudoDraft={pseudoDraft}
@@ -11792,6 +11778,10 @@ export default function GameScreen() {
           onSubmit={() => {
             void submitLeaderboardScore(pseudoDraft);
           }}
+           onSkipSubmit={() => {
+             setLeaderboardStatus('idle');
+             setLeaderboardMessage('SCORE NON ENREGISTRÉ');
+           }}
           onRetry={() => {
              void submitLeaderboardScore(pseudoDraft || playerPseudo);
           }}
@@ -13214,10 +13204,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   leaderboardAction: {
-    minWidth: 190,
+    flex: 1,
     minHeight: 36,
-    marginTop: 9,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -13225,14 +13214,39 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: 'rgba(184, 255, 74, 0.14)',
   },
+  leaderboardActionRow: {
+    width: '88%',
+    marginTop: 9,
+    flexDirection: 'row',
+    columnGap: 7,
+  },
   leaderboardActionDisabled: {
     opacity: 0.55,
   },
   leaderboardActionText: {
     color: HUD_COLORS.lime,
     fontFamily: 'Inter_700Bold',
-    fontSize: 10,
-    letterSpacing: 1.1,
+    fontSize: 8,
+    letterSpacing: 0.75,
+    textAlign: 'center',
+  },
+  leaderboardSkipAction: {
+    flex: 1,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: HUD_COLORS.amber,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 184, 74, 0.08)',
+  },
+  leaderboardSkipActionText: {
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    letterSpacing: 0.75,
+    textAlign: 'center',
   },
   pseudoSavedBlock: {
     minHeight: 58,
