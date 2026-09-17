@@ -1,0 +1,9 @@
+name = "fragments-leaderboard"
+main = "index.js"
+compatibility_date = "2026-09-17"
+
+[vars]
+GITHUB_OWNER = "LioCroust"
+GITHUB_REPOSITORY = "fragments-scores"
+GITHUB_BRANCH = "main"
+ALLOWED_ORIGIN = "*"
