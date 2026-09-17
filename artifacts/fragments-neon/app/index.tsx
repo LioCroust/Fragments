@@ -50,6 +50,7 @@ import {
 import DiamondPurchaseOverlay, { type ShardOffer } from './DiamondPurchaseOverlay';
 import ShopOverlay, { type ShopItem } from './ShopOverlay';
 import { shardProductIdentifierFor, useShardPurchases } from '../lib/revenuecat';
+import { RELEASE_BUILD_NUMBER } from '../build-number.generated';
 
 const COLS = 12;
 const INITIAL_BACKGROUND_PRELOAD_COUNT = 10;
@@ -372,19 +373,10 @@ const LEVEL_BACKGROUND_SOURCES: Record<number, any> = {
 const backgroundSourceForLevel = (level: number) => (
   LEVEL_BACKGROUND_SOURCES[Math.min(MAX_LEVEL, Math.max(1, level))]
 );
-// Release APKs receive the GitHub Actions run number through the explicit
-// EXPO_PUBLIC_BUILD_NUMBER bundle variable. Native Expo Constants can still
-// expose the static app.json manifest, so they are only fallbacks here.
-const APP_VERSION = __DEV__
-  ? '1.0.16'
-  : String(
-    process.env.EXPO_PUBLIC_BUILD_NUMBER
-      ?? process.env.APK_BUILD_NUMBER
-      ?? Constants.nativeBuildVersion
-      ?? Constants.nativeAppVersion
-      ?? Constants.expoConfig?.version
-      ?? '1.0.16',
-  );
+// Gradle replaces the generated module with the native Android build number
+// before bundling a release APK. Expo Constants only exposes the static
+// app.json manifest here, so it cannot be the source of this label.
+const APP_VERSION = __DEV__ ? '1.0.16' : RELEASE_BUILD_NUMBER;
 const BEST_SCORE_STORAGE_KEY = 'fragments-neon:best-score';
 const PLAYER_PSEUDO_STORAGE_KEY = 'fragments-neon:player-pseudo';
 const LEADERBOARD_API_URL = String(process.env.EXPO_PUBLIC_LEADERBOARD_API_URL ?? '').replace(/\/+$/, '');
@@ -5816,7 +5808,10 @@ export default function GameScreen() {
     keepAudioSessionActive: true,
   });
   const audioSessionReadyRef = useRef<Promise<void>>(Promise.resolve());
-  const audioUnlockedRef = useRef(Platform.OS !== 'web');
+  // The native game is prepared behind the launch screen, so the game loop
+  // can already be running before the player chooses a game. Audio must stay
+  // locked until that explicit choice (or a gameplay gesture) is made.
+  const audioUnlockedRef = useRef(false);
   const audioPlaybackTokenRef = useRef(0);
 
   const stopGameplayAudio = useCallback(() => {
