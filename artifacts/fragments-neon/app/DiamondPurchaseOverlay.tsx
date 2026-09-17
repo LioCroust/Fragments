@@ -44,7 +44,7 @@ export const SHARD_OFFERS: ShardOffer[] = [
     title: 'CARGAISON KORV-9',
     subtitle: 'Une réserve longue portée pour les secteurs avancés.',
     shards: 500,
-    price: '4,99 €',
+    price: '4,49 €',
     accent: '#ff47ca',
     tag: 'MEILLEUR TAUX',
   },
