@@ -70,7 +70,7 @@ const CAPTURED_ZONE_OPACITY = 0.15;
 const CAPTURED_ZONE_LAYER_OPACITY = (
   CAPTURED_ZONE_OPACITY - INITIAL_MAP_OPACITY
 ) / (1 - INITIAL_MAP_OPACITY);
-const EXTERNAL_LIFE_LOSS_PER_SECOND = 0.01;
+const EXTERNAL_LIFE_LOSS_PER_SECOND = 0.015;
 const LEVEL_CAPTURE_TARGET = 80;
 const MAX_LEVEL = 50;
 const TUTORIAL_SECTOR = 0;
@@ -149,6 +149,7 @@ type NeonProgressBarProps = {
   shimmerDelay?: number;
   laserShimmer?: boolean;
   fillGradient?: boolean;
+  shimmerConstrained?: boolean;
   children?: React.ReactNode;
 };
 
@@ -160,6 +161,7 @@ const NeonProgressBar = React.memo(({
   shimmerDelay = 0,
   laserShimmer = false,
   fillGradient = false,
+  shimmerConstrained = false,
   children,
 }: NeonProgressBarProps) => {
   const shimmerPosition = useRef(new Animated.Value(-1)).current;
@@ -187,7 +189,9 @@ const NeonProgressBar = React.memo(({
   const boundedProgress = clamp(progress, 0, 1);
   const shimmerTranslateX = shimmerPosition.interpolate({
     inputRange: [-1, 0.72, 1],
-    outputRange: [-26, Math.max(-26, fillWidth - 12), Math.max(0, fillWidth + 4)],
+    outputRange: shimmerConstrained
+      ? [0, Math.max(0, fillWidth - 26), Math.max(0, fillWidth - 26)]
+      : [-26, Math.max(-26, fillWidth - 12), Math.max(0, fillWidth + 4)],
   });
   const shimmerOpacity = shimmerPosition.interpolate({
     inputRange: [-1, -0.72, 0.72, 1],
@@ -203,7 +207,11 @@ const NeonProgressBar = React.memo(({
             Math.abs(currentWidth - nextWidth) > 0.5 ? nextWidth : currentWidth
           ));
         }}
-        style={[fillStyle, { width: `${Math.round(boundedProgress * 100)}%` }]}
+        style={[
+          fillStyle,
+          shimmerConstrained && styles.progressFillClip,
+          { width: `${Math.round(boundedProgress * 100)}%` },
+        ]}
       >
         {fillGradient ? (
           <LinearGradient
@@ -218,6 +226,7 @@ const NeonProgressBar = React.memo(({
           pointerEvents="none"
           style={[
             styles.progressShimmer,
+            shimmerConstrained && styles.progressShimmerConstrained,
             {
               opacity: shimmerOpacity,
               transform: [{ translateX: shimmerTranslateX }],
@@ -258,6 +267,7 @@ const dcaEngineChargeSource = require('../assets/audio/dca-engine-charge.mp3');
 const dcaShockwaveSource = require('../assets/audio/dca-shockwave.mp3');
 const loadingCoverSource = require('../assets/images/loading-cover-accueil.jpg');
 const cockpitInteriorSource = require('../assets/images/prism-warbird-interior-neon-console.png');
+const cockpitHudFrameSource = require('../assets/images/cockpit-hud-frame-clean.png');
 const cuttingSpriteSource = require('../assets/images/cutting-sprite-sheet.png');
 const shipSmokeSpriteSource = require('../assets/images/ship-smoke-sprite-sheet.png');
 const coreReactorSpriteSource = require('../assets/images/core-reactor-sprite-sheet.png');
@@ -878,7 +888,6 @@ type LeaderboardOverlayProps = {
   message: string;
   onPseudoChange: (value: string) => void;
   onSubmit: () => void;
-  onSkipSubmit: () => void;
   onRetry: () => void;
   onResume: () => void;
   onRestartSectorOne: () => void;
@@ -914,7 +923,6 @@ const LeaderboardOverlay = ({
   message,
   onPseudoChange,
   onSubmit,
-  onSkipSubmit,
   onRetry,
   onResume,
   onRestartSectorOne,
@@ -966,16 +974,6 @@ const LeaderboardOverlay = ({
               <Text style={styles.leaderboardActionText}>
                 {isSubmitting ? 'ENVOI…' : 'ENREGISTRER LE SCORE'}
               </Text>
-            </Pressable>
-            <Pressable
-              style={styles.leaderboardSkipAction}
-              onPress={onSkipSubmit}
-              disabled={isSubmitting}
-              accessibilityRole="button"
-              accessibilityLabel="Ne pas enregistrer le score"
-              testID="leaderboard-skip-submit"
-            >
-              <Text style={styles.leaderboardSkipActionText}>NE PAS ENREGISTRER</Text>
             </Pressable>
           </View>
           <Text style={styles.leaderboardStatusText}>
@@ -6487,6 +6485,7 @@ export default function GameScreen() {
         ...dcaDirectionSources,
         loadingCoverSource,
         cockpitInteriorSource,
+        cockpitHudFrameSource,
         repairVendorSource,
         aegisShieldShopSource,
         shipSmokeSpriteSource,
@@ -11042,7 +11041,7 @@ export default function GameScreen() {
             ),
             level: g.level,
             mode: g.mode,
-            feedback: g.status === 'RESPAWN' ? 'DRONE EN EXPANSION' : '',
+            feedback: '',
           };
           setHud((current) => (
             current.score === nextHud.score
@@ -11286,6 +11285,7 @@ export default function GameScreen() {
     return () => glowLoop.stop();
   }, [zoneGlow]);
   const shieldSegments = Array.from({ length: MAX_SHIELDS });
+  const externalLifeSegments = Array.from({ length: 48 });
   const hudTopPadding = Platform.OS === 'android'
     ? Math.max(12, insets.top - 36)
     : Math.max(insets.top, 12);
@@ -11501,203 +11501,164 @@ export default function GameScreen() {
       )}
 
       <View
-        style={[styles.hud, { paddingTop: hudTopPadding }]}
+        style={[styles.hud, { top: Math.max(hudTopPadding - 12, 0), left: 0, right: 0 }]}
         pointerEvents="box-none"
         collapsable={false}
       >
-        <View style={styles.hudSignalRail}>
-          <Text
-            style={[
-              styles.signalLabel,
-              styles.speedBoostSignalLabel,
-              bossSector && styles.speedBoostSignalLabelDisabled,
-            ]}
-          >
-            {bossSector ? 'SURCHARGE IONIQUE · INACTIVE' : 'SURCHARGE IONIQUE'}
-          </Text>
+        <View style={styles.imageHudFrame} pointerEvents="box-none">
+          <View style={styles.imageHudArtworkLayer} pointerEvents="none">
+            <RNImage
+              source={cockpitHudFrameSource}
+              style={styles.imageHudArtwork}
+              resizeMode="stretch"
+              accessibilityLabel="Interface de cockpit néon"
+            />
+          </View>
+
+          <View style={[styles.imageHudDynamic, styles.imageHudSignalLabel]} pointerEvents="none">
+            <Text
+              style={styles.imageHudSignalLabelText}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.72}
+            >
+              {bossSector ? 'SURCHARGE IONIQUE · INACTIVE' : 'SURCHARGE IONIQUE'}
+            </Text>
+          </View>
+          <View style={[styles.imageHudDynamic, styles.imageHudTopSector]} pointerEvents="none">
+            <Text style={styles.imageHudTopSectorText}>
+              {hud.level.toString().padStart(2, '0')}
+            </Text>
+          </View>
           <View
-            style={[
-              styles.specialChargeSquares,
-              bossSector && styles.specialChargeSquaresDisabled,
-            ]}
-            accessibilityLabel={
-              bossSector
-                ? `${hud.speedBoostCharges} charges conservées, surcharge ionique indisponible dans les secteurs boss`
-                : `${hud.speedBoostCharges} charges de surcharge ionique disponibles`
-            }
+            style={[styles.imageHudDynamic, styles.imageHudChargeRow]}
+            pointerEvents="none"
+            accessibilityLabel={`${hud.speedBoostCharges} charges de surcharge ionique disponibles`}
           >
             {Array.from({ length: Math.max(0, hud.speedBoostCharges) }).map((_, index) => (
               <View
-                key={`special-charge-${index}`}
+                key={`image-hud-charge-${index}`}
                 style={[
-                  styles.specialChargeSquare,
-                  bossSector && styles.specialChargeSquareDisabled,
-                  { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber, HUD_COLORS.magenta][index % 4] },
+                  styles.imageHudCharge,
+                  bossSector && styles.imageHudChargeDisabled,
+                  {
+                    backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber, HUD_COLORS.magenta][index % 4],
+                  },
                 ]}
               />
             ))}
           </View>
-          <Text style={styles.signalLabel}>SECTEUR {hud.level.toString().padStart(2, '0')}</Text>
-        </View>
-
-        <View style={styles.hudDeck}>
-          <View style={[styles.hudCardStack, styles.sectorStack]}>
-            <View style={[styles.hudCard, styles.sectorCard]}>
-              <Text
-                style={[
-                  styles.cardLabel,
-                  { color: HUD_COLORS.cyan },
-                ]}
-              >
-                SECTEUR
-              </Text>
-              <Text style={[styles.sectorValue, { color: HUD_COLORS.cyan }]}>
-                {hud.level.toString().padStart(2, '0')}
-              </Text>
-              {hud.level === TUTORIAL_SECTOR && (
-                <Text style={styles.tutorialSectorLabel}>TUTORIEL</Text>
-              )}
-              {isBossSector(hud.level) && (
-                <Text style={[styles.bossSectorValue, { color: HUD_COLORS.cyan }]}>BOSS</Text>
-              )}
-            </View>
-            <View style={[styles.hudCard, styles.utilityCard, styles.optionsCard]}>
-              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole options">
-                <Polygon
-                  points="8,0.4 10,1.2 11.8,0.5 12.7,2.2 14.7,2.5 14.9,4.4 16.6,5.5 15.9,7.3 17.2,8.8 15.9,10.3 16.5,12.1 14.8,13.1 14.6,15 12.7,15.2 11.7,16.8 10,16.1 8.2,16.8 7.3,15.1 5.3,14.8 5.1,13 3.4,11.9 4.1,10.2 2.8,8.7 4.1,7.2 3.5,5.4 5.2,4.4 5.4,2.5 7.3,2.2"
-                  fill="none"
-                  stroke={HUD_COLORS.cyan}
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <Circle cx="10" cy="8.7" r="3.1" fill="none" stroke={HUD_COLORS.cyan} strokeWidth="1.5" />
-                <Circle cx="10" cy="8.7" r="1" fill={HUD_COLORS.cyan} />
-              </Svg>
-              <Text style={[styles.utilityLabel, { color: HUD_COLORS.cyan }]}>OPTIONS</Text>
-            </View>
+          <View style={[styles.imageHudDynamic, styles.imageHudSectorValue]} pointerEvents="none">
+            <Text style={styles.imageHudSectorValueText}>
+              {hud.level.toString().padStart(2, '0')}
+            </Text>
+            {bossSector && (
+              <Text style={styles.imageHudSectorBossText}>BOSS</Text>
+            )}
           </View>
-
-          <View style={[styles.hudCard, styles.scoreCard]}>
-            <Text style={[styles.cardLabel, { color: HUD_COLORS.warmWhite }]}>SCORE</Text>
-            <Text style={[styles.scoreValue, { color: HUD_COLORS.lime }]}>
+          <View style={[styles.imageHudDynamic, styles.imageHudScoreValue]} pointerEvents="none">
+            <Text style={styles.imageHudScoreValueText}>
               {hud.score.toString().padStart(6, '0')}
             </Text>
-            <Text style={[styles.cardMeta, styles.scoreMeta, { color: HUD_COLORS.amber }]}>
+            <Text style={styles.imageHudBestScoreText}>
               MEILLEUR SCORE : {hud.bestScore.toString().padStart(6, '0')}
             </Text>
           </View>
-
-          <View style={[styles.hudCardStack, styles.shieldStack]}>
-            <View style={[styles.hudCard, styles.shieldCard]}>
-              <Text style={[styles.cardLabel, { color: HUD_COLORS.lime }]}>BOUCLIERS</Text>
-              <View style={styles.shieldSegments} accessibilityLabel={`${hud.shields} boucliers actifs`}>
-                {shieldSegments.map((_, index) => (
-                  <View
-                    key={`shield-${index}`}
-                    style={[
-                      styles.shieldSegment,
-                      index < hud.shields
-                         ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber, HUD_COLORS.magenta, HUD_COLORS.warmWhite][index] }
-                        : styles.shieldSegmentInactive,
-                    ]}
-                  />
-                ))}
-              </View>
-              <View style={styles.shieldDiamondDivider} />
-              <Text style={[styles.cardLabel, { color: HUD_COLORS.cyan }]}>ÉCLATS</Text>
-              <Text style={[styles.diamondValue, { color: HUD_COLORS.cyan }]}>{hud.diamonds}</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.hudCard,
-                styles.utilityCard,
-                styles.shopCard,
-                pressed && styles.shopCardPressed,
-              ]}
-              onPress={openShop}
-              hitSlop={8}
-              pointerEvents="auto"
-              accessibilityRole="button"
-              accessibilityLabel="Ouvrir la boutique"
-              testID="open-shop"
-            >
-              <Svg width={20} height={18} viewBox="0 0 20 18" accessibilityLabel="Symbole boutique">
-                <Polygon points="2,6 4,2 16,2 18,6" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
-                <Line x1="2" y1="6" x2="18" y2="6" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
-                <Rect x="4" y="6" width="12" height="9" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.4" />
-                <Rect x="8" y="10" width="4" height="5" fill="none" stroke={HUD_COLORS.lime} strokeWidth="1.2" />
-                <Line x1="5" y1="8" x2="15" y2="8" stroke={HUD_COLORS.lime} strokeWidth="1" />
-              </Svg>
-              <Text style={[styles.utilityLabel, { color: HUD_COLORS.lime }]}>BOUTIQUE</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.zoneModule} pointerEvents="none">
-          <View style={[styles.hudCard, styles.zoneCard]}>
-            <View style={styles.zonePrimary}>
-              <Text style={[styles.cardLabel, { color: HUD_COLORS.amber }]}>ZONE SÉCURISÉE</Text>
-              <View style={styles.zoneValueRow}>
-                <Text style={[styles.zoneValue, { color: HUD_COLORS.amber }]}>{hud.capture}</Text>
-                <Text style={[styles.zoneTarget, { color: HUD_COLORS.warmWhite }]}>/ {LEVEL_CAPTURE_TARGET}</Text>
-                {FPS_READOUT_ENABLED && (
-                  <Text style={[styles.zoneFps, { color: HUD_COLORS.lime }]}>{fps} FPS</Text>
-                )}
-              </View>
-              <NeonProgressBar
-                progress={zoneProgress}
-                shimmerDuration={500}
-                shimmerDelay={3000}
-                trackStyle={[
-                  styles.zoneProgressRail,
-                  {
-                    opacity: zoneGlow.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.92, 1],
-                    }),
-                  },
+          <View
+            style={[styles.imageHudDynamic, styles.imageHudShieldBar]}
+            pointerEvents="none"
+            accessibilityLabel={`${hud.shields} boucliers actifs`}
+          >
+            {shieldSegments.map((_, index) => (
+              <View
+                key={`image-hud-shield-${index}`}
+                style={[
+                  styles.imageHudShieldSegment,
+                  index < hud.shields
+                    ? { backgroundColor: [HUD_COLORS.cyan, HUD_COLORS.lime, HUD_COLORS.amber, HUD_COLORS.magenta, HUD_COLORS.warmWhite][index] }
+                    : styles.imageHudShieldSegmentInactive,
                 ]}
-                fillStyle={styles.zoneProgressFill}
-              >
-                <View style={styles.zoneProgressTicks}>
-                  {[0, 1, 2, 3, 4].map((tick) => <View key={`zone-tick-${tick}`} style={styles.zoneProgressTick} />)}
-                </View>
-              </NeonProgressBar>
-            </View>
-             <View style={styles.zoneSecondary}>
-               <Text style={[styles.externalLifeLabel, { color: externalLifeColor }]}>
-                 AUTONOMIE HORS ZONE
-               </Text>
-               <NeonProgressBar
-                 progress={externalLifeProgress}
-                 shimmerDuration={500}
-                 shimmerDelay={3000}
-                 trackStyle={[
-                   styles.zoneProgressRail,
-                   styles.externalLifeRail,
-                   {
-                     borderColor: externalLifeColor,
-                     shadowColor: externalLifeColor,
-                   },
-                 ]}
-                 fillStyle={[
-                   styles.zoneProgressFill,
-                   {
-                     backgroundColor: externalLifeColor,
-                     shadowColor: externalLifeColor,
-                   },
-                 ]}
-               >
-                 <View style={styles.zoneProgressTicks}>
-                   {[0, 1, 2, 3, 4].map((tick) => (
-                     <View key={`external-life-tick-${tick}`} style={styles.zoneProgressTick} />
-                   ))}
-                 </View>
-               </NeonProgressBar>
-            </View>
+              />
+            ))}
           </View>
+          <View style={[styles.imageHudDynamic, styles.imageHudDiamondValue]} pointerEvents="none">
+            <Text style={styles.imageHudDiamondValueText}>{hud.diamonds}</Text>
+          </View>
+          <View style={[styles.imageHudDynamic, styles.imageHudZoneValue]} pointerEvents="none">
+            <Text
+              style={styles.imageHudZoneValueLine}
+              numberOfLines={1}
+              accessibilityLabel={`${hud.capture}% de zone sécurisée sur ${LEVEL_CAPTURE_TARGET}%`}
+            >
+              <Text style={styles.imageHudZoneValueText}>{hud.capture}%</Text>
+              <Text style={styles.imageHudZoneTargetText}> / {LEVEL_CAPTURE_TARGET}%</Text>
+            </Text>
+          </View>
+          <NeonProgressBar
+            progress={zoneProgress}
+            shimmerDuration={500}
+            shimmerDelay={3000}
+            shimmerConstrained
+            trackStyle={[
+              styles.imageHudZoneProgress,
+              {
+                opacity: zoneGlow.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.92, 1],
+                }),
+              },
+            ]}
+            fillStyle={styles.imageHudZoneProgressFill}
+          >
+            <View style={styles.imageHudProgressTicks}>
+              {[0, 1, 2, 3, 4].map((tick) => (
+                <View key={`image-hud-zone-tick-${tick}`} style={styles.imageHudProgressTick} />
+              ))}
+            </View>
+          </NeonProgressBar>
+          <Text
+            style={[styles.imageHudDynamic, styles.imageHudExternalLabel, { color: externalLifeColor }]}
+            pointerEvents="none"
+          >
+            AUTONOMIE HORS ZONE
+          </Text>
+          <View
+            style={styles.imageHudExternalSegments}
+            pointerEvents="none"
+            accessibilityLabel={`${Math.round(externalLifeProgress * 100)}% d'autonomie hors zone`}
+          >
+            {externalLifeSegments.map((_, index) => {
+              const segmentColor = index < 12
+                ? '#ff3b30'
+                : index < 24
+                  ? '#ff9f1a'
+                  : HUD_COLORS.lime;
+              const isActive = index < Math.ceil(externalLifeProgress * externalLifeSegments.length);
+              return (
+                <View
+                  key={`image-hud-external-segment-${index}`}
+                  style={[
+                    styles.imageHudExternalSegment,
+                    {
+                      borderColor: segmentColor,
+                      backgroundColor: isActive ? segmentColor : 'transparent',
+                      opacity: isActive ? 1 : 0.28,
+                      shadowColor: segmentColor,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+          <Pressable
+            style={styles.imageHudShopHitbox}
+            onPress={openShop}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Ouvrir la boutique"
+            testID="open-shop"
+          />
         </View>
-
         {hud.feedback !== '' && <Text style={[styles.feedback, { color: '#ff8a00' }]}>{hud.feedback}</Text>}
       </View>
 
@@ -11778,10 +11739,6 @@ export default function GameScreen() {
           onSubmit={() => {
             void submitLeaderboardScore(pseudoDraft);
           }}
-           onSkipSubmit={() => {
-             setLeaderboardStatus('idle');
-             setLeaderboardMessage('SCORE NON ENREGISTRÉ');
-           }}
           onRetry={() => {
              void submitLeaderboardScore(pseudoDraft || playerPseudo);
           }}
@@ -12207,6 +12164,15 @@ const styles = StyleSheet.create({
     shadowRadius: 9,
     shadowOffset: { width: 0, height: 0 },
   },
+  progressShimmerConstrained: {
+    top: 0,
+    bottom: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  },
+  progressFillClip: {
+    overflow: 'hidden',
+  },
   progressShimmerCore: {
     ...StyleSheet.absoluteFill,
     borderRadius: 13,
@@ -12560,11 +12526,286 @@ const styles = StyleSheet.create({
   },
   hud: {
     position: 'absolute',
-    top: -17,
-    left: 18,
-    right: 18,
     zIndex: 30,
     elevation: 30,
+  },
+  imageHudFrame: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1828 / 860,
+  },
+  imageHudArtwork: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+  },
+  imageHudArtworkLayer: {
+    ...StyleSheet.absoluteFill,
+  },
+  imageHudDynamic: {
+    position: 'absolute',
+  },
+  imageHudSignalLabel: {
+    left: '21.5%',
+    top: '5.1%',
+    width: '34%',
+    height: '11.5%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#001919',
+  },
+  imageHudSignalLabelText: {
+    color: HUD_COLORS.lime,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 9,
+    letterSpacing: 0.45,
+    textAlign: 'center',
+  },
+  imageHudTopSector: {
+    left: '72.7%',
+    top: '6.8%',
+    width: '8.6%',
+    height: '8.8%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageHudTopSectorText: {
+    color: '#a9c7df',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  imageHudChargeRow: {
+    left: '55.1%',
+    top: '6.8%',
+    width: '7.2%',
+    height: '8.8%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  imageHudCharge: {
+    width: 8,
+    height: 8,
+    borderRadius: 1,
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.85,
+    shadowRadius: 5,
+  },
+  imageHudChargeDisabled: {
+    opacity: 0.45,
+    shadowOpacity: 0,
+  },
+  imageHudSectorValue: {
+    left: '4.6%',
+    top: '28.5%',
+    width: '15.2%',
+    height: '18.5%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  imageHudSectorValueText: {
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: 1,
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 8,
+  },
+  imageHudSectorBossText: {
+    position: 'absolute',
+    left: '-18%',
+    top: '82%',
+    width: '136%',
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8,
+    lineHeight: 10,
+    letterSpacing: 0.55,
+    textAlign: 'center',
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 4,
+  },
+  imageHudScoreValue: {
+    left: '30.8%',
+    top: '27.5%',
+    width: '34.5%',
+    height: '19%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageHudScoreValueText: {
+    color: HUD_COLORS.lime,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 29,
+    lineHeight: 32,
+    letterSpacing: 2,
+    textShadowColor: HUD_COLORS.lime,
+    textShadowRadius: 9,
+  },
+  imageHudBestScoreText: {
+    marginTop: 1,
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 7,
+    lineHeight: 9,
+    letterSpacing: 0.5,
+  },
+  imageHudShieldBar: {
+    left: '73.7%',
+    top: '28.4%',
+    width: '20.7%',
+    height: '5.1%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 4,
+  },
+  imageHudShieldSegment: {
+    flex: 1,
+    height: 6,
+    borderRadius: 1,
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.85,
+    shadowRadius: 4,
+  },
+  imageHudShieldSegmentInactive: {
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+  },
+  imageHudDiamondValue: {
+    left: '74.1%',
+    top: '45.2%',
+    width: '13.2%',
+    height: '13%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageHudDiamondValueText: {
+    color: HUD_COLORS.cyan,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: 1,
+    textShadowColor: HUD_COLORS.cyan,
+    textShadowRadius: 7,
+  },
+  imageHudZoneValue: {
+    left: '27.5%',
+    top: '58.5%',
+    width: '47%',
+    height: '11.5%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+    zIndex: 4,
+    transform: [{ translateY: -3 }],
+  },
+  imageHudZoneValueLine: {
+    width: '100%',
+    color: HUD_COLORS.warmWhite,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 19,
+    lineHeight: 23,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  imageHudZoneValueText: {
+    color: HUD_COLORS.amber,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: 1,
+    textShadowColor: HUD_COLORS.amber,
+    textShadowRadius: 8,
+  },
+  imageHudZoneTargetText: {
+    color: HUD_COLORS.warmWhite,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  imageHudFpsText: {
+    color: HUD_COLORS.lime,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 0.55,
+  },
+  imageHudZoneProgress: {
+    position: 'absolute',
+    left: '27.5%',
+    top: '72%',
+    width: '43.5%',
+    height: '4.9%',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 243, 255, 0.8)',
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 20, 30, 0.9)',
+    overflow: 'hidden',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 0.55,
+    shadowRadius: 5,
+    transform: [{ translateY: -6 }],
+  },
+  imageHudZoneProgressFill: {
+    position: 'relative',
+    height: '100%',
+    borderRadius: 8,
+    backgroundColor: '#08d9e8',
+    shadowColor: HUD_COLORS.cyan,
+    shadowOpacity: 1,
+    shadowRadius: 8,
+  },
+  imageHudExternalLabel: {
+    left: '25.5%',
+    top: '81.2%',
+    width: '49%',
+    height: '6%',
+    textAlign: 'center',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 8.5,
+    letterSpacing: 0.7,
+  },
+  imageHudExternalSegments: {
+    position: 'absolute',
+    left: '27.5%',
+    top: '88.5%',
+    width: '43.5%',
+    height: '6%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 0,
+  },
+  imageHudExternalSegment: {
+    width: 2,
+    minWidth: 2,
+    height: '100%',
+    borderWidth: 1,
+    borderRadius: 0,
+    shadowOpacity: 0.7,
+    shadowRadius: 3,
+  },
+  imageHudProgressTicks: {
+    ...StyleSheet.absoluteFill,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  imageHudProgressTick: {
+    width: 1,
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.42)',
+  },
+  imageHudShopHitbox: {
+    position: 'absolute',
+    right: '1%',
+    top: '71%',
+    width: '25%',
+    height: '15%',
   },
   nativeArenaDynamicLayer: {
     position: 'absolute',
@@ -13225,24 +13466,6 @@ const styles = StyleSheet.create({
   },
   leaderboardActionText: {
     color: HUD_COLORS.lime,
-    fontFamily: 'Inter_700Bold',
-    fontSize: 8,
-    letterSpacing: 0.75,
-    textAlign: 'center',
-  },
-  leaderboardSkipAction: {
-    flex: 1,
-    minHeight: 36,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: HUD_COLORS.amber,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 184, 74, 0.08)',
-  },
-  leaderboardSkipActionText: {
-    color: HUD_COLORS.amber,
     fontFamily: 'Inter_700Bold',
     fontSize: 8,
     letterSpacing: 0.75,
